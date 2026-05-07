@@ -1,59 +1,39 @@
 # Mohanoe Inc. Legal Practice Management
 
-A full-featured legal practice management system for **Mohanoe Inc. Attorneys**, built for the South African legal market.
+Legal practice management app for Mohanoe Inc. Attorneys with encrypted intake, AI-assisted triage, and a POPIA-safe data path.
 
-## Project Status
-- `mohanoe_inc_legal_mvp.html` — Preserved MVP (single-file prototype, do not modify)
-- `index.html` — Active development entry point
+## What the app does
+- Captures client intake details and consent
+- Encrypts raw PII before persistence
+- Strips PII from the matter brief before AI assessment
+- Produces attorney-facing triage notes, urgency, and next actions
+- Tracks assessed matters as live cases
 
-## Features (MVP)
-- Dashboard with case statistics and court calendar
-- Case management with practice area filtering
-- Client management (10,000+ client capacity)
-- New client intake with POPIA consent gate and 11 official languages
-- CaseTrack live tracking
-- LegalAI Research assistant
-- Document Vault
-- Billing & Invoicing
-- Staff & Advocates management
-- Court Calendar
+## Project layout
+- `backend/` - Express API, intake workflow, encryption, and AI assessment
+- `frontend/` - React dashboard for intake and case review
+- `backend/database.sql` - Postgres/Supabase schema for production persistence
 
-## Roadmap (Full App)
-- [ ] Backend API (Node.js / Supabase)
-- [ ] Authentication & role-based access control
-- [ ] Real-time case updates
-- [ ] Document upload & e-signing
-- [ ] Invoice generation & payment integration
-- [ ] SMS/WhatsApp client notifications (multilingual)
-- [ ] Court date automated reminders
-- [ ] Mobile-responsive PWA
-- [ ] Offline support
+## Local development
+1. Copy `.env.example` to `.env` and set the secrets you want to use.
+2. Install dependencies in `backend/` and `frontend/`.
+3. Start the backend on port `3001`.
+4. Start the frontend on port `3000`.
 
-## Tech Stack
-- **Frontend:** HTML5, CSS3, Vanilla JS (MVP) → React + TailwindCSS (Full App)
-- **Icons:** Inline SVG
-- **Fonts:** Inter (Google Fonts)
+## Production notes
+- Store `INTAKE_ENCRYPTION_KEY` as a 32-byte base64 or hex key.
+- Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to persist intake data in Postgres.
+- Set `ANTHROPIC_API_KEY` to enable live AI triage. Without it, the backend falls back to rules-based assessment.
 
-## Project Structure
-```
-mohanoe_inc_legal/
-├── mohanoe_inc_legal_mvp.html   # Preserved MVP snapshot
-├── index.html                   # Development entry point
-├── src/
-│   ├── css/                     # Extracted stylesheets
-│   ├── js/                      # Extracted scripts & modules
-│   └── components/              # Reusable UI components
-├── assets/                      # Images, icons, fonts
-└── README.md
-```
-
-## Setup
-Open `index.html` in a browser or serve with any static file server:
-```bash
-npx serve .
-```
+## Deployment
+- Recommended platform: Render.
+- Use the root-level `render.yaml` blueprint for a single web service.
+- The backend serves the built React app from `frontend/build`, so the UI and API stay on the same origin.
+- Populate the secret env vars Render prompts for on blueprint creation: `JWT_SECRET`, `INTAKE_ENCRYPTION_KEY`, `AUDIT_CHAIN_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `DEFAULT_ADMIN_EMAIL`, and `DEFAULT_ADMIN_PASSWORD`.
+- The health check endpoint is `/ready`.
+- `ALLOW_PUBLIC_REGISTRATION` is disabled by default; staff access should be seeded by an admin account.
 
 ## Compliance
-- **POPIA** (Protection of Personal Information Act 4 of 2013)
-- **Legal Practice Act 28 of 2014**
-- Data encrypted at rest (AES-256)
+- Raw client PII stays encrypted at rest.
+- Only redacted matter summaries are sent to AI.
+- Consent is required for both storage and AI assessment.

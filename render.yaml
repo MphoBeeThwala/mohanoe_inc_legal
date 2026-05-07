@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: mohanoe-inc-legal
+    runtime: node
+    plan: starter
+    rootDir: .
+    buildCommand: npm ci --prefix backend && npm ci --prefix frontend && npm run build --prefix frontend
+    startCommand: node backend/server.js
+    healthCheckPath: /ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ALLOW_PUBLIC_REGISTRATION
+        value: "false"
+      - key: JWT_EXPIRES_IN
+        value: 12h
+      - key: CLIENT_DATA_RETENTION_DAYS
+        value: "3650"
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "60000"
+      - key: RATE_LIMIT_MAX
+        value: "240"
+      - key: LOG_HTTP
+        value: "true"
+      - key: DEFAULT_ADMIN_NAME
+        value: Practice Admin
+      - key: JWT_SECRET
+        sync: false
+      - key: INTAKE_ENCRYPTION_KEY
+        sync: false
+      - key: AUDIT_CHAIN_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DEFAULT_ADMIN_EMAIL
+        sync: false
+      - key: DEFAULT_ADMIN_PASSWORD
+        sync: false
