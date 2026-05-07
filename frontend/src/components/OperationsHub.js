@@ -31,6 +31,19 @@ const initialEventForm = {
   notes: '',
 };
 
+const initialNotificationForm = {
+  title: '',
+  body: '',
+  category: 'general',
+  priority: 'medium',
+  recipientRole: 'attorney',
+};
+
+const initialReportForm = {
+  title: 'Practice snapshot',
+  reportType: 'dashboard',
+};
+
 function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
   const [tab, setTab] = useState('documents');
   const [documents, setDocuments] = useState([]);
@@ -39,12 +52,16 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
   const [billingLedger, setBillingLedger] = useState([]);
   const [calendar, setCalendar] = useState([]);
   const [audit, setAudit] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [reports, setReports] = useState([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
   const [documentForm, setDocumentForm] = useState(initialDocumentForm);
   const [invoiceForm, setInvoiceForm] = useState(initialInvoiceForm);
   const [ledgerForm, setLedgerForm] = useState(initialLedgerForm);
   const [eventForm, setEventForm] = useState(initialEventForm);
+  const [notificationForm, setNotificationForm] = useState(initialNotificationForm);
+  const [reportForm, setReportForm] = useState(initialReportForm);
 
   const selectedCase = useMemo(
     () => cases.find((item) => item.id === selectedCaseId) || null,
@@ -52,7 +69,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
   );
 
   const loadData = async () => {
-    const [documentsResponse, billingResponse, invoicesResponse, ledgerResponse, calendarResponse, auditResponse] =
+    const [documentsResponse, billingResponse, invoicesResponse, ledgerResponse, calendarResponse, auditResponse, notificationsResponse, reportsResponse] =
       await Promise.all([
         api.get('/documents'),
         api.get('/billing/summary'),
@@ -60,6 +77,8 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
         api.get('/billing/ledger'),
         api.get('/calendar/upcoming'),
         api.get('/audit'),
+        api.get('/notifications'),
+        api.get('/reports'),
       ]);
 
     setDocuments(documentsResponse.data);
@@ -68,6 +87,8 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
     setBillingLedger(ledgerResponse.data);
     setCalendar(calendarResponse.data);
     setAudit(auditResponse.data);
+    setNotifications(notificationsResponse.data);
+    setReports(reportsResponse.data);
   };
 
   useEffect(() => {
@@ -206,10 +227,67 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
     }
   };
 
+  const submitNotification = async (event) => {
+    event.preventDefault();
+    if (!notificationForm.title || !notificationForm.body) {
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await api.post('/notifications', notificationForm);
+      setNotificationForm(initialNotificationForm);
+      await Promise.all([loadData(), onChanged?.()]);
+      setNotice({ tone: 'success', message: 'Notification created.' });
+    } catch (error) {
+      setNotice({
+        tone: 'error',
+        message: error?.response?.data?.message || 'Could not create notification.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitReport = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await api.post('/reports', reportForm);
+      await Promise.all([loadData(), onChanged?.()]);
+      setNotice({ tone: 'success', message: 'Report generated.' });
+    } catch (error) {
+      setNotice({
+        tone: 'error',
+        message: error?.response?.data?.message || 'Could not generate report.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const markNotificationRead = async (notificationId) => {
+    setBusy(true);
+    try {
+      await api.post(`/notifications/${notificationId}/read`);
+      await loadData();
+      setNotice({ tone: 'success', message: 'Notification marked as read.' });
+    } catch (error) {
+      setNotice({
+        tone: 'error',
+        message: error?.response?.data?.message || 'Could not update notification.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const tabs = [
     ['documents', 'Documents'],
     ['billing', 'Billing'],
     ['calendar', 'Calendar'],
+    ['notifications', 'Notifications'],
+    ['reports', 'Reports'],
     ['audit', 'Audit'],
   ];
 
@@ -218,7 +296,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
       <div className="panel-head">
         <div>
           <p className="panel-kicker">Practice operations</p>
-          <h2>Documents, billing, calendar, and audit</h2>
+          <h2>Documents, billing, calendar, notifications, reports, and audit</h2>
         </div>
       </div>
 
@@ -525,6 +603,155 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
                     {item.startsAt} - {item.eventType}
                   </div>
                 </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {tab === 'notifications' ? (
+        <section className="ops-section">
+          <div className="mini-grid">
+            <Stat
+              label="Unread"
+              value={notifications.filter((item) => !item.isRead).length}
+            />
+            <Stat label="Total" value={notifications.length} />
+          </div>
+
+          <form className="stack-form" onSubmit={submitNotification}>
+            <input
+              value={notificationForm.title}
+              onChange={(event) =>
+                setNotificationForm((current) => ({
+                  ...current,
+                  title: event.target.value,
+                }))
+              }
+              placeholder="Urgent hearing reminder"
+            />
+            <textarea
+              rows={3}
+              value={notificationForm.body}
+              onChange={(event) =>
+                setNotificationForm((current) => ({
+                  ...current,
+                  body: event.target.value,
+                }))
+              }
+              placeholder="Notification body"
+            />
+            <select
+              value={notificationForm.category}
+              onChange={(event) =>
+                setNotificationForm((current) => ({
+                  ...current,
+                  category: event.target.value,
+                }))
+              }
+            >
+              <option value="general">General</option>
+              <option value="deadline">Deadline</option>
+              <option value="billing">Billing</option>
+              <option value="case_update">Case update</option>
+            </select>
+            <select
+              value={notificationForm.priority}
+              onChange={(event) =>
+                setNotificationForm((current) => ({
+                  ...current,
+                  priority: event.target.value,
+                }))
+              }
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+            <select
+              value={notificationForm.recipientRole}
+              onChange={(event) =>
+                setNotificationForm((current) => ({
+                  ...current,
+                  recipientRole: event.target.value,
+                }))
+              }
+            >
+              <option value="attorney">Attorney</option>
+              <option value="paralegal">Paralegal</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button className="secondary-button" disabled={busy}>
+              Send notification
+            </button>
+          </form>
+
+          <div className="mini-list">
+            {notifications.slice(0, 6).map((item) => (
+              <div key={item.id} className="mini-item">
+                <div>
+                  <strong>{item.title}</strong>
+                  <div className="muted">{item.body}</div>
+                </div>
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => markNotificationRead(item.id)}
+                  disabled={busy || item.isRead}
+                >
+                  {item.isRead ? 'Read' : 'Mark read'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {tab === 'reports' ? (
+        <section className="ops-section">
+          <div className="mini-grid">
+            <Stat label="Snapshots" value={reports.length} />
+            <Stat label="Unread notifications" value={notifications.filter((item) => !item.isRead).length} />
+          </div>
+
+          <form className="stack-form" onSubmit={submitReport}>
+            <input
+              value={reportForm.title}
+              onChange={(event) =>
+                setReportForm((current) => ({
+                  ...current,
+                  title: event.target.value,
+                }))
+              }
+              placeholder="Practice snapshot"
+            />
+            <select
+              value={reportForm.reportType}
+              onChange={(event) =>
+                setReportForm((current) => ({
+                  ...current,
+                  reportType: event.target.value,
+                }))
+              }
+            >
+              <option value="dashboard">Dashboard</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+            <button className="secondary-button" disabled={busy}>
+              Generate report
+            </button>
+          </form>
+
+          <div className="mini-list">
+            {reports.slice(0, 5).map((item) => (
+              <div key={item.id} className="mini-item">
+                <div>
+                  <strong>{item.title}</strong>
+                  <div className="muted">{item.reportType}</div>
+                </div>
+                <div className="muted">{item.createdAt}</div>
               </div>
             ))}
           </div>

@@ -224,6 +224,39 @@ CREATE TABLE audit_events (
 );
 
 -- --------------------------------------------------------------------
+-- TABLE: notifications
+-- Stores in-app notifications for staff and matter owners.
+-- --------------------------------------------------------------------
+CREATE TABLE notifications (
+  id uuid PRIMARY KEY,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'general',
+  priority TEXT NOT NULL DEFAULT 'medium',
+  recipient_role TEXT NOT NULL DEFAULT 'attorney',
+  recipient_user_id uuid,
+  related_entity_type TEXT,
+  related_entity_id TEXT,
+  is_read BOOLEAN NOT NULL DEFAULT FALSE,
+  read_at TIMESTAMPTZ,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- --------------------------------------------------------------------
+-- TABLE: report_snapshots
+-- Stores generated operational dashboard snapshots.
+-- --------------------------------------------------------------------
+CREATE TABLE report_snapshots (
+  id uuid PRIMARY KEY,
+  report_type TEXT NOT NULL DEFAULT 'dashboard',
+  title TEXT NOT NULL,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- --------------------------------------------------------------------
 -- RLS (Row-Level Security) Policies
 -- Ensure that users can only access their own data.
 -- --------------------------------------------------------------------
@@ -241,6 +274,8 @@ ALTER TABLE billing_invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE billing_ledger ENABLE ROW LEVEL SECURITY;
 ALTER TABLE calendar_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE report_snapshots ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Allow users to see their own client profile
 CREATE POLICY "Users can view their own client data" 
@@ -293,5 +328,13 @@ USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 
 
 CREATE POLICY "Staff can access all audit events"
 ON audit_events FOR ALL
+USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 'paralegal') );
+
+CREATE POLICY "Staff can access all notifications"
+ON notifications FOR ALL
+USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 'paralegal') );
+
+CREATE POLICY "Staff can access all report snapshots"
+ON report_snapshots FOR ALL
 USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 'paralegal') );
 

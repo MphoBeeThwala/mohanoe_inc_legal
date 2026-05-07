@@ -9,6 +9,8 @@ router.use('/clients', require('./client.routes'));
 router.use('/cases', require('./case.routes'));
 router.use('/calendar', require('./calendar.routes'));
 router.use('/documents', require('./documents.routes'));
+router.use('/notifications', require('./notifications.routes'));
+router.use('/reports', require('./reports.routes'));
 router.use('/intake', require('./intake.routes'));
 
 module.exports = router;
