@@ -31,8 +31,24 @@ async function me(req, res) {
   }
 }
 
+async function seedAdmin(req, res) {
+  try {
+    const user = await authService.seedDefaultUsers();
+    if (!user) {
+      return res.status(400).json({
+        message: 'DEFAULT_ADMIN_EMAIL and DEFAULT_ADMIN_PASSWORD must be set to seed an admin user',
+      });
+    }
+
+    res.status(200).json({ user });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ message: error.message });
+  }
+}
+
 module.exports = {
   login,
   me,
+  seedAdmin,
   register,
 };
