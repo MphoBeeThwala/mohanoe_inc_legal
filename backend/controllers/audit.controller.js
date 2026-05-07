@@ -12,6 +12,16 @@ async function index(req, res) {
   }
 }
 
+async function verify(req, res) {
+  try {
+    const status = await auditService.verifyEventChain();
+    res.status(200).json(status);
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ message: error.message });
+  }
+}
+
 module.exports = {
   index,
+  verify,
 };

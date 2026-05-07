@@ -220,6 +220,8 @@ CREATE TABLE audit_events (
   action TEXT NOT NULL,
   summary TEXT NOT NULL DEFAULT '',
   details JSONB NOT NULL DEFAULT '{}'::jsonb,
+  previous_hash TEXT NOT NULL DEFAULT 'genesis',
+  entry_hash TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

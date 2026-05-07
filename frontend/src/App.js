@@ -49,15 +49,13 @@ function StatCard({ label, value, detail, tone = 'neutral' }) {
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
-  const [authMode, setAuthMode] = useState('login');
   const [authBusy, setAuthBusy] = useState(false);
   const [authNotice, setAuthNotice] = useState({
     tone: 'info',
     message:
-      'Sign in to access attorney workspace functions. Intake and assessment remain POPIA-safe and server-side.',
+      'Sign in with an admin-seeded staff account to access the practice workspace.',
   });
   const [authForm, setAuthForm] = useState({
-    fullName: '',
     email: '',
     password: '',
   });
@@ -121,20 +119,10 @@ function App() {
     event.preventDefault();
     setAuthBusy(true);
     try {
-      const endpoint = authMode === 'register' ? '/auth/register' : '/auth/login';
-      const payload =
-        authMode === 'register'
-          ? {
-              fullName: authForm.fullName,
-              email: authForm.email,
-              password: authForm.password,
-            }
-          : {
-              email: authForm.email,
-              password: authForm.password,
-            };
-
-      const { data } = await api.post(endpoint, payload);
+      const { data } = await api.post('/auth/login', {
+        email: authForm.email,
+        password: authForm.password,
+      });
       window.localStorage.setItem('mhl_token', data.token);
       setCurrentUser(data.user);
       setAuthNotice({
@@ -255,22 +243,8 @@ function App() {
         <section className="auth-grid">
           <div className="panel">
             <p className="panel-kicker">Authentication</p>
-            <h2>{authMode === 'login' ? 'Sign in' : 'Create a user'}</h2>
+            <h2>Sign in</h2>
             <form className="auth-form" onSubmit={handleAuthSubmit}>
-              {authMode === 'register' ? (
-                <Field label="Full name">
-                  <input
-                    value={authForm.fullName}
-                    onChange={(event) =>
-                      setAuthForm((current) => ({
-                        ...current,
-                        fullName: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </Field>
-              ) : null}
               <Field label="Email">
                 <input
                   type="email"
@@ -299,19 +273,13 @@ function App() {
               </Field>
               <div className="action-row">
                 <button type="submit" className="primary-button" disabled={authBusy}>
-                  {authBusy ? 'Working...' : authMode === 'login' ? 'Sign in' : 'Create user'}
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() =>
-                    setAuthMode((mode) => (mode === 'login' ? 'register' : 'login'))
-                  }
-                >
-                  {authMode === 'login' ? 'Need an account?' : 'Have an account?'}
+                  {authBusy ? 'Working...' : 'Sign in'}
                 </button>
               </div>
             </form>
+            <div className="field-hint">
+              Public self-registration is disabled. Ask an administrator to provision a staff account.
+            </div>
           </div>
 
           <div className={`notice notice-${authNotice.tone}`}>

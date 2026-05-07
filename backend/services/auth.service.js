@@ -11,6 +11,10 @@ function getJwtSecret() {
   return process.env.JWT_SECRET || 'mohanoe-dev-secret';
 }
 
+function isPublicRegistrationEnabled() {
+  return String(process.env.ALLOW_PUBLIC_REGISTRATION || '').toLowerCase() === 'true';
+}
+
 function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString('hex');
 }
@@ -132,9 +136,28 @@ async function registerUser(input, options = {}) {
   const role = options.allowRoleOverride
     ? String(options.role || input.role || 'attorney').trim()
     : 'attorney';
+  const passwordLength = password.length;
 
   if (!fullName || !email || !password) {
     const error = new Error('fullName, email, and password are required');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!options.allowRoleOverride && !isPublicRegistrationEnabled()) {
+    const error = new Error('Public registration is disabled');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (passwordLength < 12) {
+    const error = new Error('Password must be at least 12 characters long');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) {
+    const error = new Error('Password must include upper-case, lower-case, and a number');
     error.statusCode = 400;
     throw error;
   }
@@ -297,6 +320,7 @@ module.exports = {
   authenticateRequest,
   getSessionUser,
   loginUser,
+  isPublicRegistrationEnabled,
   registerUser,
   requireRoles,
   seedDefaultUsers,
