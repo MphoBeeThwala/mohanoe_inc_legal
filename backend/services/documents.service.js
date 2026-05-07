@@ -220,8 +220,28 @@ async function signDocument(documentId, actor = {}) {
   return getDocument(documentId);
 }
 
+async function deleteByCaseIds(caseIds = []) {
+  if (!caseIds.length) {
+    return 0;
+  }
+
+  const normalized = new Set(caseIds.map((value) => String(value)));
+  const db = getSupabaseClient();
+  if (db) {
+    const { error } = await db.from('documents').delete().in('case_id', [...normalized]);
+    if (error) {
+      throw error;
+    }
+  } else {
+    memory.documents = memory.documents.filter((doc) => !normalized.has(String(doc.case_id)));
+  }
+
+  return normalized.size;
+}
+
 module.exports = {
   createDocument,
+  deleteByCaseIds,
   getDocument,
   listDocuments,
   signDocument,

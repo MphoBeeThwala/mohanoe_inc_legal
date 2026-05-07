@@ -143,8 +143,31 @@ async function getUpcomingEvents(limit = 8) {
     .slice(0, limit);
 }
 
+async function deleteByCaseIds(caseIds = []) {
+  if (!caseIds.length) {
+    return 0;
+  }
+
+  const normalized = new Set(caseIds.map((value) => String(value)));
+  const db = getSupabaseClient();
+  if (db) {
+    const { error } = await db
+      .from('calendar_events')
+      .delete()
+      .in('case_id', [...normalized]);
+    if (error) {
+      throw error;
+    }
+  } else {
+    memory.events = memory.events.filter((item) => !normalized.has(String(item.case_id)));
+  }
+
+  return normalized.size;
+}
+
 module.exports = {
   createEvent,
+  deleteByCaseIds,
   getUpcomingEvents,
   listEvents,
 };

@@ -257,6 +257,27 @@ CREATE TABLE report_snapshots (
 );
 
 -- --------------------------------------------------------------------
+-- TABLE: compliance_requests
+-- Stores POPIA access, correction, deletion, and export requests.
+-- --------------------------------------------------------------------
+CREATE TABLE compliance_requests (
+  id uuid PRIMARY KEY,
+  request_type TEXT NOT NULL DEFAULT 'access',
+  subject_name TEXT NOT NULL,
+  subject_email TEXT NOT NULL,
+  case_ref TEXT,
+  description TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  response_summary TEXT NOT NULL DEFAULT '',
+  response_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  due_at TIMESTAMPTZ,
+  fulfilled_at TIMESTAMPTZ,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- --------------------------------------------------------------------
 -- RLS (Row-Level Security) Policies
 -- Ensure that users can only access their own data.
 -- --------------------------------------------------------------------
@@ -276,6 +297,7 @@ ALTER TABLE calendar_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE report_snapshots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE compliance_requests ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Allow users to see their own client profile
 CREATE POLICY "Users can view their own client data" 
@@ -336,5 +358,9 @@ USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 
 
 CREATE POLICY "Staff can access all report snapshots"
 ON report_snapshots FOR ALL
+USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 'paralegal') );
+
+CREATE POLICY "Staff can access all compliance requests"
+ON compliance_requests FOR ALL
 USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 'paralegal') );
 

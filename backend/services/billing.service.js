@@ -269,8 +269,40 @@ async function getBillingSummary() {
   };
 }
 
+async function deleteByCaseIds(caseIds = []) {
+  if (!caseIds.length) {
+    return 0;
+  }
+
+  const normalized = new Set(caseIds.map((value) => String(value)));
+  const db = getSupabaseClient();
+  if (db) {
+    const { error } = await db
+      .from('billing_invoices')
+      .delete()
+      .in('case_id', [...normalized]);
+    if (error) {
+      throw error;
+    }
+
+    const { error: ledgerError } = await db
+      .from('billing_ledger')
+      .delete()
+      .in('case_id', [...normalized]);
+    if (ledgerError) {
+      throw ledgerError;
+    }
+  } else {
+    memory.invoices = memory.invoices.filter((item) => !normalized.has(String(item.case_id)));
+    memory.ledger = memory.ledger.filter((item) => !normalized.has(String(item.case_id)));
+  }
+
+  return normalized.size;
+}
+
 module.exports = {
   createInvoice,
+  deleteByCaseIds,
   getBillingSummary,
   listInvoices,
   listLedgerEntries,

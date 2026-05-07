@@ -312,6 +312,34 @@ async function addTimeline(caseId, input, actor) {
   return saved;
 }
 
+async function deleteByCaseIds(caseIds = []) {
+  if (!caseIds.length) {
+    return 0;
+  }
+
+  const normalized = new Set(caseIds.map((value) => String(value)));
+  const db = getSupabaseClient();
+  if (db) {
+    const { error } = await db.from('case_tasks').delete().in('case_id', [...normalized]);
+    if (error) {
+      throw error;
+    }
+
+    const { error: timelineError } = await db
+      .from('case_timeline')
+      .delete()
+      .in('case_id', [...normalized]);
+    if (timelineError) {
+      throw timelineError;
+    }
+  } else {
+    memory.tasks = memory.tasks.filter((task) => !normalized.has(String(task.case_id)));
+    memory.timeline = memory.timeline.filter((entry) => !normalized.has(String(entry.case_id)));
+  }
+
+  return normalized.size;
+}
+
 module.exports = {
   addTask,
   addTimeline,
@@ -320,5 +348,6 @@ module.exports = {
   getCasesIndex,
   listTasks,
   listTimeline,
+  deleteByCaseIds,
   updateCaseStatus,
 };

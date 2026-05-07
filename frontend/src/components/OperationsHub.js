@@ -44,7 +44,20 @@ const initialReportForm = {
   reportType: 'dashboard',
 };
 
-function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
+const initialComplianceForm = {
+  requestType: 'access',
+  subjectName: '',
+  subjectEmail: '',
+  caseRef: '',
+  description: '',
+};
+
+const initialExportForm = {
+  subjectEmail: '',
+  caseRef: '',
+};
+
+function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged }) {
   const [tab, setTab] = useState('documents');
   const [documents, setDocuments] = useState([]);
   const [billingSummary, setBillingSummary] = useState(null);
@@ -54,6 +67,9 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
   const [audit, setAudit] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [reports, setReports] = useState([]);
+  const [complianceSummary, setComplianceSummary] = useState(null);
+  const [complianceRequests, setComplianceRequests] = useState([]);
+  const [exportPreview, setExportPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
   const [documentForm, setDocumentForm] = useState(initialDocumentForm);
@@ -62,6 +78,8 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
   const [eventForm, setEventForm] = useState(initialEventForm);
   const [notificationForm, setNotificationForm] = useState(initialNotificationForm);
   const [reportForm, setReportForm] = useState(initialReportForm);
+  const [complianceForm, setComplianceForm] = useState(initialComplianceForm);
+  const [exportForm, setExportForm] = useState(initialExportForm);
 
   const selectedCase = useMemo(
     () => cases.find((item) => item.id === selectedCaseId) || null,
@@ -69,7 +87,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
   );
 
   const loadData = async () => {
-    const [documentsResponse, billingResponse, invoicesResponse, ledgerResponse, calendarResponse, auditResponse, notificationsResponse, reportsResponse] =
+    const [documentsResponse, billingResponse, invoicesResponse, ledgerResponse, calendarResponse, auditResponse, notificationsResponse, reportsResponse, complianceSummaryResponse, complianceRequestsResponse] =
       await Promise.all([
         api.get('/documents'),
         api.get('/billing/summary'),
@@ -79,6 +97,8 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
         api.get('/audit'),
         api.get('/notifications'),
         api.get('/reports'),
+        api.get('/compliance/summary'),
+        api.get('/compliance/requests'),
       ]);
 
     setDocuments(documentsResponse.data);
@@ -89,6 +109,8 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
     setAudit(auditResponse.data);
     setNotifications(notificationsResponse.data);
     setReports(reportsResponse.data);
+    setComplianceSummary(complianceSummaryResponse.data);
+    setComplianceRequests(complianceRequestsResponse.data);
   };
 
   useEffect(() => {
@@ -266,6 +288,86 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
     }
   };
 
+  const submitComplianceRequest = async (event) => {
+    event.preventDefault();
+    if (!complianceForm.subjectName || !complianceForm.subjectEmail || !complianceForm.description) {
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await api.post('/compliance/requests', complianceForm);
+      setComplianceForm(initialComplianceForm);
+      await loadData();
+      setNotice({ tone: 'success', message: 'Compliance request logged.' });
+    } catch (error) {
+      setNotice({
+        tone: 'error',
+        message: error?.response?.data?.message || 'Could not create compliance request.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitExportPreview = async (event) => {
+    event.preventDefault();
+    if (!exportForm.subjectEmail && !exportForm.caseRef) {
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const { data } = await api.get('/compliance/export', {
+        params: exportForm,
+      });
+      setExportPreview(data);
+      setNotice({ tone: 'success', message: 'Export preview generated.' });
+    } catch (error) {
+      setNotice({
+        tone: 'error',
+        message: error?.response?.data?.message || 'Could not generate export preview.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const fulfillComplianceRequest = async (requestId) => {
+    setBusy(true);
+    try {
+      await api.post(`/compliance/requests/${requestId}/fulfill`, {
+        status: 'fulfilled',
+        responseSummary: 'Handled by practice operations team.',
+      });
+      await loadData();
+      setNotice({ tone: 'success', message: 'Compliance request fulfilled.' });
+    } catch (error) {
+      setNotice({
+        tone: 'error',
+        message: error?.response?.data?.message || 'Could not fulfill request.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runRetentionSweep = async () => {
+    setBusy(true);
+    try {
+      await api.post('/compliance/retention/sweep');
+      await loadData();
+      setNotice({ tone: 'success', message: 'Retention sweep completed.' });
+    } catch (error) {
+      setNotice({
+        tone: 'error',
+        message: error?.response?.data?.message || 'Could not run retention sweep.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const markNotificationRead = async (notificationId) => {
     setBusy(true);
     try {
@@ -288,6 +390,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
     ['calendar', 'Calendar'],
     ['notifications', 'Notifications'],
     ['reports', 'Reports'],
+    ['compliance', 'Compliance'],
     ['audit', 'Audit'],
   ];
 
@@ -296,7 +399,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
       <div className="panel-head">
         <div>
           <p className="panel-kicker">Practice operations</p>
-          <h2>Documents, billing, calendar, notifications, reports, and audit</h2>
+          <h2>Documents, billing, calendar, notifications, reports, compliance, and audit</h2>
         </div>
       </div>
 
@@ -752,6 +855,145 @@ function OperationsHub({ api, selectedCaseId, cases = [], onChanged }) {
                   <div className="muted">{item.reportType}</div>
                 </div>
                 <div className="muted">{item.createdAt}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {tab === 'compliance' ? (
+        <section className="ops-section">
+          <div className="mini-grid">
+            <Stat label="Open requests" value={complianceSummary?.openRequests ?? 0} />
+            <Stat label="Fulfilled" value={complianceSummary?.fulfilledRequests ?? 0} />
+            <Stat label="Retention days" value={complianceSummary?.retentionDays ?? 0} />
+            <Stat label="Eligible" value={complianceSummary?.eligibleForRetention ?? 0} />
+          </div>
+
+          <form className="stack-form" onSubmit={submitComplianceRequest}>
+            <select
+              value={complianceForm.requestType}
+              onChange={(event) =>
+                setComplianceForm((current) => ({
+                  ...current,
+                  requestType: event.target.value,
+                }))
+              }
+            >
+              <option value="access">Access</option>
+              <option value="correction">Correction</option>
+              <option value="deletion">Deletion</option>
+              <option value="export">Export</option>
+              <option value="objection">Objection</option>
+            </select>
+            <input
+              value={complianceForm.subjectName}
+              onChange={(event) =>
+                setComplianceForm((current) => ({
+                  ...current,
+                  subjectName: event.target.value,
+                }))
+              }
+              placeholder="Subject name"
+            />
+            <input
+              type="email"
+              value={complianceForm.subjectEmail}
+              onChange={(event) =>
+                setComplianceForm((current) => ({
+                  ...current,
+                  subjectEmail: event.target.value,
+                }))
+              }
+              placeholder="subject@example.com"
+            />
+            <input
+              value={complianceForm.caseRef}
+              onChange={(event) =>
+                setComplianceForm((current) => ({
+                  ...current,
+                  caseRef: event.target.value,
+                }))
+              }
+              placeholder="Case number or submission id"
+            />
+            <textarea
+              rows={3}
+              value={complianceForm.description}
+              onChange={(event) =>
+                setComplianceForm((current) => ({
+                  ...current,
+                  description: event.target.value,
+                }))
+              }
+              placeholder="Request details"
+            />
+            <button className="secondary-button" disabled={busy}>
+              Log compliance request
+            </button>
+          </form>
+
+          <form className="stack-form" onSubmit={submitExportPreview}>
+            <input
+              type="email"
+              value={exportForm.subjectEmail}
+              onChange={(event) =>
+                setExportForm((current) => ({
+                  ...current,
+                  subjectEmail: event.target.value,
+                }))
+              }
+              placeholder="Export subject email"
+            />
+            <input
+              value={exportForm.caseRef}
+              onChange={(event) =>
+                setExportForm((current) => ({
+                  ...current,
+                  caseRef: event.target.value,
+                }))
+              }
+              placeholder="Case ref for export"
+            />
+            <button className="secondary-button" disabled={busy}>
+              Generate export preview
+            </button>
+          </form>
+
+          {currentUser?.role === 'admin' ? (
+            <button type="button" className="secondary-button" onClick={runRetentionSweep} disabled={busy}>
+              Run retention sweep
+            </button>
+          ) : null}
+
+          {exportPreview ? (
+            <div className="panel nested-panel">
+              <p className="panel-kicker">Export preview</p>
+              <div className="mini-grid">
+                <Stat label="Submissions" value={exportPreview.submissions?.length ?? 0} />
+                <Stat label="Cases" value={exportPreview.cases?.length ?? 0} />
+                <Stat label="Documents" value={exportPreview.documents?.length ?? 0} />
+                <Stat label="Invoices" value={exportPreview.invoices?.length ?? 0} />
+              </div>
+              <div className="muted">{exportPreview.notices?.join(' ')}</div>
+            </div>
+          ) : null}
+
+          <div className="mini-list">
+            {complianceRequests.slice(0, 6).map((item) => (
+              <div key={item.id} className="mini-item">
+                <div>
+                  <strong>{item.requestType}</strong>
+                  <div className="muted">{item.subjectName} - {item.status}</div>
+                </div>
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => fulfillComplianceRequest(item.id)}
+                  disabled={busy || item.status === 'fulfilled'}
+                >
+                  {item.status === 'fulfilled' ? 'Fulfilled' : 'Fulfill'}
+                </button>
               </div>
             ))}
           </div>

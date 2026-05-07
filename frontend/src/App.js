@@ -428,6 +428,7 @@ function App() {
               api={api}
               selectedCaseId={selectedCaseId}
               cases={cases}
+              currentUser={currentUser}
               onChanged={loadWorkspace}
             />
 

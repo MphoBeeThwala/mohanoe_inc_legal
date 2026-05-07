@@ -308,6 +308,51 @@ async function getSubmission(id) {
   );
 }
 
+async function getPrivateSubmission(id) {
+  const submission = await findRow('submissions', id);
+  if (!submission) {
+    return null;
+  }
+
+  const raw = decryptJson(submission.raw_payload_encrypted);
+  const assessments = await listRows('assessments');
+  const cases = await listRows('cases');
+
+  return {
+    submission,
+    raw,
+    assessment:
+      assessments.find((item) => item.intake_submission_id === submission.id) || null,
+    caseRecord:
+      cases.find((item) => item.intake_submission_id === submission.id) || null,
+  };
+}
+
+async function findSubmissionsByEmail(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized) {
+    return [];
+  }
+
+  const submissions = await listRows('submissions');
+  const assessments = await listRows('assessments');
+  const cases = await listRows('cases');
+
+  return submissions
+    .map((submission) => ({
+      submission,
+      raw: decryptJson(submission.raw_payload_encrypted),
+    }))
+    .filter((item) => String(item.raw?.email || '').trim().toLowerCase() === normalized)
+    .map((item) =>
+      toPublicSubmission(
+        item.submission,
+        assessments.find((entry) => entry.intake_submission_id === item.submission.id),
+        cases.find((entry) => entry.intake_submission_id === item.submission.id),
+      ),
+    );
+}
+
 async function assessSubmission(id) {
   const submission = await findRow('submissions', id);
   if (!submission) {
@@ -418,6 +463,7 @@ async function listCases() {
     status: item.status,
     nextAction: item.next_action,
     createdAt: item.created_at,
+    updatedAt: item.updated_at,
   }));
 }
 
@@ -437,8 +483,39 @@ async function getSummary() {
   };
 }
 
+async function deleteSubmission(submissionId) {
+  const cases = await listRows('cases');
+  const relatedCases = cases.filter(
+    (item) => item.intake_submission_id === submissionId,
+  );
+
+  const db = getSupabaseClient();
+  if (db) {
+    const { error } = await db.from('submissions').delete().eq('id', submissionId);
+    if (error) {
+      throw error;
+    }
+  } else {
+    memory.submissions = memory.submissions.filter((item) => item.id !== submissionId);
+    memory.assessments = memory.assessments.filter(
+      (item) => item.intake_submission_id !== submissionId,
+    );
+    memory.cases = memory.cases.filter(
+      (item) => item.intake_submission_id !== submissionId,
+    );
+  }
+
+  return {
+    submissionId,
+    caseIds: relatedCases.map((item) => item.id),
+  };
+}
+
 module.exports = {
   createSubmission,
+  deleteSubmission,
+  findSubmissionsByEmail,
+  getPrivateSubmission,
   getSubmission,
   assessSubmission,
   listCases,

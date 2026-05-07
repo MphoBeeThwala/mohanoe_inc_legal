@@ -6,6 +6,11 @@ const express = require('express');
 const cors = require('cors');
 const routes = require('./routes');
 const { seedDefaultUsers } = require('./services/auth.service');
+const {
+  createRateLimiter,
+  requestLogger,
+  securityHeaders,
+} = require('./middleware/security');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -16,7 +21,21 @@ const allowedOrigins = new Set(
     .filter(Boolean),
 );
 
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+
 // Middleware
+app.use(securityHeaders);
+app.use(requestLogger);
+const rateLimiter = createRateLimiter();
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    rateLimiter(req, res, next);
+    return;
+  }
+
+  next();
+});
 app.use(
   cors({
     origin(origin, callback) {
@@ -36,6 +55,22 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'mohanoe-inc-legal-backend',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/ready', (req, res) => {
+  const configured = Boolean(
+    process.env.JWT_SECRET &&
+      process.env.APP_ORIGIN &&
+      process.env.SUPABASE_URL &&
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+  );
+
+  res.json({
+    status: configured ? 'ready' : 'degraded',
+    configured,
+    retentionDays: Number(process.env.CLIENT_DATA_RETENTION_DAYS || 3650),
     timestamp: new Date().toISOString(),
   });
 });

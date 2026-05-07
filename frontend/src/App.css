@@ -540,6 +540,11 @@
   gap: 10px;
 }
 
+.nested-panel {
+  padding: 18px;
+  background: rgba(248, 251, 248, 0.96);
+}
+
 @media (max-width: 1080px) {
   .summary-grid,
   .content-grid {
