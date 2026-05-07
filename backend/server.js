@@ -5,6 +5,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const express = require('express');
 const cors = require('cors');
 const routes = require('./routes');
+const { seedDefaultUsers } = require('./services/auth.service');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -57,6 +58,7 @@ if (frontendBuildPath) {
 }
 
 if (require.main === module) {
+  seedDefaultUsers().catch(() => {});
   app.listen(port, () => {
     console.log(`Mohanoe backend listening at http://localhost:${port}`);
   });

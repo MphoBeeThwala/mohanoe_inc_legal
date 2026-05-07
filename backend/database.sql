@@ -11,6 +11,10 @@ CREATE TABLE users (
   email TEXT UNIQUE NOT NULL,
   full_name TEXT,
   role TEXT NOT NULL DEFAULT 'client',
+  password_hash TEXT NOT NULL DEFAULT '',
+  password_salt TEXT NOT NULL DEFAULT '',
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  last_login_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -91,15 +95,49 @@ CREATE TABLE cases (
 );
 
 -- --------------------------------------------------------------------
+-- TABLE: case_tasks
+-- Stores attorney work items for each matter.
+-- --------------------------------------------------------------------
+CREATE TABLE case_tasks (
+  id uuid PRIMARY KEY,
+  case_id uuid NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  due_date DATE,
+  assignee_name TEXT,
+  created_by TEXT,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- --------------------------------------------------------------------
+-- TABLE: case_timeline
+-- Tracks notes and status changes for each matter.
+-- --------------------------------------------------------------------
+CREATE TABLE case_timeline (
+  id uuid PRIMARY KEY,
+  case_id uuid NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL DEFAULT 'note',
+  message TEXT NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  actor_name TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- --------------------------------------------------------------------
 -- RLS (Row-Level Security) Policies
 -- Ensure that users can only access their own data.
 -- --------------------------------------------------------------------
 
 -- Enable RLS on all relevant tables
 ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE assessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE case_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE case_timeline ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Allow users to see their own client profile
 CREATE POLICY "Users can view their own client data" 
@@ -124,5 +162,13 @@ USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 
 -- Policy: Allow staff to access all cases
 CREATE POLICY "Staff can access all cases" 
 ON cases FOR ALL
+USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 'paralegal') );
+
+CREATE POLICY "Staff can access all case tasks"
+ON case_tasks FOR ALL
+USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 'paralegal') );
+
+CREATE POLICY "Staff can access all case timeline"
+ON case_timeline FOR ALL
 USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 'paralegal') );
 
