@@ -1,6 +1,7 @@
 const { randomUUID } = require('crypto');
 const { getSupabaseClient } = require('../config/supabase');
 const intakeService = require('./intake.service');
+const auditService = require('./audit.service');
 
 const memory = {
   tasks: [],
@@ -155,6 +156,18 @@ async function addTask(caseId, input, actor) {
   };
 
   const saved = await writeRow('case_tasks', 'tasks', task);
+  await auditService
+    .logEvent(
+      {
+        entityType: 'case_task',
+        entityId: saved.id,
+        action: 'task_created',
+        summary: `Task created: ${task.title}`,
+        details: { caseId: caseRecord.id },
+      },
+      actor,
+    )
+    .catch(() => {});
   await addTimeline(caseRecord.id, {
     eventType: 'task_created',
     message: `Task created: ${task.title}`,
@@ -211,6 +224,18 @@ async function completeTask(caseId, taskId, actor) {
     message: `Task completed: ${existing.title}`,
     metadata: { taskId },
   }, actor);
+  await auditService
+    .logEvent(
+      {
+        entityType: 'case_task',
+        entityId: existing.id,
+        action: 'task_completed',
+        summary: `Task completed: ${existing.title}`,
+        details: { caseId: caseRecord.id },
+      },
+      actor,
+    )
+    .catch(() => {});
 
   return patch;
 }
@@ -241,6 +266,18 @@ async function updateCaseStatus(caseId, input, actor) {
     message: `Case status changed to ${status}`,
     metadata: { previousStatus: caseRecord.status, newStatus: status },
   }, actor);
+  await auditService
+    .logEvent(
+      {
+        entityType: 'case',
+        entityId: caseRecord.id,
+        action: 'case_status_changed',
+        summary: `Case status changed to ${status}`,
+        details: { previousStatus: caseRecord.status, newStatus: status },
+      },
+      actor,
+    )
+    .catch(() => {});
 
   return updated;
 }
@@ -257,6 +294,21 @@ async function addTimeline(caseId, input, actor) {
   };
 
   const saved = await writeRow('case_timeline', 'timeline', entry);
+  await auditService
+    .logEvent(
+      {
+        entityType: 'case_timeline',
+        entityId: saved.id,
+        action: 'timeline_note_added',
+        summary: entry.message,
+        details: {
+          caseId,
+          eventType: entry.event_type,
+        },
+      },
+      actor,
+    )
+    .catch(() => {});
   return saved;
 }
 

@@ -7,6 +7,7 @@ const {
   redactMatterForAi,
   redactText,
 } = require('./privacy.service');
+const auditService = require('./audit.service');
 
 const memory = {
   clients: [],
@@ -263,6 +264,17 @@ async function createSubmission(input) {
   };
 
   const saved = await insertRow('submissions', record);
+  await auditService
+    .logEvent(
+      {
+        entityType: 'submission',
+        entityId: saved.id,
+        action: 'submission_created',
+        summary: `Intake submitted: ${saved.client_label}`,
+      },
+      { email: normalized.email, fullName: normalized.fullName, role: 'client' },
+    )
+    .catch(() => {});
   return toPublicSubmission(saved);
 }
 
@@ -352,6 +364,21 @@ async function assessSubmission(id) {
   };
 
   const savedCase = await upsertRow('cases', caseRecord, 'intake_submission_id');
+  await auditService
+    .logEvent(
+      {
+        entityType: 'case',
+        entityId: savedCase.id,
+        action: 'case_created',
+        summary: `Case created: ${savedCase.case_number}`,
+        details: {
+          submissionId: submission.id,
+          urgency: savedCase.urgency,
+        },
+      },
+      { email: 'system', fullName: 'Intake pipeline', role: 'system' },
+    )
+    .catch(() => {});
 
   const updatedSubmission = {
     ...submission,
@@ -360,6 +387,21 @@ async function assessSubmission(id) {
   };
 
   await upsertRow('submissions', updatedSubmission);
+  await auditService
+    .logEvent(
+      {
+        entityType: 'submission',
+        entityId: submission.id,
+        action: 'submission_assessed',
+        summary: `Intake assessed: ${submission.id}`,
+        details: {
+          provider: savedAssessment.provider,
+          urgency: savedCase.urgency,
+        },
+      },
+      { email: 'system', fullName: 'Assessment pipeline', role: 'system' },
+    )
+    .catch(() => {});
 
   return toPublicSubmission(updatedSubmission, savedAssessment, savedCase);
 }

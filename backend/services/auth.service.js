@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { getSupabaseClient } = require('../config/supabase');
+const auditService = require('./audit.service');
 
 const memory = {
   users: [],
@@ -159,6 +160,17 @@ async function registerUser(input, options = {}) {
   };
 
   const saved = await saveUser(user);
+  await auditService
+    .logEvent(
+      {
+        entityType: 'user',
+        entityId: saved.id,
+        action: 'user_registered',
+        summary: `User registered: ${saved.email}`,
+      },
+      { userId: saved.id, email: saved.email, fullName: saved.full_name, role: saved.role },
+    )
+    .catch(() => {});
   return {
     user: toPublicUser(saved),
     token: signToken(saved),
@@ -191,6 +203,17 @@ async function loginUser(input) {
   const updated = await updateUser(user.id, {
     last_login_at: new Date().toISOString(),
   });
+  await auditService
+    .logEvent(
+      {
+        entityType: 'user',
+        entityId: user.id,
+        action: 'user_logged_in',
+        summary: `User logged in: ${user.email}`,
+      },
+      { userId: user.id, email: user.email, fullName: user.full_name, role: user.role },
+    )
+    .catch(() => {});
 
   return {
     user: toPublicUser(updated || user),

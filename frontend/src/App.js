@@ -4,6 +4,7 @@ import IntakeForm from './components/IntakeForm';
 import AssessmentCard from './components/AssessmentCard';
 import CaseTable from './components/CaseTable';
 import CaseWorkspace from './components/CaseWorkspace';
+import OperationsHub from './components/OperationsHub';
 import './App.css';
 
 const api = axios.create({
@@ -420,6 +421,13 @@ function App() {
               api={api}
               selectedCaseId={selectedCaseId}
               onSelectCase={handleSelectCase}
+              onChanged={loadWorkspace}
+            />
+
+            <OperationsHub
+              api={api}
+              selectedCaseId={selectedCaseId}
+              cases={cases}
               onChanged={loadWorkspace}
             />
 

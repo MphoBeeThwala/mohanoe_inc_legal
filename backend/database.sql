@@ -126,6 +126,104 @@ CREATE TABLE case_timeline (
 );
 
 -- --------------------------------------------------------------------
+-- TABLE: documents
+-- Stores encrypted document bodies and matter-level metadata.
+-- --------------------------------------------------------------------
+CREATE TABLE documents (
+  id uuid PRIMARY KEY,
+  case_id uuid NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  case_number TEXT NOT NULL,
+  client_label TEXT NOT NULL,
+  title TEXT NOT NULL,
+  document_type TEXT NOT NULL DEFAULT 'correspondence',
+  tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+  status TEXT NOT NULL DEFAULT 'draft',
+  encrypted_content TEXT NOT NULL,
+  content_preview TEXT NOT NULL DEFAULT '',
+  created_by TEXT,
+  signed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- --------------------------------------------------------------------
+-- TABLE: billing_invoices
+-- Stores invoice records for operating work.
+-- --------------------------------------------------------------------
+CREATE TABLE billing_invoices (
+  id uuid PRIMARY KEY,
+  case_id uuid NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  case_number TEXT NOT NULL,
+  client_label TEXT NOT NULL,
+  invoice_number TEXT UNIQUE NOT NULL,
+  subject TEXT NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'ZAR',
+  status TEXT NOT NULL DEFAULT 'issued',
+  line_items JSONB NOT NULL DEFAULT '[]'::jsonb,
+  subtotal NUMERIC(14,2) NOT NULL DEFAULT 0,
+  vat NUMERIC(14,2) NOT NULL DEFAULT 0,
+  total NUMERIC(14,2) NOT NULL DEFAULT 0,
+  issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  due_at TIMESTAMPTZ,
+  paid_at TIMESTAMPTZ,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- --------------------------------------------------------------------
+-- TABLE: billing_ledger
+-- Stores trust and operating ledger movements.
+-- --------------------------------------------------------------------
+CREATE TABLE billing_ledger (
+  id uuid PRIMARY KEY,
+  case_id uuid NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  case_number TEXT NOT NULL,
+  entry_type TEXT NOT NULL,
+  account TEXT NOT NULL,
+  amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+  reference TEXT,
+  notes TEXT,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- --------------------------------------------------------------------
+-- TABLE: calendar_events
+-- Stores hearings, deadlines, and practice reminders.
+-- --------------------------------------------------------------------
+CREATE TABLE calendar_events (
+  id uuid PRIMARY KEY,
+  case_id uuid NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  case_number TEXT NOT NULL,
+  title TEXT NOT NULL,
+  event_type TEXT NOT NULL DEFAULT 'deadline',
+  starts_at TIMESTAMPTZ NOT NULL,
+  ends_at TIMESTAMPTZ,
+  location TEXT,
+  notes TEXT,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- --------------------------------------------------------------------
+-- TABLE: audit_events
+-- App-level audit trail for security and compliance.
+-- --------------------------------------------------------------------
+CREATE TABLE audit_events (
+  id uuid PRIMARY KEY,
+  actor_id uuid,
+  actor_name TEXT,
+  actor_role TEXT,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT,
+  action TEXT NOT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  details JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- --------------------------------------------------------------------
 -- RLS (Row-Level Security) Policies
 -- Ensure that users can only access their own data.
 -- --------------------------------------------------------------------
@@ -138,6 +236,11 @@ ALTER TABLE assessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE case_tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE case_timeline ENABLE ROW LEVEL SECURITY;
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE billing_invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE billing_ledger ENABLE ROW LEVEL SECURITY;
+ALTER TABLE calendar_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_events ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Allow users to see their own client profile
 CREATE POLICY "Users can view their own client data" 
@@ -170,5 +273,25 @@ USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 
 
 CREATE POLICY "Staff can access all case timeline"
 ON case_timeline FOR ALL
+USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 'paralegal') );
+
+CREATE POLICY "Staff can access all documents"
+ON documents FOR ALL
+USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 'paralegal') );
+
+CREATE POLICY "Staff can access all invoices"
+ON billing_invoices FOR ALL
+USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 'paralegal') );
+
+CREATE POLICY "Staff can access all billing ledger"
+ON billing_ledger FOR ALL
+USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 'paralegal') );
+
+CREATE POLICY "Staff can access all calendar events"
+ON calendar_events FOR ALL
+USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 'paralegal') );
+
+CREATE POLICY "Staff can access all audit events"
+ON audit_events FOR ALL
 USING ( (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'attorney', 'paralegal') );
 
