@@ -14,7 +14,8 @@ const {
 
 const app = express();
 const port = process.env.PORT || 3001;
-const appOrigin = process.env.APP_ORIGIN || 'http://localhost:3000';
+const appOrigin =
+  process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
 const allowedOrigins = new Set(
   [appOrigin, 'http://localhost:3000', 'http://localhost:3001']
     .map((origin) => origin && origin.trim())
@@ -62,7 +63,7 @@ app.get('/health', (req, res) => {
 app.get('/ready', (req, res) => {
   const configured = Boolean(
     process.env.JWT_SECRET &&
-      process.env.APP_ORIGIN &&
+      (process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL) &&
       process.env.SUPABASE_URL &&
       process.env.SUPABASE_SERVICE_ROLE_KEY,
   );
