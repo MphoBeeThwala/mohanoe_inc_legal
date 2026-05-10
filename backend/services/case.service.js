@@ -28,30 +28,7 @@ async function writeRow(table, memoryKey, record) {
 }
 
 async function updateCaseRecord(caseId, patch) {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db
-      .from('cases')
-      .update(patch)
-      .eq('id', caseId)
-      .select()
-      .single();
-
-    if (error) {
-      throw error;
-    }
-
-    return data;
-  }
-
-  const cases = await intakeService.listCases();
-  const current = cases.find((item) => item.id === caseId || item.caseNumber === caseId);
-  if (!current) {
-    return null;
-  }
-
-  const updated = { ...current, ...patch };
-  return updated;
+  return intakeService.updateCase(caseId, patch);
 }
 
 async function getCasesIndex() {

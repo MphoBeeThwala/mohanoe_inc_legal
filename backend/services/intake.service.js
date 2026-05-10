@@ -467,6 +467,36 @@ async function listCases() {
   }));
 }
 
+async function updateCase(caseId, patch) {
+  const db = getSupabaseClient();
+  if (db) {
+    const { data, error } = await db
+      .from('cases')
+      .update(patch)
+      .eq('id', caseId)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return data;
+  }
+
+  const index = memory.cases.findIndex((item) => item.id === caseId);
+  if (index < 0) {
+    return null;
+  }
+
+  memory.cases[index] = {
+    ...memory.cases[index],
+    ...patch,
+  };
+
+  return memory.cases[index];
+}
+
 async function getSummary() {
   const submissions = await listRows('submissions');
   const assessments = await listRows('assessments');
@@ -521,4 +551,5 @@ module.exports = {
   listCases,
   listSubmissions,
   getSummary,
+  updateCase,
 };
