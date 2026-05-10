@@ -25,11 +25,31 @@ async function check(path, expectedStatus = 200, contains = null) {
   };
 }
 
+async function fetchJson(path, expectedStatus = 200) {
+  const response = await fetch(new URL(path, baseUrl));
+
+  if (response.status !== expectedStatus) {
+    throw new Error(`${path} returned ${response.status}, expected ${expectedStatus}`);
+  }
+
+  return response.json();
+}
+
 (async () => {
   const results = [];
   results.push(await check('/health'));
   results.push(await check('/ready'));
-  results.push(await check('/', 200, 'Legal practice management'));
+  results.push(await check('/', 200, '<div id="root"></div>'));
+  results.push(await check('/manifest.json', 200, '"short_name"'));
+
+  const assetManifest = await fetchJson('/asset-manifest.json');
+  const mainJsPath = assetManifest.files?.['main.js'];
+
+  if (!mainJsPath) {
+    throw new Error('asset-manifest.json did not include files["main.js"]');
+  }
+
+  results.push(await check(mainJsPath, 200));
   console.log(JSON.stringify({ ok: true, results }, null, 2));
 })().catch((error) => {
   console.error(JSON.stringify({ ok: false, message: error.message }, null, 2));
