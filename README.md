@@ -31,6 +31,7 @@ Legal practice management app for Mohanoe Inc. Attorneys with encrypted intake, 
 - Use the root-level `render.yaml` blueprint for a single web service.
 - The Render build copies the React build into `backend/public`, and the backend serves that directory so the UI and API stay on the same origin.
 - Populate the secret env vars Render prompts for on blueprint creation: `JWT_SECRET`, `INTAKE_ENCRYPTION_KEY`, `AUDIT_CHAIN_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `DEFAULT_ADMIN_EMAIL`, and `DEFAULT_ADMIN_PASSWORD`.
+- If you need a temporary access workaround, set `EMERGENCY_ADMIN_LOGIN=true` and sign in from `/` with `DEFAULT_ADMIN_EMAIL` and `DEFAULT_ADMIN_PASSWORD`. Turn it back off after access is restored.
 - If startup seeding fails or an existing admin password needs a secure reset, set `ADMIN_BOOTSTRAP_TOKEN` temporarily and call `POST /api/auth/bootstrap-admin` with `fullName`, `email`, `password`, and `token`. Remove the token env var after successful bootstrap.
 - The health check endpoint is `/ready`.
 - `ALLOW_PUBLIC_REGISTRATION` is disabled by default; staff access should be seeded by an admin account.

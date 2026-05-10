@@ -23,6 +23,10 @@ function getDefaultAdminConfig() {
   };
 }
 
+function isEmergencyAdminLoginEnabled() {
+  return String(process.env.EMERGENCY_ADMIN_LOGIN || '').toLowerCase() === 'true';
+}
+
 function constantTimeEquals(left, right) {
   const leftBuffer = Buffer.from(String(left || ''), 'utf8');
   const rightBuffer = Buffer.from(String(right || ''), 'utf8');
@@ -153,6 +157,36 @@ async function countAdminUsers() {
   return users.filter((user) => user.role === 'admin' && user.is_active !== false).length;
 }
 
+async function ensureAdminUser({ fullName, email, password }) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const normalizedName = String(fullName || 'Practice Admin').trim();
+  const normalizedPassword = String(password || '');
+  const passwordData = createPasswordHash(normalizedPassword);
+  const existing = await findUserByEmail(normalizedEmail);
+
+  if (existing) {
+    return updateUser(existing.id, {
+      full_name: normalizedName,
+      role: 'admin',
+      is_active: true,
+      password_hash: passwordData.hash,
+      password_salt: passwordData.salt,
+    });
+  }
+
+  return saveUser({
+    id: crypto.randomUUID(),
+    email: normalizedEmail,
+    full_name: normalizedName,
+    role: 'admin',
+    password_hash: passwordData.hash,
+    password_salt: passwordData.salt,
+    is_active: true,
+    created_at: new Date().toISOString(),
+    last_login_at: null,
+  });
+}
+
 async function registerUser(input, options = {}) {
   const fullName = String(input.fullName || '').trim();
   const email = String(input.email || '').trim().toLowerCase();
@@ -236,24 +270,59 @@ async function loginUser(input) {
 
   let user = await findUserByEmail(email);
   const defaultAdmin = getDefaultAdminConfig();
+  const emergencyAdminMatch =
+    isEmergencyAdminLoginEnabled() &&
+    defaultAdmin.email &&
+    constantTimeEquals(email, defaultAdmin.email) &&
+    constantTimeEquals(password, defaultAdmin.password);
 
   if (!user && defaultAdmin.email && email === defaultAdmin.email) {
     try {
       await seedDefaultUsers();
       user = await findUserByEmail(email);
     } catch (error) {
-      error.statusCode = error.statusCode || 500;
-      throw error;
+      if (!emergencyAdminMatch) {
+        error.statusCode = error.statusCode || 500;
+        throw error;
+      }
     }
   }
 
-  if (!user || user.is_active === false) {
-    const error = new Error('Invalid credentials');
-    error.statusCode = 401;
-    throw error;
-  }
+  if (!user || user.is_active === false || !verifyPassword(password, user.password_salt, user.password_hash)) {
+    if (emergencyAdminMatch) {
+      const emergencyAdmin = await ensureAdminUser({
+        fullName: defaultAdmin.fullName,
+        email: defaultAdmin.email,
+        password: defaultAdmin.password,
+      });
 
-  if (!verifyPassword(password, user.password_salt, user.password_hash)) {
+      await auditService
+        .logEvent(
+          {
+            entityType: 'user',
+            entityId: emergencyAdmin.id,
+            action: 'emergency_admin_login',
+            summary: `Emergency admin login: ${emergencyAdmin.email}`,
+          },
+          {
+            userId: emergencyAdmin.id,
+            email: emergencyAdmin.email,
+            fullName: emergencyAdmin.full_name,
+            role: emergencyAdmin.role,
+          },
+        )
+        .catch(() => {});
+
+      const updatedEmergencyAdmin = await updateUser(emergencyAdmin.id, {
+        last_login_at: new Date().toISOString(),
+      });
+
+      return {
+        user: toPublicUser(updatedEmergencyAdmin || emergencyAdmin),
+        token: signToken(updatedEmergencyAdmin || emergencyAdmin),
+      };
+    }
+
     const error = new Error('Invalid credentials');
     error.statusCode = 401;
     throw error;
@@ -306,16 +375,15 @@ async function bootstrapAdmin(input) {
   }
 
   const existing = await findUserByEmail(email);
-  const passwordData = createPasswordHash(password);
   let saved;
 
   if (existing) {
-    saved = await updateUser(existing.id, {
-      full_name: fullName,
-      role: 'admin',
-      is_active: true,
-      password_hash: passwordData.hash,
-      password_salt: passwordData.salt,
+    saved = await ensureAdminUser({
+      fullName,
+      email,
+      password,
+    });
+    saved = await updateUser(saved.id, {
       last_login_at: null,
     });
   } else {
@@ -326,16 +394,10 @@ async function bootstrapAdmin(input) {
       throw error;
     }
 
-    saved = await saveUser({
-      id: crypto.randomUUID(),
+    saved = await ensureAdminUser({
+      fullName,
       email,
-      full_name: fullName,
-      role: 'admin',
-      password_hash: passwordData.hash,
-      password_salt: passwordData.salt,
-      is_active: true,
-      created_at: new Date().toISOString(),
-      last_login_at: null,
+      password,
     });
   }
 
