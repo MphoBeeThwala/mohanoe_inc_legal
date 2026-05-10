@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: starter
     rootDir: .
-    buildCommand: npm ci --prefix backend && npm ci --prefix frontend && npm run build --prefix frontend
+    buildCommand: npm ci --prefix backend && npm ci --prefix frontend && npm run build --prefix frontend && node scripts/prepare-static.js
     startCommand: node backend/server.js
     healthCheckPath: /ready
     envVars:

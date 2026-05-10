@@ -80,6 +80,7 @@ app.get('/ready', (req, res) => {
 app.use('/api', routes);
 
 const frontendBuildCandidates = [
+  path.resolve(__dirname, 'public'),
   path.resolve(__dirname, '..', 'frontend', 'build'),
   path.resolve(__dirname, '..', 'build'),
 ];
@@ -91,6 +92,10 @@ if (frontendBuildPath) {
   app.get(/^\/(?!api).*/, (req, res) => {
     res.sendFile(path.join(frontendBuildPath, 'index.html'));
   });
+} else {
+  console.warn(
+    `Frontend build not found. Checked: ${frontendBuildCandidates.join(', ')}`,
+  );
 }
 
 if (require.main === module) {

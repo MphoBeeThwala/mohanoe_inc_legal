@@ -22,16 +22,18 @@ Legal practice management app for Mohanoe Inc. Attorneys with encrypted intake, 
 
 ## Production notes
 - Store `INTAKE_ENCRYPTION_KEY` as a 32-byte base64 or hex key.
+- Keep Supabase as the production datastore for the first live release.
 - Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to persist intake data in Postgres.
 - Set `ANTHROPIC_API_KEY` to enable live AI triage. Without it, the backend falls back to rules-based assessment.
 
 ## Deployment
 - Recommended platform: Render.
 - Use the root-level `render.yaml` blueprint for a single web service.
-- The backend serves the built React app from `frontend/build`, so the UI and API stay on the same origin.
+- The Render build copies the React build into `backend/public`, and the backend serves that directory so the UI and API stay on the same origin.
 - Populate the secret env vars Render prompts for on blueprint creation: `JWT_SECRET`, `INTAKE_ENCRYPTION_KEY`, `AUDIT_CHAIN_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `DEFAULT_ADMIN_EMAIL`, and `DEFAULT_ADMIN_PASSWORD`.
 - The health check endpoint is `/ready`.
 - `ALLOW_PUBLIC_REGISTRATION` is disabled by default; staff access should be seeded by an admin account.
+- See `PROD_OPERATIONS.md` for backup, restore, and smoke-test procedures.
 
 ## Compliance
 - Raw client PII stays encrypted at rest.
