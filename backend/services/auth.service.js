@@ -15,6 +15,14 @@ function isPublicRegistrationEnabled() {
   return String(process.env.ALLOW_PUBLIC_REGISTRATION || '').toLowerCase() === 'true';
 }
 
+function getDefaultAdminConfig() {
+  return {
+    email: String(process.env.DEFAULT_ADMIN_EMAIL || '').trim().toLowerCase(),
+    password: String(process.env.DEFAULT_ADMIN_PASSWORD || ''),
+    fullName: String(process.env.DEFAULT_ADMIN_NAME || 'Practice Admin').trim(),
+  };
+}
+
 function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString('hex');
 }
@@ -210,7 +218,19 @@ async function loginUser(input) {
     throw error;
   }
 
-  const user = await findUserByEmail(email);
+  let user = await findUserByEmail(email);
+  const defaultAdmin = getDefaultAdminConfig();
+
+  if (!user && defaultAdmin.email && email === defaultAdmin.email) {
+    try {
+      await seedDefaultUsers();
+      user = await findUserByEmail(email);
+    } catch (error) {
+      error.statusCode = error.statusCode || 500;
+      throw error;
+    }
+  }
+
   if (!user || user.is_active === false) {
     const error = new Error('Invalid credentials');
     error.statusCode = 401;
@@ -291,9 +311,11 @@ function requireRoles(...roles) {
 }
 
 async function seedDefaultUsers() {
-  const seedEmail = process.env.DEFAULT_ADMIN_EMAIL;
-  const seedPassword = process.env.DEFAULT_ADMIN_PASSWORD;
-  const seedName = process.env.DEFAULT_ADMIN_NAME || 'Practice Admin';
+  const {
+    email: seedEmail,
+    password: seedPassword,
+    fullName: seedName,
+  } = getDefaultAdminConfig();
 
   if (!seedEmail || !seedPassword) {
     return null;

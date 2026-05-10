@@ -99,7 +99,9 @@ if (frontendBuildPath) {
 }
 
 if (require.main === module) {
-  seedDefaultUsers().catch(() => {});
+  seedDefaultUsers().catch((error) => {
+    console.error('Default admin seed failed:', error.message);
+  });
   app.listen(port, () => {
     console.log(`Mohanoe backend listening at http://localhost:${port}`);
   });
