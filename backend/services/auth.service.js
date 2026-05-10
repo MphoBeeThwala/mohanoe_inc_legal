@@ -23,6 +23,17 @@ function getDefaultAdminConfig() {
   };
 }
 
+function constantTimeEquals(left, right) {
+  const leftBuffer = Buffer.from(String(left || ''), 'utf8');
+  const rightBuffer = Buffer.from(String(right || ''), 'utf8');
+
+  if (leftBuffer.length !== rightBuffer.length || leftBuffer.length === 0) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
 function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString('hex');
 }
@@ -135,6 +146,11 @@ async function updateUser(id, patch) {
   }
 
   return null;
+}
+
+async function countAdminUsers() {
+  const users = await readUsers();
+  return users.filter((user) => user.role === 'admin' && user.is_active !== false).length;
 }
 
 async function registerUser(input, options = {}) {
@@ -264,6 +280,85 @@ async function loginUser(input) {
   };
 }
 
+async function bootstrapAdmin(input) {
+  const bootstrapToken = String(process.env.ADMIN_BOOTSTRAP_TOKEN || '');
+  const providedToken = String(input.token || '');
+  const fullName = String(input.fullName || process.env.DEFAULT_ADMIN_NAME || 'Practice Admin').trim();
+  const email = String(input.email || '').trim().toLowerCase();
+  const password = String(input.password || '');
+
+  if (!bootstrapToken) {
+    const error = new Error('Admin bootstrap is not enabled');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (!constantTimeEquals(providedToken, bootstrapToken)) {
+    const error = new Error('Invalid bootstrap token');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (!fullName || !email || !password) {
+    const error = new Error('fullName, email, password, and token are required');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const existing = await findUserByEmail(email);
+  const passwordData = createPasswordHash(password);
+  let saved;
+
+  if (existing) {
+    saved = await updateUser(existing.id, {
+      full_name: fullName,
+      role: 'admin',
+      is_active: true,
+      password_hash: passwordData.hash,
+      password_salt: passwordData.salt,
+      last_login_at: null,
+    });
+  } else {
+    const adminCount = await countAdminUsers();
+    if (adminCount > 0) {
+      const error = new Error('An admin account already exists for a different email');
+      error.statusCode = 409;
+      throw error;
+    }
+
+    saved = await saveUser({
+      id: crypto.randomUUID(),
+      email,
+      full_name: fullName,
+      role: 'admin',
+      password_hash: passwordData.hash,
+      password_salt: passwordData.salt,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      last_login_at: null,
+    });
+  }
+
+  await auditService
+    .logEvent(
+      {
+        entityType: 'user',
+        entityId: saved.id,
+        action: existing ? 'admin_bootstrap_reset' : 'admin_bootstrap_created',
+        summary: existing
+          ? `Admin credentials reset: ${saved.email}`
+          : `Admin account bootstrapped: ${saved.email}`,
+      },
+      { userId: saved.id, email: saved.email, fullName: saved.full_name, role: saved.role },
+    )
+    .catch(() => {});
+
+  return {
+    user: toPublicUser(saved),
+    token: signToken(saved),
+  };
+}
+
 async function getSessionUser(userId) {
   const user = await findUserById(userId);
   return toPublicUser(user);
@@ -340,6 +435,7 @@ async function seedDefaultUsers() {
 
 module.exports = {
   authenticateRequest,
+  bootstrapAdmin,
   getSessionUser,
   loginUser,
   isPublicRegistrationEnabled,

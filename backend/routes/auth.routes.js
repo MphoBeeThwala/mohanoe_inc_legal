@@ -8,6 +8,7 @@ const router = express.Router();
 
 router.post('/register', authController.register);
 router.post('/login', authController.login);
+router.post('/bootstrap-admin', authController.bootstrapAdmin);
 router.get('/me', authenticateRequest, authController.me);
 router.post('/seed-admin', authenticateRequest, authController.seedAdmin);
 
