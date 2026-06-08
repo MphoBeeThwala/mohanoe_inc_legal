@@ -11,8 +11,20 @@ body,
 body {
   margin: 0;
   font-family: Inter, 'Segoe UI', Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #0f241c;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 3px solid rgba(27, 122, 88, 0.42);
+  outline-offset: 2px;
 }
 
 button,

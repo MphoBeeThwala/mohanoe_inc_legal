@@ -18,7 +18,7 @@ function ensureStringArray(value) {
   return [String(value)];
 }
 
-function AssessmentCard({ matter }) {
+function AssessmentCard({ matter, onGoToIntake, onGoToCases }) {
   if (!matter) {
     return (
       <div className="panel assessment-panel">
@@ -27,6 +27,18 @@ function AssessmentCard({ matter }) {
         <p className="muted">
           Submit an intake or choose a case to view the attorney-facing triage.
         </p>
+        <div className="empty-actions">
+          {onGoToIntake ? (
+            <button type="button" className="primary-button" onClick={onGoToIntake}>
+              New intake
+            </button>
+          ) : null}
+          {onGoToCases ? (
+            <button type="button" className="secondary-button" onClick={onGoToCases}>
+              Browse cases
+            </button>
+          ) : null}
+        </div>
       </div>
     );
   }

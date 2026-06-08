@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import DismissibleNotice from './DismissibleNotice';
 
 const initialDocumentForm = {
   title: '',
@@ -71,6 +72,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
   const [complianceRequests, setComplianceRequests] = useState([]);
   const [exportPreview, setExportPreview] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState(null);
   const [documentForm, setDocumentForm] = useState(initialDocumentForm);
   const [invoiceForm, setInvoiceForm] = useState(initialInvoiceForm);
@@ -96,6 +98,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
   };
 
   const loadData = async () => {
+    setLoading(true);
     const batchOne = await loadBatch([
       '/documents',
       '/billing/summary',
@@ -135,13 +138,15 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
         message: `Some operations data could not be loaded (${failed.length} of ${responses.length} requests).`,
       });
     }
+    setLoading(false);
   };
 
   useEffect(() => {
     loadData().catch(() => {
+      setLoading(false);
       setNotice({
         tone: 'warn',
-        message: 'Operations data could not be loaded.',
+        message: 'Operations data could not be loaded. Check your connection and try again.',
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -441,9 +446,13 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
       </div>
 
       <div className="mini-label">Selected matter</div>
-      <div className="muted">{selectedCase?.caseNumber || 'No case selected'}</div>
+      <div className="muted">
+        {selectedCase?.caseNumber || 'No case selected — open a matter from Cases first'}
+      </div>
 
-      {tab === 'documents' ? (
+      {loading ? <OpsSkeleton /> : null}
+
+      {!loading && tab === 'documents' ? (
         <section className="ops-section">
           <form className="stack-form" onSubmit={submitDocument}>
             <input
@@ -498,21 +507,28 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
           </form>
 
           <div className="mini-list">
-            {documents.slice(0, 5).map((item) => (
-              <div key={item.id} className="mini-item">
-                <div>
-                  <strong>{item.title}</strong>
-                  <div className="muted">
-                    {item.caseNumber} - {item.documentType}
+            {documents.length ? (
+              documents.slice(0, 5).map((item) => (
+                <div key={item.id} className="mini-item">
+                  <div>
+                    <strong>{item.title}</strong>
+                    <div className="muted">
+                      {item.caseNumber} - {item.documentType}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <EmptyHint
+                message="No documents yet."
+                hint={activeCaseId ? 'Save your first document above.' : 'Select a case to attach documents.'}
+              />
+            )}
           </div>
         </section>
       ) : null}
 
-      {tab === 'billing' ? (
+      {!loading && tab === 'billing' ? (
         <section className="ops-section">
           <div className="mini-grid">
             <Stat label="Invoices" value={billingSummary?.invoices ?? 0} />
@@ -658,7 +674,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
         </section>
       ) : null}
 
-      {tab === 'calendar' ? (
+      {!loading && tab === 'calendar' ? (
         <section className="ops-section">
           <form className="stack-form" onSubmit={submitEvent}>
             <input
@@ -722,21 +738,25 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
           </form>
 
           <div className="mini-list">
-            {calendar.slice(0, 6).map((item) => (
-              <div key={item.id} className="mini-item">
-                <div>
-                  <strong>{item.title}</strong>
-                  <div className="muted">
-                    {item.startsAt} - {item.eventType}
+            {calendar.length ? (
+              calendar.slice(0, 6).map((item) => (
+                <div key={item.id} className="mini-item">
+                  <div>
+                    <strong>{item.title}</strong>
+                    <div className="muted">
+                      {item.startsAt} - {item.eventType}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <EmptyHint message="No upcoming events." hint="Add a deadline or hearing above." />
+            )}
           </div>
         </section>
       ) : null}
 
-      {tab === 'notifications' ? (
+      {!loading && tab === 'notifications' ? (
         <section className="ops-section">
           <div className="mini-grid">
             <Stat
@@ -835,7 +855,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
         </section>
       ) : null}
 
-      {tab === 'reports' ? (
+      {!loading && tab === 'reports' ? (
         <section className="ops-section">
           <div className="mini-grid">
             <Stat label="Snapshots" value={reports.length} />
@@ -885,7 +905,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
         </section>
       ) : null}
 
-      {tab === 'compliance' ? (
+      {!loading && tab === 'compliance' ? (
         <section className="ops-section">
           <div className="mini-grid">
             <Stat label="Open requests" value={complianceSummary?.openRequests ?? 0} />
@@ -1024,23 +1044,31 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
         </section>
       ) : null}
 
-      {tab === 'audit' ? (
+      {!loading && tab === 'audit' ? (
         <section className="ops-section">
           <div className="mini-list">
-            {audit.slice(0, 8).map((item) => (
-              <div key={item.id} className="mini-item">
-                <div>
-                  <strong>{item.action}</strong>
-                  <div className="muted">{item.summary}</div>
+            {audit.length ? (
+              audit.slice(0, 8).map((item) => (
+                <div key={item.id} className="mini-item">
+                  <div>
+                    <strong>{item.action}</strong>
+                    <div className="muted">{item.summary}</div>
+                  </div>
+                  <div className="muted">{item.createdAt}</div>
                 </div>
-                <div className="muted">{item.createdAt}</div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <EmptyHint message="No audit entries yet." hint="Activity will appear here as you work." />
+            )}
           </div>
         </section>
       ) : null}
 
-      {notice ? <div className={`notice notice-${notice.tone}`}>{notice.message}</div> : null}
+      <DismissibleNotice
+        tone={notice?.tone}
+        message={notice?.message}
+        onDismiss={() => setNotice(null)}
+      />
     </div>
   );
 }
@@ -1050,6 +1078,30 @@ function Stat({ label, value }) {
     <div className="mini-stat">
       <div className="mini-label">{label}</div>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function OpsSkeleton() {
+  return (
+    <div className="ops-skeleton" aria-busy="true" aria-label="Loading operations data">
+      <div className="skeleton-line skeleton-wide" />
+      <div className="skeleton-line" />
+      <div className="skeleton-line skeleton-short" />
+      <div className="skeleton-grid">
+        <div className="skeleton-block" />
+        <div className="skeleton-block" />
+        <div className="skeleton-block" />
+      </div>
+    </div>
+  );
+}
+
+function EmptyHint({ message, hint }) {
+  return (
+    <div className="empty-state empty-state-compact">
+      <p>{message}</p>
+      {hint ? <p className="muted">{hint}</p> : null}
     </div>
   );
 }

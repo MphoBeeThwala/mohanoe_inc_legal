@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import IntakeForm from './components/IntakeForm';
 import AssessmentCard from './components/AssessmentCard';
 import CaseTable from './components/CaseTable';
 import CaseWorkspace from './components/CaseWorkspace';
 import OperationsHub from './components/OperationsHub';
+import ErrorBoundary from './components/ErrorBoundary';
+import DismissibleNotice from './components/DismissibleNotice';
 import './App.css';
 
 const api = axios.create({
@@ -36,6 +38,13 @@ const sampleMatter = {
   preferredLanguage: 'English',
 };
 
+const NAV_SECTIONS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'intake', label: 'Intake' },
+  { id: 'cases', label: 'Cases' },
+  { id: 'operations', label: 'Operations' },
+];
+
 function StatCard({ label, value, detail, tone = 'neutral' }) {
   return (
     <article className={`stat-card stat-${tone}`}>
@@ -43,6 +52,23 @@ function StatCard({ label, value, detail, tone = 'neutral' }) {
       <div className="stat-value">{value}</div>
       <div className="stat-detail">{detail}</div>
     </article>
+  );
+}
+
+function LoadingShell() {
+  return (
+    <div className="app-shell">
+      <div className="loading-shell" aria-busy="true" aria-label="Loading workspace">
+        <div className="skeleton-hero" />
+        <div className="summary-grid">
+          <div className="skeleton-stat" />
+          <div className="skeleton-stat" />
+          <div className="skeleton-stat" />
+          <div className="skeleton-stat" />
+        </div>
+        <div className="skeleton-panel" />
+      </div>
+    </div>
   );
 }
 
@@ -70,8 +96,18 @@ function App() {
   const [selectedCaseId, setSelectedCaseId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [activeSection, setActiveSection] = useState('overview');
 
+  const sectionRefs = useRef({});
   const workspaceReady = useMemo(() => Boolean(currentUser), [currentUser]);
+
+  const scrollToSection = useCallback((sectionId) => {
+    const node = sectionRefs.current[sectionId];
+    if (node) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActiveSection(sectionId);
+    }
+  }, []);
 
   const loadWorkspace = async () => {
     const [summaryResponse, casesResponse, submissionsResponse] =
@@ -137,6 +173,33 @@ function App() {
     bootstrap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!workspaceReady) {
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+        if (visible[0]?.target?.dataset?.section) {
+          setActiveSection(visible[0].target.dataset.section);
+        }
+      },
+      { rootMargin: '-20% 0px -55% 0px', threshold: [0.15, 0.4, 0.7] },
+    );
+
+    NAV_SECTIONS.forEach(({ id }) => {
+      const node = sectionRefs.current[id];
+      if (node) {
+        observer.observe(node);
+      }
+    });
+
+    return () => observer.disconnect();
+  }, [workspaceReady]);
 
   const handleAuthSubmit = async (event) => {
     event.preventDefault();
@@ -234,6 +297,7 @@ function App() {
       setSelectedCaseId(caseKey);
       const { data } = await api.get(`/cases/${caseKey}`);
       setSelectedMatter(data);
+      scrollToSection('cases');
     } catch (error) {
       setAuthNotice({
         tone: 'error',
@@ -243,11 +307,7 @@ function App() {
   };
 
   if (!authReady || loading) {
-    return (
-      <div className="app-shell">
-        <div className="notice notice-info">Loading workspace...</div>
-      </div>
-    );
+    return <LoadingShell />;
   }
 
   if (!workspaceReady) {
@@ -278,8 +338,9 @@ function App() {
             <h2>{authMode === 'register' ? 'Create staff account' : 'Sign in'}</h2>
             <form className="auth-form" onSubmit={handleAuthSubmit}>
               {authMode === 'register' ? (
-                <Field label="Full name">
+                <Field label="Full name" id="auth-fullName">
                   <input
+                    id="auth-fullName"
                     type="text"
                     value={authForm.fullName}
                     onChange={(event) =>
@@ -292,9 +353,11 @@ function App() {
                   />
                 </Field>
               ) : null}
-              <Field label="Email">
+              <Field label="Email" id="auth-email">
                 <input
+                  id="auth-email"
                   type="email"
+                  autoComplete="email"
                   value={authForm.email}
                   onChange={(event) =>
                     setAuthForm((current) => ({
@@ -305,9 +368,11 @@ function App() {
                   required
                 />
               </Field>
-              <Field label="Password">
+              <Field label="Password" id="auth-password">
                 <input
+                  id="auth-password"
                   type="password"
+                  autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
                   value={authForm.password}
                   onChange={(event) =>
                     setAuthForm((current) => ({
@@ -348,109 +413,181 @@ function App() {
             </div>
           </div>
 
-          <div className={`notice notice-${authNotice.tone}`}>
-            {authNotice.message}
-          </div>
+          <DismissibleNotice
+            tone={authNotice.tone}
+            message={authNotice.message}
+            onDismiss={() => setAuthNotice({ tone: 'info', message: '' })}
+          />
         </section>
       </div>
     );
   }
 
+  const activeLabel =
+    NAV_SECTIONS.find((section) => section.id === activeSection)?.label || 'Overview';
+
   return (
     <div className="app-shell">
-      <header className="hero">
+      <header className="hero hero-compact">
         <div className="hero-copy">
           <div className="brand-mark">M</div>
           <div>
             <p className="eyebrow">Mohanoe Inc. Attorneys</p>
-            <h1>Legal practice management with POPIA-safe AI intake</h1>
+            <h1>Practice workspace</h1>
             <p className="hero-text">
-              Day-to-day matter handling, encrypted client intake, attorney
-              triage, and AI-assisted case assessment in one workspace.
+              Encrypted intake, matter triage, and day-to-day case operations.
             </p>
           </div>
         </div>
-        <div className="hero-badges">
-          <span className="pill pill-strong">Encrypted intake</span>
-          <span className="pill">POPIA purpose limitation</span>
-          <span className="pill">Attorney review first</span>
-          <button type="button" className="secondary-button" onClick={handleLogout}>
+        <div className="user-strip">
+          <div className="user-chip" title={currentUser.email}>
+            <span className="user-name">{currentUser.fullName || currentUser.email}</span>
+            <span className="user-role">{currentUser.role || 'staff'}</span>
+          </div>
+          <button type="button" className="secondary-button sign-out-button" onClick={handleLogout}>
             Sign out
           </button>
         </div>
       </header>
 
+      <nav className="workspace-nav" aria-label="Workspace sections">
+        <div className="workspace-nav-inner">
+          <div className="nav-links">
+            {NAV_SECTIONS.map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                className={`nav-link ${activeSection === id ? 'nav-link-active' : ''}`}
+                onClick={() => scrollToSection(id)}
+                aria-current={activeSection === id ? 'page' : undefined}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="breadcrumb" aria-label="Current section">
+            <span className="breadcrumb-label">You are in</span>
+            <strong>{activeLabel}</strong>
+          </div>
+        </div>
+      </nav>
+
+      <DismissibleNotice
+        tone={authNotice.tone}
+        message={authNotice.message}
+        onDismiss={() => setAuthNotice({ tone: 'info', message: '' })}
+      />
+
       <main className="dashboard">
-        <section className="summary-grid">
-          <StatCard
-            label="Open intakes"
-            value={loading ? '...' : summary?.openIntakes ?? 0}
-            detail="New matters waiting for attorney triage"
-            tone="mint"
-          />
-          <StatCard
-            label="AI assessed"
-            value={loading ? '...' : summary?.assessedIntakes ?? 0}
-            detail="Redacted briefs analyzed server-side"
-            tone="blue"
-          />
-          <StatCard
-            label="Live matters"
-            value={loading ? '...' : summary?.liveCases ?? 0}
-            detail="Cases created from intake submissions"
-            tone="gold"
-          />
-          <StatCard
-            label="Critical"
-            value={loading ? '...' : summary?.criticalMatters ?? 0}
-            detail="Priority reviews needing immediate attention"
-            tone="rose"
-          />
+        <section
+          id="section-overview"
+          className="dashboard-section"
+          data-section="overview"
+          ref={(node) => {
+            sectionRefs.current.overview = node;
+          }}
+        >
+          <div className="summary-grid">
+            <StatCard
+              label="Open intakes"
+              value={summary?.openIntakes ?? 0}
+              detail="New matters waiting for attorney triage"
+              tone="mint"
+            />
+            <StatCard
+              label="AI assessed"
+              value={summary?.assessedIntakes ?? 0}
+              detail="Redacted briefs analyzed server-side"
+              tone="blue"
+            />
+            <StatCard
+              label="Live matters"
+              value={summary?.liveCases ?? 0}
+              detail="Cases created from intake submissions"
+              tone="gold"
+            />
+            <StatCard
+              label="Critical"
+              value={summary?.criticalMatters ?? 0}
+              detail="Priority reviews needing immediate attention"
+              tone="rose"
+            />
+          </div>
         </section>
 
         <section className="content-grid">
           <div className="primary-column">
-            <div className="panel">
-              <div className="panel-head">
-                <div>
-                  <p className="panel-kicker">Client intake</p>
-                  <h2>Collect the matter, redact PII, then assess it</h2>
+            <section
+              id="section-intake"
+              className="dashboard-section"
+              data-section="intake"
+              ref={(node) => {
+                sectionRefs.current.intake = node;
+              }}
+            >
+              <div className="panel">
+                <div className="panel-head">
+                  <div>
+                    <p className="panel-kicker">Client intake</p>
+                    <h2>Collect the matter, redact PII, then assess it</h2>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() =>
+                      setAuthNotice({
+                        tone: 'info',
+                        message:
+                          'Use the sample matter to test the full encrypted intake and assessment flow.',
+                      })
+                    }
+                  >
+                    Review flow
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() =>
-                    setAuthNotice({
-                      tone: 'info',
-                      message:
-                        'Use the sample matter to test the full encrypted intake and assessment flow.',
-                    })
-                  }
-                >
-                  Review flow
-                </button>
+
+                <IntakeForm
+                  onSubmit={handleSubmit}
+                  busy={busy}
+                  sampleMatter={sampleMatter}
+                  onGoToCases={() => scrollToSection('cases')}
+                />
               </div>
+            </section>
 
-              <IntakeForm
-                onSubmit={handleSubmit}
-                busy={busy}
-                sampleMatter={sampleMatter}
-              />
-            </div>
-
-            <div className="panel">
-              <div className="panel-head">
-                <div>
-                  <p className="panel-kicker">Case management</p>
-                  <h2>Recent matters</h2>
+            <section
+              id="section-cases"
+              className="dashboard-section"
+              data-section="cases"
+              ref={(node) => {
+                sectionRefs.current.cases = node;
+              }}
+            >
+              <div className="panel">
+                <div className="panel-head">
+                  <div>
+                    <p className="panel-kicker">Case management</p>
+                    <h2>Recent matters</h2>
+                  </div>
                 </div>
+                <CaseTable
+                  cases={cases}
+                  onSelectCase={handleSelectCase}
+                  onGoToIntake={() => scrollToSection('intake')}
+                />
               </div>
-              <CaseTable cases={cases} onSelectCase={handleSelectCase} />
-            </div>
+            </section>
           </div>
 
           <aside className="secondary-column">
-            <AssessmentCard matter={selectedMatter} />
+            <ErrorBoundary label="Assessment">
+              <AssessmentCard
+                matter={selectedMatter}
+                onGoToIntake={() => scrollToSection('intake')}
+                onGoToCases={() => scrollToSection('cases')}
+              />
+            </ErrorBoundary>
+
             <CaseWorkspace
               api={api}
               selectedCaseId={selectedCaseId}
@@ -458,13 +595,24 @@ function App() {
               onChanged={loadWorkspace}
             />
 
-            <OperationsHub
-              api={api}
-              selectedCaseId={selectedCaseId}
-              cases={cases}
-              currentUser={currentUser}
-              onChanged={loadWorkspace}
-            />
+            <section
+              id="section-operations"
+              className="dashboard-section"
+              data-section="operations"
+              ref={(node) => {
+                sectionRefs.current.operations = node;
+              }}
+            >
+              <ErrorBoundary label="Operations">
+                <OperationsHub
+                  api={api}
+                  selectedCaseId={selectedCaseId}
+                  cases={cases}
+                  currentUser={currentUser}
+                  onChanged={loadWorkspace}
+                />
+              </ErrorBoundary>
+            </section>
 
             <div className="panel compliance-panel">
               <p className="panel-kicker">POPIA controls</p>
@@ -476,10 +624,6 @@ function App() {
                 <li>Assessment output is attorney-facing, not client-facing.</li>
               </ul>
             </div>
-
-            <div className={`notice notice-${authNotice.tone}`}>
-              {authNotice.message}
-            </div>
           </aside>
         </section>
       </main>
@@ -487,13 +631,15 @@ function App() {
   );
 }
 
-function Field({ label, hint, children }) {
+function Field({ label, hint, id, children }) {
   return (
-    <label className="field">
-      <div className="field-label">{label}</div>
+    <div className="field">
+      <label className="field-label" htmlFor={id}>
+        {label}
+      </label>
       {hint ? <div className="field-hint">{hint}</div> : null}
       {children}
-    </label>
+    </div>
   );
 }
 

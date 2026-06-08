@@ -1,11 +1,16 @@
 import React from 'react';
 
-function CaseTable({ cases, onSelectCase }) {
+function CaseTable({ cases, onSelectCase, onGoToIntake }) {
   if (!cases?.length) {
     return (
       <div className="empty-state">
-        No matters have been assessed yet. Submit an intake to create the first
-        case.
+        <p>No matters have been assessed yet.</p>
+        <p className="muted">Submit a client intake to create your first case.</p>
+        {onGoToIntake ? (
+          <button type="button" className="primary-button" onClick={onGoToIntake}>
+            Go to intake
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -15,12 +20,12 @@ function CaseTable({ cases, onSelectCase }) {
       <table className="case-table">
         <thead>
           <tr>
-            <th>Case</th>
-            <th>Client</th>
-            <th>Practice area</th>
-            <th>Urgency</th>
-            <th>Status</th>
-            <th>Action</th>
+            <th scope="col">Case</th>
+            <th scope="col">Client</th>
+            <th scope="col">Practice area</th>
+            <th scope="col">Urgency</th>
+            <th scope="col">Status</th>
+            <th scope="col">Action</th>
           </tr>
         </thead>
         <tbody>
