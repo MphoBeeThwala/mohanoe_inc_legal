@@ -11,8 +11,24 @@ function getJwtSecret() {
   return process.env.JWT_SECRET || 'mohanoe-dev-secret';
 }
 
+function getAdminSeedToken() {
+  return process.env.ADMIN_SEED_TOKEN || process.env.BOOTSTRAP_ADMIN_TOKEN || '';
+}
+
 function isPublicRegistrationEnabled() {
   return String(process.env.ALLOW_PUBLIC_REGISTRATION || '').toLowerCase() === 'true';
+}
+
+function normalizeRole(role) {
+  const normalized = String(role || 'attorney').trim().toLowerCase();
+  const allowedRoles = new Set(['admin', 'attorney', 'paralegal']);
+  if (!allowedRoles.has(normalized)) {
+    const error = new Error('Role must be admin, attorney, or paralegal');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return normalized;
 }
 
 function hashPassword(password, salt) {
@@ -134,7 +150,7 @@ async function registerUser(input, options = {}) {
   const email = String(input.email || '').trim().toLowerCase();
   const password = String(input.password || '');
   const role = options.allowRoleOverride
-    ? String(options.role || input.role || 'attorney').trim()
+    ? normalizeRole(options.role || input.role || 'attorney')
     : 'attorney';
   const passwordLength = password.length;
 
@@ -290,6 +306,42 @@ function requireRoles(...roles) {
   };
 }
 
+function requireAdminSeedAccess(req, _res, next) {
+  const setupToken = getAdminSeedToken();
+  const providedToken =
+    req.headers['x-admin-seed-token'] ||
+    req.headers['x-setup-token'] ||
+    req.body?.adminSeedToken ||
+    req.body?.setupToken;
+
+  if (setupToken && providedToken && String(providedToken) === setupToken) {
+    next();
+    return;
+  }
+
+  authenticateRequest(req, _res, (authError) => {
+    if (authError) {
+      const error = new Error(
+        setupToken
+          ? 'Admin seed token is required'
+          : 'Admin seeding requires an authenticated admin or ADMIN_SEED_TOKEN',
+      );
+      error.statusCode = 401;
+      next(error);
+      return;
+    }
+
+    if (req.auth?.role !== 'admin') {
+      const error = new Error('Only admins can seed admin users');
+      error.statusCode = 403;
+      next(error);
+      return;
+    }
+
+    next();
+  });
+}
+
 async function seedDefaultUsers() {
   const seedEmail = process.env.DEFAULT_ADMIN_EMAIL;
   const seedPassword = process.env.DEFAULT_ADMIN_PASSWORD;
@@ -322,6 +374,7 @@ module.exports = {
   loginUser,
   isPublicRegistrationEnabled,
   registerUser,
+  requireAdminSeedAccess,
   requireRoles,
   seedDefaultUsers,
   signToken,

@@ -2,6 +2,11 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
+function getAuthHeaders() {
+  const token = window.localStorage.getItem('mhl_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 const AddClient = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -11,11 +16,17 @@ const AddClient = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://localhost:5000/api/clients', {
-        name,
-        email,
-        phone,
-      });
+      const response = await axios.post(
+        '/api/clients',
+        {
+          name,
+          email,
+          phone,
+        },
+        {
+          headers: getAuthHeaders(),
+        },
+      );
       if (response.status === 201) {
         setMessage('Client added successfully!');
         setName('');

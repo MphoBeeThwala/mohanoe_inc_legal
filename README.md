@@ -30,9 +30,11 @@ Legal practice management app for Mohanoe Inc. Attorneys with encrypted intake, 
 - Recommended platform: Render.
 - Use the root-level `render.yaml` blueprint for a single web service.
 - The Render build copies the React build into `backend/public`, and the backend serves that directory so the UI and API stay on the same origin.
-- Populate the secret env vars Render prompts for on blueprint creation: `JWT_SECRET`, `INTAKE_ENCRYPTION_KEY`, `AUDIT_CHAIN_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `DEFAULT_ADMIN_EMAIL`, and `DEFAULT_ADMIN_PASSWORD`.
+- Populate the secret env vars Render prompts for on blueprint creation: `JWT_SECRET`, `INTAKE_ENCRYPTION_KEY`, `AUDIT_CHAIN_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `DEFAULT_ADMIN_EMAIL`, `DEFAULT_ADMIN_PASSWORD`, and `ADMIN_SEED_TOKEN`.
 - The health check endpoint is `/ready`.
-- `ALLOW_PUBLIC_REGISTRATION` is disabled by default; staff access should be seeded by an admin account.
+- `ALLOW_PUBLIC_REGISTRATION` is disabled by default; staff access should be provisioned by an admin account with `POST /api/auth/users`.
+- `DEFAULT_ADMIN_PASSWORD` must be at least 12 characters and include upper-case, lower-case, and a number. If startup seeding fails, the backend logs the exact reason.
+- If the first admin was not created during startup, call `POST /api/auth/seed-admin` with the `x-admin-seed-token: <ADMIN_SEED_TOKEN>` header after setting `DEFAULT_ADMIN_EMAIL` and `DEFAULT_ADMIN_PASSWORD`.
 - See `PROD_OPERATIONS.md` for backup, restore, and smoke-test procedures.
 
 ## Compliance
