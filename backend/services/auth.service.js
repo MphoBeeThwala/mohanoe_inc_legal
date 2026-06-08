@@ -108,6 +108,12 @@ async function saveUser(record) {
   if (db) {
     const { data, error } = await db.from('users').insert(record).select().single();
     if (error) {
+      console.error('[auth] users insert failed:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
       throw error;
     }
 

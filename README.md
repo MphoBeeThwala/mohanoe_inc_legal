@@ -25,6 +25,7 @@ Legal practice management app for Mohanoe Inc. Attorneys with encrypted intake, 
 - Store `INTAKE_ENCRYPTION_KEY` as a 32-byte base64 or hex key.
 - Keep Supabase as the production datastore for the first live release.
 - Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to persist intake data in Postgres.
+- If account registration returns a 500 about a missing `users` column (e.g. `is_active`), run the SQL in [`SUPABASE_FIX.md`](SUPABASE_FIX.md) in the Supabase SQL Editor.
 - Set `ANTHROPIC_API_KEY` to enable live AI triage. Without it, the backend falls back to rules-based assessment.
 
 ## Deployment
