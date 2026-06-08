@@ -1,0 +1,1954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Mohanoe Inc. Attorneys — Legal Practice Management</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<style>
+:root{
+  --font-sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'SF Mono','Fira Code','Consolas',monospace;
+  --color-background-primary:#ffffff;
+  --color-background-secondary:#F8FAFC;
+  --color-background-tertiary:#EEF2F8;
+  --color-text-primary:#0F172A;
+  --color-text-secondary:#64748B;
+  --color-text-tertiary:#94A3B8;
+  --color-accent:#1D9E75;
+  --color-border-primary:#CBD5E1;
+  --color-border-secondary:#E2E8F0;
+  --color-border-tertiary:#E2E8F0;
+  --border-radius-sm:5px;
+  --border-radius-md:8px;
+  --border-radius-lg:14px;
+  --shadow-xs:0 1px 2px rgba(0,0,0,0.05);
+  --shadow-sm:0 1px 4px rgba(0,0,0,0.07),0 0 0 1px rgba(0,0,0,0.04);
+  --shadow-md:0 4px 20px rgba(0,0,0,0.09),0 0 0 1px rgba(0,0,0,0.04);
+  --transition:all 0.15s ease;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--color-background-tertiary);font-family:var(--font-sans)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+#app{display:flex;min-height:100vh;font-family:var(--font-sans);font-size:14px;color:var(--color-text-primary)}
+
+/* SIDEBAR */
+#sidebar{width:228px;background:linear-gradient(175deg,#0C3526 0%,#061D14 100%);color:#9FE1CB;display:flex;flex-direction:column;flex-shrink:0;box-shadow:2px 0 20px rgba(0,0,0,0.2)}
+.slogo{padding:20px 16px 16px;border-bottom:1px solid rgba(159,225,203,0.1)}
+.sicon{width:36px;height:36px;background:linear-gradient(135deg,#1D9E75,#0A5C43);border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:18px;flex-shrink:0;box-shadow:0 3px 10px rgba(29,158,117,0.45)}
+.nav-section{padding:18px 16px 5px;font-size:9px;color:rgba(159,225,203,0.28);letter-spacing:1.6px;font-weight:600;text-transform:uppercase}
+.ni{display:flex;align-items:center;gap:10px;padding:9px 11px;cursor:pointer;font-size:12.5px;color:rgba(159,225,203,0.52);border-left:2px solid transparent;transition:var(--transition);margin:1px 8px;border-radius:8px;font-weight:400}
+.ni:hover{color:#C5EDD9;background:rgba(255,255,255,0.07)}
+.ni.active{color:#7DDCB8;background:rgba(93,202,165,0.14);border-left-color:#5DCAA5;font-weight:500}
+.nbadge{margin-left:auto;background:rgba(93,202,165,0.16);color:#5DCAA5;font-size:10px;padding:1px 7px;border-radius:10px;font-weight:600}
+.nbadge-ai{background:rgba(29,158,117,0.28);color:#5DCAA5;font-size:9px;padding:1px 6px;border-radius:8px;font-weight:700;letter-spacing:0.3px}
+.suser{margin-top:auto;padding:14px 16px;border-top:1px solid rgba(159,225,203,0.1);display:flex;align-items:center;gap:10px}
+
+/* LAYOUT */
+.avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;color:white;flex-shrink:0}
+#content{flex:1;background:var(--color-background-tertiary);min-width:0;display:flex;flex-direction:column;overflow:hidden}
+.ph{background:var(--color-background-primary);border-bottom:1px solid var(--color-border-secondary);padding:15px 24px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;box-shadow:0 1px 6px rgba(0,0,0,0.05)}
+.ph-title{font-size:17px;font-weight:700;color:var(--color-text-primary);letter-spacing:-0.4px}
+.ph-sub{font-size:11.5px;color:var(--color-text-secondary);margin-top:2px;font-weight:400}
+.pc{padding:22px 24px;flex:1;overflow-y:auto;animation:fadeIn 0.22s ease}
+
+/* CARDS */
+.card{background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:18px 20px;box-shadow:var(--shadow-sm)}
+.stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.stat{background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:18px;box-shadow:var(--shadow-xs);transition:var(--transition);position:relative;overflow:hidden}
+.stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#1D9E75,#5DCAA5);opacity:0;transition:var(--transition)}
+.stat:hover{box-shadow:var(--shadow-sm);transform:translateY(-2px)}
+.stat:hover::before{opacity:1}
+.stat-lbl{font-size:10.5px;color:var(--color-text-secondary);margin-bottom:7px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px}
+.stat-val{font-size:28px;font-weight:700;color:var(--color-text-primary);letter-spacing:-1px}
+.stat-sub{font-size:11px;margin-top:5px;font-weight:500}
+
+/* TABLE */
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;padding:10px 14px;color:var(--color-text-secondary);font-weight:600;font-size:10.5px;border-bottom:1px solid var(--color-border-secondary);background:var(--color-background-secondary);text-transform:uppercase;letter-spacing:0.5px}
+td{padding:11px 14px;border-bottom:1px solid #F0F4F9;color:var(--color-text-primary)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#F5F9FF}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap;letter-spacing:0.2px}
+.b-green{background:#DCFCE7;color:#166534}
+.b-amber{background:#FEF9C3;color:#854D0E}
+.b-gray{background:#F1F5F9;color:#475569}
+.b-red{background:#FEE2E2;color:#991B1B}
+.b-blue{background:#DBEAFE;color:#1E40AF}
+.b-coral{background:#FFEDD5;color:#9A3412}
+.b-pink{background:#FCE7F3;color:#9D174D}
+.b-teal{background:#CCFBF1;color:#0F766E}
+.b-purple{background:#EDE9FE;color:#5B21B6}
+
+/* BUTTONS */
+.btn-p{background:linear-gradient(135deg,#1D9E75 0%,#0F6E56 100%);color:white;border:none;padding:8px 16px;border-radius:var(--border-radius-md);font-size:12.5px;cursor:pointer;font-weight:600;transition:var(--transition);box-shadow:0 2px 6px rgba(29,158,117,0.35);font-family:var(--font-sans);letter-spacing:0.1px}
+.btn-p:hover{background:linear-gradient(135deg,#168A66 0%,#0A5040 100%);box-shadow:0 4px 16px rgba(29,158,117,0.4);transform:translateY(-1px)}
+.btn-p:active{transform:translateY(0);box-shadow:0 1px 4px rgba(29,158,117,0.3)}
+.btn-s{background:white;color:var(--color-text-secondary);border:1px solid var(--color-border-secondary);padding:8px 16px;border-radius:var(--border-radius-md);font-size:12.5px;cursor:pointer;transition:var(--transition);font-family:var(--font-sans);font-weight:500}
+.btn-s:hover{background:var(--color-background-secondary);border-color:var(--color-border-primary);color:var(--color-text-primary)}
+
+/* FORMS */
+input,select,textarea{font-family:var(--font-sans);font-size:12.5px;border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:9px 12px;background:white;color:var(--color-text-primary);transition:var(--transition);outline:none}
+input:focus,select:focus,textarea:focus{border-color:#1D9E75;box-shadow:0 0 0 3px rgba(29,158,117,0.12)}
+.form-label{font-size:11px;color:var(--color-text-secondary);margin-bottom:4px;display:block;font-weight:600;letter-spacing:0.2px}
+.fg{margin-bottom:14px}
+
+/* INTAKE STEPS */
+.steps{display:flex;gap:0;margin-bottom:22px;border-bottom:1px solid var(--color-border-secondary)}
+.step{flex:1;padding:10px 6px;font-size:10.5px;text-align:center;color:var(--color-text-tertiary);border-bottom:2px solid transparent;margin-bottom:-1px;transition:var(--transition);font-weight:500}
+.step.active{color:#1D9E75;border-bottom-color:#1D9E75;font-weight:600}
+.step.done{color:#1D9E75;border-bottom-color:#5DCAA5;opacity:0.7}
+
+/* LANGUAGE BUTTONS */
+.lang-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px}
+.lang-btn{padding:10px 6px;border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-md);text-align:center;cursor:pointer;font-size:12px;background:white;color:var(--color-text-primary);transition:var(--transition);font-weight:500}
+.lang-btn:hover{border-color:#1D9E75;background:#F0FDF9;color:#0F6E56}
+.lang-btn.sel{border-color:#1D9E75;background:linear-gradient(135deg,#E1F5EE,#C8EFE3);color:#0F6E56;font-weight:600;box-shadow:0 2px 6px rgba(29,158,117,0.15)}
+
+/* FILTER PILLS */
+.filter-pill{padding:5px 13px;border-radius:20px;font-size:11px;cursor:pointer;border:1px solid var(--color-border-secondary);background:white;color:var(--color-text-secondary);transition:var(--transition);font-weight:500}
+.filter-pill:hover{border-color:#1D9E75;color:#1D9E75}
+.filter-pill.active{background:#1D9E75;color:white;border-color:#1D9E75;box-shadow:0 2px 8px rgba(29,158,117,0.28)}
+
+/* TABS */
+.tab-bar{display:flex;border-bottom:1px solid var(--color-border-secondary);margin-bottom:18px}
+.vtab{padding:10px 18px;font-size:12.5px;cursor:pointer;border-bottom:2px solid transparent;color:var(--color-text-secondary);margin-bottom:-1px;transition:var(--transition);font-weight:500}
+.vtab.active{color:#1D9E75;border-bottom-color:#1D9E75;font-weight:600}
+.vtab:hover:not(.active){color:var(--color-text-primary);background:var(--color-background-secondary);border-radius:6px 6px 0 0}
+
+/* CHAT */
+.chat-bubble{padding:10px 14px;border-radius:14px;font-size:12.5px;line-height:1.6;max-width:78%}
+
+/* MISC */
+.mono{font-family:var(--font-mono);font-size:11.5px}
+.popia-gate{background:linear-gradient(135deg,#EFF6FF 0%,#F0FDF9 100%);border:1px solid #93C5D8;border-radius:var(--border-radius-lg);padding:22px;margin-bottom:20px;box-shadow:var(--shadow-xs)}
+.popia-check{display:flex;align-items:flex-start;gap:10px;margin-bottom:9px;font-size:11.5px;color:var(--color-text-secondary);line-height:1.6}
+.ct-pill{display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:3px 9px;border-radius:10px;font-weight:600}
+.ct-live{background:#DCFCE7;color:#166534}
+.ct-pend{background:#FEF9C3;color:#854D0E}
+.ct-err{background:#FEE2E2;color:#991B1B}
+.ct-na{background:#F1F5F9;color:#475569}
+.fee-row{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--color-border-secondary);font-size:12.5px}
+.fee-row:last-child{border-bottom:none}
+.research-block{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:14px 16px;margin-bottom:12px;border:1px solid var(--color-border-secondary)}
+.research-tag{display:inline-block;font-size:9px;font-weight:700;letter-spacing:0.8px;padding:2px 7px;border-radius:4px;margin-bottom:8px;text-transform:uppercase}
+.rt-leg{background:#DBEAFE;color:#1E40AF}
+.rt-case{background:#FCE7F3;color:#9D174D}
+.rt-const{background:#DCFCE7;color:#166534}
+.rt-summary{background:#EDE9FE;color:#5B21B6}
+.rt-draft{background:#FEF9C3;color:#854D0E}
+.client-q{background:linear-gradient(135deg,#FFFBEB,#FFF7ED);border:1px solid #FCD34D;border-radius:var(--border-radius-lg);padding:14px 16px;margin-bottom:14px;font-size:12.5px}
+
+/* PRINT */
+@media print{
+  #sidebar,.ph,.no-print,nav{display:none!important}
+  #content,body,html{background:white!important;overflow:visible!important}
+  .pc{padding:0!important;animation:none!important}
+  .print-area{display:block!important}
+  @page{margin:15mm}
+}
+</style>
+
+<div id="app">
+<nav id="sidebar">
+  <div class="slogo">
+    <div style="display:flex;align-items:center;gap:9px">
+      <div class="sicon">M</div>
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#5DCAA5;letter-spacing:0.5px">MOHANOE INC.</div>
+        <div style="font-size:9px;color:rgba(159,225,203,0.4);letter-spacing:1.5px">ATTORNEYS</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-section">MAIN</div>
+  <div class="ni active" onclick="go('dashboard',this)">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+    Dashboard
+  </div>
+  <div class="ni" onclick="go('cases',this)">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+    Cases<span class="nbadge">147</span>
+  </div>
+  <div class="ni" onclick="go('casetrack',this)">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    CaseTrack<span class="nbadge-ai" style="background:rgba(59,141,245,0.2);color:#5DA8F5">LIVE</span>
+  </div>
+  <div class="ni" onclick="go('clients',this)">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    Clients
+  </div>
+  <div class="ni" onclick="go('intake',this)">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+    New Client Intake
+  </div>
+
+  <div class="nav-section">AI SERVICES</div>
+  <div class="ni" onclick="go('legalai',this)">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    LegalAI Research<span class="nbadge-ai">AI</span>
+  </div>
+
+  <div class="nav-section">OPERATIONS</div>
+  <div class="ni" onclick="go('documents',this)">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    Document Vault
+  </div>
+  <div class="ni" onclick="go('billing',this)">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+    Billing &amp; Invoicing
+  </div>
+  <div class="ni" onclick="go('staff',this)">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+    Staff &amp; Advocates
+  </div>
+  <div class="ni" onclick="go('calendar',this)">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    Court Calendar
+  </div>
+
+  <div class="suser">
+    <div class="avatar" style="background:#1D9E75">SA</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:11px;font-weight:500;color:#9FE1CB">Sr. Advocate</div>
+      <div style="font-size:10px;color:rgba(159,225,203,0.4)">Mohanoe Inc.</div>
+    </div>
+  </div>
+</nav>
+
+<main id="content">
+
+<!-- DASHBOARD -->
+<div id="v-dashboard">
+  <div class="ph">
+    <div><div class="ph-title">Dashboard</div><div class="ph-sub">Thursday, 2 April 2026</div></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select style="font-size:12px;padding:5px 10px"><option>All Practice Areas</option><option>Family Law</option><option>Conveyancing</option><option>Labour Law</option><option>Commercial</option></select>
+      <button class="btn-p" onclick="go('intake',document.querySelectorAll('.ni')[4])">+ New Client</button>
+    </div>
+  </div>
+  <div class="pc">
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-lbl">Active Cases</div><div class="stat-val">147</div><div class="stat-sub" style="color:#1D9E75">+12 this month</div></div>
+      <div class="stat"><div class="stat-lbl">Active Clients</div><div class="stat-val">2,341</div><div class="stat-sub" style="color:#1D9E75">10,000+ lifetime</div></div>
+      <div class="stat"><div class="stat-lbl">Revenue MTD</div><div class="stat-val">R847k</div><div class="stat-sub" style="color:#1D9E75">+18% vs last month</div></div>
+      <div class="stat"><div class="stat-lbl">Tasks Due Today</div><div class="stat-val">23</div><div class="stat-sub" style="color:#A32D2D">7 overdue</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:14px">
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
+          <div style="font-size:13px;font-weight:500">Recent Cases</div>
+          <button class="btn-s" style="font-size:10px;padding:3px 9px" onclick="go('cases',document.querySelectorAll('.ni')[1])">View all</button>
+        </div>
+        <table>
+          <thead><tr><th>Case #</th><th>Client</th><th>Area</th><th>Status</th><th>Advocate</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">MHI-2026-0441</td><td><b>Sipho Dlamini</b></td><td><span class="badge b-blue">Family Law</span></td><td><span class="badge b-green">Active</span></td><td style="color:var(--color-text-secondary)">Adv. Mohanoe</td></tr>
+            <tr><td class="mono">MHI-2026-0440</td><td><b>Thandi Nkosi</b></td><td><span class="badge b-teal">Conveyancing</span></td><td><span class="badge b-amber">Pending Docs</span></td><td style="color:var(--color-text-secondary)">Adv. Khumalo</td></tr>
+            <tr><td class="mono">MHI-2026-0439</td><td><b>P. van der Merwe</b></td><td><span class="badge b-coral">Labour Law</span></td><td><span class="badge b-red">Court: Apr 03</span></td><td style="color:var(--color-text-secondary)">Adv. Sithole</td></tr>
+            <tr><td class="mono">MHI-2026-0438</td><td><b>Fatima Mahomed</b></td><td><span class="badge b-pink">Deceased Est.</span></td><td><span class="badge b-green">Active</span></td><td style="color:var(--color-text-secondary)">Adv. Mohanoe</td></tr>
+            <tr><td class="mono">MHI-2026-0437</td><td><b>Lucky Mthembu</b></td><td><span class="badge b-gray">Litigation</span></td><td><span class="badge b-gray">Closed</span></td><td style="color:var(--color-text-secondary)">Adv. Naidoo</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="card">
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px">Upcoming Court Dates</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;gap:9px;align-items:flex-start">
+              <div style="background:#FCEBEB;color:#A32D2D;border-radius:var(--border-radius-md);padding:3px 7px;font-size:10px;font-weight:500;flex-shrink:0;text-align:center"><div>APR</div><div style="font-size:15px">03</div></div>
+              <div><div style="font-size:12px;font-weight:500">Van der Merwe v Employer</div><div style="font-size:10px;color:var(--color-text-secondary)">Labour Court · 09:00</div></div>
+            </div>
+            <div style="display:flex;gap:9px;align-items:flex-start">
+              <div style="background:#FAEEDA;color:#854F0B;border-radius:var(--border-radius-md);padding:3px 7px;font-size:10px;font-weight:500;flex-shrink:0;text-align:center"><div>APR</div><div style="font-size:15px">07</div></div>
+              <div><div style="font-size:12px;font-weight:500">Dlamini Divorce Hearing</div><div style="font-size:10px;color:var(--color-text-secondary)">High Court Jhb · 10:30</div></div>
+            </div>
+            <div style="display:flex;gap:9px;align-items:flex-start">
+              <div style="background:#E1F5EE;color:#0F6E56;border-radius:var(--border-radius-md);padding:3px 7px;font-size:10px;font-weight:500;flex-shrink:0;text-align:center"><div>APR</div><div style="font-size:15px">12</div></div>
+              <div><div style="font-size:12px;font-weight:500">Mahomed Estate Filing</div><div style="font-size:10px;color:var(--color-text-secondary)">Masters Office · 14:00</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-size:13px;font-weight:500">AI Research Queue</div>
+            <span class="badge b-green">12 pending</span>
+          </div>
+          <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:10px">Client issues awaiting AI research &amp; attorney review</div>
+          <button class="btn-p" style="width:100%;font-size:11px" onclick="go('legalai',document.querySelectorAll('.ni')[5])">Review AI Research</button>
+        </div>
+        <div class="card">
+          <div style="font-size:13px;font-weight:500;margin-bottom:6px">Automation Status</div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px"><span style="color:var(--color-text-secondary)">Auto-reminders sent today</span><span style="font-weight:500;color:#1D9E75">47</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px"><span style="color:var(--color-text-secondary)">Documents auto-filed</span><span style="font-weight:500;color:#1D9E75">12</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px"><span style="color:var(--color-text-secondary)">Invoices auto-generated</span><span style="font-weight:500;color:#1D9E75">8</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px"><span style="color:var(--color-text-secondary)">Paper documents today</span><span style="font-weight:500;color:#A32D2D">0</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CASES -->
+<div id="v-cases" style="display:none">
+  <div class="ph">
+    <div><div class="ph-title">Case Management</div><div class="ph-sub">147 active cases across 6 practice areas</div></div>
+    <div style="display:flex;gap:8px">
+      <input placeholder="Search cases, clients..." style="font-size:12px;padding:5px 11px;width:200px">
+      <button class="btn-p">+ New Case</button>
+    </div>
+  </div>
+  <div class="pc">
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+      <div class="filter-pill active" onclick="fpill(this)">All (147)</div>
+      <div class="filter-pill" onclick="fpill(this)">Active (89)</div>
+      <div class="filter-pill" onclick="fpill(this)">Pending Docs (23)</div>
+      <div class="filter-pill" onclick="fpill(this)">Court Date (18)</div>
+      <div class="filter-pill" onclick="fpill(this)">Closed (17)</div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table>
+        <thead><tr><th style="padding-left:16px">Case Number</th><th>Client</th><th>Practice Area</th><th>Status</th><th>Assigned To</th><th>Next Action</th><th>Updated</th><th></th></tr></thead>
+        <tbody>
+          <tr>
+            <td style="padding-left:16px" class="mono">MHI-2026-0441</td>
+            <td><div style="font-weight:500">Sipho Dlamini</div><div style="font-size:10px;color:var(--color-text-secondary)">+27 82 345 6789</div></td>
+            <td><span class="badge b-blue">Family Law</span></td>
+            <td><span class="badge b-green">Active</span></td>
+            <td style="font-size:11px">Adv. Mohanoe</td>
+            <td style="font-size:11px">File affidavit</td>
+            <td style="font-size:11px;color:var(--color-text-secondary)">Today 09:14</td>
+            <td><button class="btn-s" style="font-size:10px;padding:2px 8px">Open</button></td>
+          </tr>
+          <tr>
+            <td style="padding-left:16px" class="mono">MHI-2026-0440</td>
+            <td><div style="font-weight:500">Thandi Nkosi</div><div style="font-size:10px;color:var(--color-text-secondary)">+27 71 234 5678</div></td>
+            <td><span class="badge b-teal">Conveyancing</span></td>
+            <td><span class="badge b-amber">Pending Docs</span></td>
+            <td style="font-size:11px">Adv. Khumalo</td>
+            <td style="font-size:11px;color:#A32D2D">Title deed outstanding</td>
+            <td style="font-size:11px;color:var(--color-text-secondary)">Yesterday</td>
+            <td><button class="btn-s" style="font-size:10px;padding:2px 8px">Open</button></td>
+          </tr>
+          <tr>
+            <td style="padding-left:16px" class="mono">MHI-2026-0439</td>
+            <td><div style="font-weight:500">P. van der Merwe</div><div style="font-size:10px;color:var(--color-text-secondary)">+27 83 456 7890</div></td>
+            <td><span class="badge b-coral">Labour Law</span></td>
+            <td><span class="badge b-red">Court: Apr 03</span></td>
+            <td style="font-size:11px">Adv. Sithole</td>
+            <td style="font-size:11px;font-weight:500;color:#A32D2D">Court tomorrow 09:00</td>
+            <td style="font-size:11px;color:var(--color-text-secondary)">Today 08:30</td>
+            <td><button class="btn-s" style="font-size:10px;padding:2px 8px">Open</button></td>
+          </tr>
+          <tr>
+            <td style="padding-left:16px" class="mono">MHI-2026-0438</td>
+            <td><div style="font-weight:500">Fatima Mahomed</div><div style="font-size:10px;color:var(--color-text-secondary)">+27 84 567 8901</div></td>
+            <td><span class="badge b-pink">Deceased Estates</span></td>
+            <td><span class="badge b-green">Active</span></td>
+            <td style="font-size:11px">Adv. Mohanoe</td>
+            <td style="font-size:11px">L&amp;D account prep</td>
+            <td style="font-size:11px;color:var(--color-text-secondary)">2 Apr 2026</td>
+            <td><button class="btn-s" style="font-size:10px;padding:2px 8px">Open</button></td>
+          </tr>
+          <tr>
+            <td style="padding-left:16px" class="mono">MHI-2026-0437</td>
+            <td><div style="font-weight:500">Lucky Mthembu</div><div style="font-size:10px;color:var(--color-text-secondary)">+27 79 678 9012</div></td>
+            <td><span class="badge b-gray">Gen. Litigation</span></td>
+            <td><span class="badge b-gray">Closed</span></td>
+            <td style="font-size:11px">Adv. Naidoo</td>
+            <td style="font-size:11px;color:var(--color-text-secondary)">Archive file</td>
+            <td style="font-size:11px;color:var(--color-text-secondary)">28 Mar 2026</td>
+            <td><button class="btn-s" style="font-size:10px;padding:2px 8px">Open</button></td>
+          </tr>
+          <tr>
+            <td style="padding-left:16px" class="mono">MHI-2026-0436</td>
+            <td><div style="font-weight:500">Nomsa Zulu</div><div style="font-size:10px;color:var(--color-text-secondary)">+27 76 789 0123</div></td>
+            <td><span class="badge b-blue">Family Law</span></td>
+            <td><span class="badge b-green">Active</span></td>
+            <td style="font-size:11px">Adv. Mohanoe</td>
+            <td style="font-size:11px">Await maintenance order</td>
+            <td style="font-size:11px;color:var(--color-text-secondary)">1 Apr 2026</td>
+            <td><button class="btn-s" style="font-size:10px;padding:2px 8px">Open</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- CLIENTS -->
+<div id="v-clients" style="display:none">
+  <div class="ph">
+    <div><div class="ph-title">Client Management</div><div class="ph-sub">10,000+ lifetime clients · 2,341 active</div></div>
+    <div style="display:flex;gap:8px">
+      <input placeholder="Search clients..." style="font-size:12px;padding:5px 11px;width:200px">
+      <button class="btn-p" onclick="go('intake',document.querySelectorAll('.ni')[4])">+ New Client</button>
+    </div>
+  </div>
+  <div class="pc">
+    <div class="card" style="padding:0;overflow:hidden">
+      <table>
+        <thead><tr><th style="padding-left:16px">Client</th><th>ID Number</th><th>Language</th><th>Cases</th><th>Client Since</th><th>Balance</th><th></th></tr></thead>
+        <tbody>
+          <tr>
+            <td style="padding-left:16px"><div style="display:flex;align-items:center;gap:8px"><div class="avatar" style="width:30px;height:30px;font-size:10px;background:#E1F5EE;color:#0F6E56">SD</div><div><div style="font-weight:500">Sipho Dlamini</div><div style="font-size:10px;color:var(--color-text-secondary)">sipho@email.co.za</div></div></div></td>
+            <td class="mono">8812155***083</td><td>isiZulu</td><td><span class="badge b-green">2 active</span></td>
+            <td style="font-size:11px;color:var(--color-text-secondary)">Jan 2024</td>
+            <td style="font-weight:500;color:#1D9E75">R0.00</td>
+            <td><button class="btn-s" style="font-size:10px;padding:2px 8px">View</button></td>
+          </tr>
+          <tr>
+            <td style="padding-left:16px"><div style="display:flex;align-items:center;gap:8px"><div class="avatar" style="width:30px;height:30px;font-size:10px;background:#FAEEDA;color:#854F0B">TN</div><div><div style="font-weight:500">Thandi Nkosi</div><div style="font-size:10px;color:var(--color-text-secondary)">thandi@email.co.za</div></div></div></td>
+            <td class="mono">9205120***089</td><td>isiXhosa</td><td><span class="badge b-amber">1 active</span></td>
+            <td style="font-size:11px;color:var(--color-text-secondary)">Mar 2025</td>
+            <td style="font-weight:500;color:#A32D2D">R8,750</td>
+            <td><button class="btn-s" style="font-size:10px;padding:2px 8px">View</button></td>
+          </tr>
+          <tr>
+            <td style="padding-left:16px"><div style="display:flex;align-items:center;gap:8px"><div class="avatar" style="width:30px;height:30px;font-size:10px;background:#E6F1FB;color:#185FA5">PV</div><div><div style="font-weight:500">Pieter van der Merwe</div><div style="font-size:10px;color:var(--color-text-secondary)">pieter@email.co.za</div></div></div></td>
+            <td class="mono">7803175***181</td><td>Afrikaans</td><td><span class="badge b-red">1 urgent</span></td>
+            <td style="font-size:11px;color:var(--color-text-secondary)">Oct 2022</td>
+            <td style="font-weight:500;color:#A32D2D">R15,200</td>
+            <td><button class="btn-s" style="font-size:10px;padding:2px 8px">View</button></td>
+          </tr>
+          <tr>
+            <td style="padding-left:16px"><div style="display:flex;align-items:center;gap:8px"><div class="avatar" style="width:30px;height:30px;font-size:10px;background:#FBEAF0;color:#993556">FM</div><div><div style="font-weight:500">Fatima Mahomed</div><div style="font-size:10px;color:var(--color-text-secondary)">fatima@email.co.za</div></div></div></td>
+            <td class="mono">6901220***087</td><td>English</td><td><span class="badge b-green">1 active</span></td>
+            <td style="font-size:11px;color:var(--color-text-secondary)">Jun 2020</td>
+            <td style="font-weight:500;color:#1D9E75">R0.00</td>
+            <td><button class="btn-s" style="font-size:10px;padding:2px 8px">View</button></td>
+          </tr>
+          <tr>
+            <td style="padding-left:16px"><div style="display:flex;align-items:center;gap:8px"><div class="avatar" style="width:30px;height:30px;font-size:10px;background:#EEEDFE;color:#534AB7">NZ</div><div><div style="font-weight:500">Nomsa Zulu</div><div style="font-size:10px;color:var(--color-text-secondary)">nomsa@email.co.za</div></div></div></td>
+            <td class="mono">9002280***082</td><td>isiZulu</td><td><span class="badge b-green">1 active</span></td>
+            <td style="font-size:11px;color:var(--color-text-secondary)">Aug 2023</td>
+            <td style="font-weight:500;color:#1D9E75">R0.00</td>
+            <td><button class="btn-s" style="font-size:10px;padding:2px 8px">View</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- INTAKE -->
+<div id="v-intake" style="display:none">
+  <div class="ph">
+    <div><div class="ph-title">New Client Intake</div><div class="ph-sub">Paperless digital onboarding · 11 official languages</div></div>
+  </div>
+  <div class="pc">
+    <div style="max-width:660px">
+
+      <!-- POPIA CONSENT GATE -->
+      <div id="popia-gate" class="popia-gate">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <div style="width:34px;height:34px;background:#D6E9FF;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <svg width="18" height="18" fill="none" stroke="#185FA5" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:600;color:#185FA5">POPIA Consent Notice</div>
+            <div style="font-size:11px;color:#4A7AB5">Protection of Personal Information Act 4 of 2013</div>
+          </div>
+        </div>
+        <p style="font-size:12px;color:#2A5080;line-height:1.65;margin-bottom:12px">Mohanoe Inc. Attorneys collects and processes your personal information (including your name, ID number, contact details, and legal matter details) as the Responsible Party under POPIA. Your information will be used solely for providing legal services, will be stored securely with AES-256 encryption, and will not be shared with third parties without your consent except where required by law or court order.</p>
+        <div class="popia-check">
+          <svg width="14" height="14" fill="none" stroke="#1D9E75" stroke-width="2.5" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:1px"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>You may withdraw consent or request deletion of your data at any time by contacting our Information Officer.</span>
+        </div>
+        <div class="popia-check">
+          <svg width="14" height="14" fill="none" stroke="#1D9E75" stroke-width="2.5" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:1px"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>Data is retained for the minimum period required by law and the Legal Practice Act 28 of 2014.</span>
+        </div>
+        <div class="popia-check">
+          <svg width="14" height="14" fill="none" stroke="#1D9E75" stroke-width="2.5" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:1px"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>You have the right to access, correct, or object to processing of your personal information.</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;margin-top:14px;padding-top:12px;border-top:0.5px solid #B8D4F5">
+          <input type="checkbox" id="popia-chk" onchange="document.getElementById('popia-btn').disabled=!this.checked" style="width:14px;height:14px;accent-color:#1D9E75">
+          <label for="popia-chk" style="font-size:11px;color:#2A5080;cursor:pointer">I have read and understood the above. I consent to Mohanoe Inc. collecting and processing my personal information for legal services.</label>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn-s" onclick="go('dashboard',document.querySelector('.ni.active'))">Decline</button>
+          <button class="btn-p" id="popia-btn" disabled onclick="acceptPopia()" style="opacity:0.5" onmouseover="" >I Consent &amp; Proceed</button>
+        </div>
+      </div>
+
+      <div id="intake-body" style="display:none">
+      <div class="steps">
+        <div class="step active" id="stp1">1. Language</div>
+        <div class="step" id="stp2">2. Personal</div>
+        <div class="step" id="stp3">3. Legal Matter</div>
+        <div class="step" id="stp4">4. Documents</div>
+        <div class="step" id="stp5">5. AI Evaluation</div>
+        <div class="step" id="stp6">6. Confirm</div>
+      </div>
+
+      <div id="is1" class="card">
+        <div style="font-size:14px;font-weight:500;margin-bottom:3px">Select preferred language</div>
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:14px">Khetha ulimi · Kies jou taal · Kgethang puo · Khetha ulwimi</div>
+        <div class="lang-grid">
+          <div class="lang-btn sel" onclick="slang(this)">English</div>
+          <div class="lang-btn" onclick="slang(this)">isiZulu</div>
+          <div class="lang-btn" onclick="slang(this)">isiXhosa</div>
+          <div class="lang-btn" onclick="slang(this)">Afrikaans</div>
+          <div class="lang-btn" onclick="slang(this)">Sesotho</div>
+          <div class="lang-btn" onclick="slang(this)">Setswana</div>
+          <div class="lang-btn" onclick="slang(this)">Sepedi</div>
+          <div class="lang-btn" onclick="slang(this)">Tshivenda</div>
+          <div class="lang-btn" onclick="slang(this)">Xitsonga</div>
+          <div class="lang-btn" onclick="slang(this)">isiNdebele</div>
+          <div class="lang-btn" onclick="slang(this)">siSwati</div>
+        </div>
+        <div style="margin-top:18px;display:flex;justify-content:flex-end"><button class="btn-p" onclick="istep(2)">Continue</button></div>
+      </div>
+
+      <div id="is2" style="display:none" class="card">
+        <div style="font-size:14px;font-weight:500;margin-bottom:14px">Personal Information</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="fg"><label class="form-label">First Name</label><input placeholder="e.g. Sipho" style="width:100%"></div>
+          <div class="fg"><label class="form-label">Surname</label><input placeholder="e.g. Dlamini" style="width:100%"></div>
+          <div class="fg"><label class="form-label">RSA ID / Passport</label><input placeholder="ID or Passport Number" style="width:100%"></div>
+          <div class="fg"><label class="form-label">Mobile</label><input placeholder="+27 82 000 0000" style="width:100%"></div>
+          <div class="fg" style="grid-column:span 2"><label class="form-label">Email Address</label><input type="email" placeholder="client@email.co.za" style="width:100%"></div>
+          <div class="fg" style="grid-column:span 2"><label class="form-label">Physical Address</label><input placeholder="Street, City, Province, Code" style="width:100%"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px"><button class="btn-s" onclick="istep(1)">Back</button><button class="btn-p" onclick="istep(3)">Continue</button></div>
+      </div>
+
+      <div id="is3" style="display:none" class="card">
+        <div style="font-size:14px;font-weight:500;margin-bottom:14px">Legal Matter</div>
+        <div class="fg"><label class="form-label">Practice Area</label><select style="width:100%"><option>Family Law</option><option>Deceased Estates</option><option>General Litigation</option><option>Conveyancing</option><option>Commercial Law</option><option>Labour Law</option></select></div>
+        <div class="fg"><label class="form-label">Describe your legal matter</label><textarea rows="3" placeholder="Describe in your own words — any language is fine..." style="width:100%;resize:vertical"></textarea></div>
+        <div class="fg">
+          <label class="form-label">Urgency</label>
+          <div style="display:flex;gap:7px;flex-wrap:wrap" id="urg">
+            <div onclick="surg(this)" style="padding:6px 13px;border:1px solid #1D9E75;border-radius:20px;font-size:11px;cursor:pointer;background:#E1F5EE;color:#0F6E56">Routine</div>
+            <div onclick="surg(this)" style="padding:6px 13px;border:0.5px solid var(--color-border-tertiary);border-radius:20px;font-size:11px;cursor:pointer;color:var(--color-text-secondary)">Moderate</div>
+            <div onclick="surg(this)" style="padding:6px 13px;border:0.5px solid var(--color-border-tertiary);border-radius:20px;font-size:11px;cursor:pointer;color:var(--color-text-secondary)">Urgent</div>
+            <div onclick="surg(this)" style="padding:6px 13px;border:0.5px solid var(--color-border-tertiary);border-radius:20px;font-size:11px;cursor:pointer;color:var(--color-text-secondary)">Emergency</div>
+          </div>
+        </div>
+        <div class="fg"><label class="form-label">Preferred Advocate (optional)</label><select style="width:100%"><option>Auto-assign by availability</option><option>Adv. Mohanoe (Senior)</option><option>Adv. Khumalo</option><option>Adv. Sithole</option><option>Adv. Naidoo</option></select></div>
+        <div style="display:flex;justify-content:space-between"><button class="btn-s" onclick="istep(2)">Back</button><button class="btn-p" onclick="istep(4)">Continue</button></div>
+      </div>
+
+      <div id="is4" style="display:none" class="card">
+        <div style="font-size:14px;font-weight:500;margin-bottom:3px">Upload Supporting Documents</div>
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:14px">All documents are AES-256 encrypted</div>
+        <div style="border:1px dashed var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:28px;text-align:center;background:var(--color-background-secondary);margin-bottom:14px">
+          <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:6px">Drag &amp; drop files or browse</div>
+          <div style="font-size:10px;color:var(--color-text-tertiary);margin-bottom:10px">PDF, JPG, PNG · Max 10MB each</div>
+          <button class="btn-s" style="font-size:11px">Browse Files</button>
+        </div>
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:7px">Commonly required:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:16px">
+          <span style="font-size:10px;padding:2px 7px;background:var(--color-background-secondary);border-radius:10px;border:0.5px solid var(--color-border-tertiary)">ID Document</span>
+          <span style="font-size:10px;padding:2px 7px;background:var(--color-background-secondary);border-radius:10px;border:0.5px solid var(--color-border-tertiary)">Marriage Certificate</span>
+          <span style="font-size:10px;padding:2px 7px;background:var(--color-background-secondary);border-radius:10px;border:0.5px solid var(--color-border-tertiary)">Title Deed</span>
+          <span style="font-size:10px;padding:2px 7px;background:var(--color-background-secondary);border-radius:10px;border:0.5px solid var(--color-border-tertiary)">Employment Contract</span>
+          <span style="font-size:10px;padding:2px 7px;background:var(--color-background-secondary);border-radius:10px;border:0.5px solid var(--color-border-tertiary)">Will / Testament</span>
+        </div>
+        <div style="display:flex;justify-content:space-between"><button class="btn-s" onclick="istep(3)">Back</button><button class="btn-p" onclick="runIntakeEval()">Run AI Evaluation &rarr;</button></div>
+      </div>
+
+      <!-- STEP 5: AI CASE EVALUATION (ATTORNEY ONLY) -->
+      <div id="is5" style="display:none" class="card">
+        <div style="background:linear-gradient(135deg,#1A0A0A,#2D0F0F);border-radius:10px;padding:10px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+          <svg width="16" height="16" fill="none" stroke="#F87171" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#F87171;letter-spacing:0.5px">ATTORNEY &amp; AUTHORISED STAFF ONLY — CONFIDENTIAL</div>
+            <div style="font-size:10px;color:#FCA5A5;margin-top:1px">AI case evaluation is not shared with or shown to the client at any time</div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div>
+            <div style="font-size:14px;font-weight:700">AI Case Evaluation</div>
+            <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px">SAFLII · SA Legislation · Constitution · Case Law</div>
+          </div>
+          <span class="badge b-purple" style="font-size:11px;padding:4px 10px">AI Assisted</span>
+        </div>
+        <div id="eval-input-area">
+          <div class="fg">
+            <label class="form-label">Matter Summary for AI Evaluation</label>
+            <textarea id="eval-summary" rows="4" style="width:100%;resize:vertical" placeholder="Summarise the client's legal matter, key facts, dates, and any urgency indicators for AI evaluation..."></textarea>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+            <div class="fg" style="margin-bottom:0"><label class="form-label">Practice Area</label>
+              <select id="eval-area" style="width:100%"><option>Family Law</option><option>Deceased Estates</option><option>General Litigation</option><option>Conveyancing</option><option>Commercial Law</option><option>Labour Law</option><option>Criminal Law</option><option>Administrative Law</option></select>
+            </div>
+            <div class="fg" style="margin-bottom:0"><label class="form-label">Urgency Level</label>
+              <select id="eval-urgency" style="width:100%"><option>Routine</option><option>Moderate</option><option>Urgent</option><option>Emergency</option></select>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn-s" onclick="istep(4)">Back</button>
+            <button class="btn-p" id="eval-btn" onclick="submitIntakeEval()">&#9889; Evaluate with AI</button>
+          </div>
+        </div>
+        <div id="eval-output" style="display:none">
+          <div id="eval-result" style="background:var(--color-background-secondary);border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:16px;font-size:12.5px;line-height:1.7;margin-bottom:14px;white-space:pre-wrap"></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn-s" onclick="document.getElementById('eval-output').style.display='none';document.getElementById('eval-input-area').querySelector('textarea').value='';document.getElementById('eval-output').style.display='none';document.getElementById('eval-btn').textContent='\u26A1 Evaluate with AI';">Re-evaluate</button>
+            <button class="btn-s" style="color:#1D9E75;border-color:#1D9E75" onclick="window.print()">Print Eval</button>
+            <button class="btn-p" onclick="istep(6)">Proceed to Registration &rarr;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 6: CONFIRM -->
+      <div id="is6" style="display:none" class="card">
+        <div style="text-align:center;padding:28px 0">
+          <div style="width:56px;height:56px;background:linear-gradient(135deg,#DCFCE7,#A7F3D0);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;box-shadow:0 4px 14px rgba(29,158,117,0.25)">
+            <svg width="24" height="24" fill="none" stroke="#1D9E75" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div style="font-size:18px;font-weight:700;margin-bottom:8px;letter-spacing:-0.3px">Client Registered Successfully</div>
+          <div style="font-size:12.5px;color:var(--color-text-secondary);margin-bottom:3px">Case Reference: <strong style="color:var(--color-text-primary)">MHI-2026-0442</strong></div>
+          <div style="font-size:12.5px;color:var(--color-text-secondary);margin-bottom:3px">POPIA consent recorded &middot; Reference: PC-2026-0442</div>
+          <div style="font-size:12.5px;color:var(--color-text-secondary);margin-bottom:24px">Advocate will contact within 24 hours. SMS &amp; email confirmation sent.</div>
+          <div style="display:flex;gap:8px;justify-content:center">
+            <button class="btn-s" onclick="resetIntake()">New Intake</button>
+            <button class="btn-p" onclick="go('legalai',document.querySelectorAll('.ni')[5])">View AI Evaluation</button>
+            <button class="btn-p" style="background:linear-gradient(135deg,#2563EB,#1D4ED8)" onclick="go('cases',document.querySelectorAll('.ni')[1])">View Cases</button>
+          </div>
+        </div>
+      </div>
+      </div><!-- end intake-body -->
+    </div>
+  </div>
+</div>
+
+<!-- LEGAL AI RESEARCH & DRAFTING -->
+<div id="v-legalai" style="display:none">
+  <div class="ph">
+    <div><div class="ph-title">LegalAI Research &amp; Drafting</div><div class="ph-sub">SAFLII · SA Legislation · Constitution · Attorney-reviewed before delivery</div></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="ai-lang" style="font-size:12px;padding:5px 10px"><option>English</option><option>isiZulu</option><option>Afrikaans</option><option>Sesotho</option><option>isiXhosa</option><option>Setswana</option><option>Sepedi</option></select>
+      <span class="badge b-blue" style="font-size:11px;padding:4px 10px">Attorney in loop</span>
+      <span class="badge b-green" style="font-size:11px;padding:4px 10px">R350 once-off</span>
+    </div>
+  </div>
+  <div class="pc">
+    <div class="tab-bar">
+      <div class="vtab active" id="ai-tab-client" onclick="aiTab('client')">Client Issue Submission</div>
+      <div class="vtab" id="ai-tab-research" onclick="aiTab('research')">Attorney Research Console</div>
+      <div class="vtab" id="ai-tab-drafting" onclick="aiTab('drafting')">AI Drafter</div>
+    </div>
+
+    <!-- CLIENT SUBMISSION PANEL -->
+    <div id="ai-panel-client">
+      <div style="background:#FAEEDA;border:0.5px solid #FAC775;border-radius:var(--border-radius-lg);padding:9px 14px;font-size:11px;color:#854F0B;margin-bottom:14px">
+        <strong>Client Portal:</strong> Clients describe their legal issue in full detail below. An attorney and AI researcher will review before any guidance is provided. This does not constitute legal advice.
+      </div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:14px">
+        <div class="card">
+          <div style="font-size:13px;font-weight:500;margin-bottom:14px">Describe Your Legal Issue</div>
+          <div class="fg"><label class="form-label">Your Full Name</label><input placeholder="e.g. Sipho Dlamini" style="width:100%"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="fg"><label class="form-label">Practice Area</label><select style="width:100%"><option>Family Law</option><option>Labour Law</option><option>Conveyancing / Property</option><option>Deceased Estates</option><option>Commercial Law</option><option>General Litigation</option><option>Criminal Law</option><option>Other</option></select></div>
+            <div class="fg"><label class="form-label">Preferred Language</label><select style="width:100%"><option>English</option><option>isiZulu</option><option>isiXhosa</option><option>Afrikaans</option><option>Sesotho</option><option>Setswana</option><option>Sepedi</option></select></div>
+          </div>
+          <div class="fg"><label class="form-label">Describe your legal issue in full detail</label><textarea id="client-issue" rows="5" placeholder="Describe exactly what happened, when it happened, who is involved, and what outcome you are seeking. The more detail you provide, the better our attorney and AI system can assist you. Any language is accepted." style="width:100%;resize:vertical;font-size:12px;line-height:1.6"></textarea></div>
+          <div class="fg"><label class="form-label">Key facts &amp; dates (one per line)</label><textarea id="client-facts" rows="3" placeholder="e.g.&#10;04 Jan 2026 — Dismissed without hearing&#10;12 Jan 2026 — Received written notice&#10;Employed for 7 years at company" style="width:100%;resize:vertical;font-size:12px;line-height:1.5"></textarea></div>
+          <div class="fg"><label class="form-label">Desired outcome</label><input placeholder="e.g. Reinstatement and back-pay, or claim at CCMA" style="width:100%"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn-s">Save Draft</button>
+            <button class="btn-p" onclick="submitClientIssue()">Submit for Attorney &amp; AI Review</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="card">
+            <div style="font-size:12px;font-weight:500;margin-bottom:8px">Pending Submissions</div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <div class="client-q">
+                <div style="font-weight:500;font-size:11px">T. Mokoena</div>
+                <div style="font-size:10px;color:var(--color-text-secondary);margin-bottom:4px">Labour · Unfair dismissal · 14 min ago</div>
+                <button onclick="loadResearch('mokoena')" style="font-size:10px;padding:2px 8px;background:#1D9E75;color:white;border:none;border-radius:4px;cursor:pointer">Research &rarr;</button>
+              </div>
+              <div class="client-q">
+                <div style="font-weight:500;font-size:11px">N. Sithole</div>
+                <div style="font-size:10px;color:var(--color-text-secondary);margin-bottom:4px">Family · Maintenance order · 1 hr ago</div>
+                <button onclick="loadResearch('sithole')" style="font-size:10px;padding:2px 8px;background:#1D9E75;color:white;border:none;border-radius:4px;cursor:pointer">Research &rarr;</button>
+              </div>
+              <div class="client-q">
+                <div style="font-weight:500;font-size:11px">B. Khumalo</div>
+                <div style="font-size:10px;color:var(--color-text-secondary);margin-bottom:4px">Estates · Contest a will · 3 hrs ago</div>
+                <button onclick="loadResearch('khumalo')" style="font-size:10px;padding:2px 8px;background:#1D9E75;color:white;border:none;border-radius:4px;cursor:pointer">Research &rarr;</button>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div style="font-size:12px;font-weight:500;margin-bottom:6px">Research Queue</div>
+            <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:8px">12 submissions awaiting AI research &amp; attorney sign-off</div>
+            <button class="btn-p" style="width:100%;font-size:11px" onclick="aiTab('research')">Open Research Console</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ATTORNEY RESEARCH CONSOLE PANEL -->
+    <div id="ai-panel-research" style="display:none">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:14px">
+        <div class="card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
+          <div style="padding:12px 16px;border-bottom:0.5px solid var(--color-border-tertiary);display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:13px;font-weight:500">AI Research Output</div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <select id="ai-lang" style="font-size:11px;padding:4px 8px"><option>English</option><option>isiZulu</option><option>Afrikaans</option><option>Sesotho</option></select>
+              <span class="badge b-purple" style="font-size:10px">SAFLII-referenced</span>
+            </div>
+          </div>
+          <div id="research-msgs" style="flex:1;padding:14px;display:flex;flex-direction:column;gap:10px;min-height:320px;overflow-y:auto">
+            <div style="text-align:center;padding:40px 0;color:var(--color-text-tertiary);font-size:12px">
+              <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.2" viewBox="0 0 24 24" style="margin:0 auto 10px;display:block;opacity:0.4"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              Select a client submission from the queue to run AI research, or enter a legal question below.
+            </div>
+          </div>
+          <div style="border-top:0.5px solid var(--color-border-tertiary);padding:10px 14px;display:flex;gap:8px">
+            <textarea id="qi" placeholder="Enter client issue or legal question for SAFLII research... (Ctrl+Enter)" rows="2" style="flex:1;resize:none;font-size:12px"></textarea>
+            <button class="btn-p" onclick="askAI()" style="align-self:flex-end;padding:9px 14px">Research</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="card">
+            <div style="font-size:12px;font-weight:500;margin-bottom:8px">Research Templates</div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div onclick="preq('Research unfair dismissal under LRA s186 and s193. Cite relevant SAFLII cases.')" style="font-size:11px;padding:7px 9px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);cursor:pointer;color:var(--color-text-secondary)">Labour: Unfair dismissal (LRA)</div>
+              <div onclick="preq('Research protection order procedure under Domestic Violence Act 116 of 1998. Cite SAFLII cases.')" style="font-size:11px;padding:7px 9px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);cursor:pointer;color:var(--color-text-secondary)">Family: Protection order (DVA)</div>
+              <div onclick="preq('Research contesting a will under Wills Act 7 of 1953 and Intestate Succession Act. Cite SAFLII.')" style="font-size:11px;padding:7px 9px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);cursor:pointer;color:var(--color-text-secondary)">Estates: Contesting a will</div>
+              <div onclick="preq('Research conveyancing process under Deeds Registries Act 47 of 1937. Cite SAFLII.')" style="font-size:11px;padding:7px 9px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);cursor:pointer;color:var(--color-text-secondary)">Property: Transfer &amp; registration</div>
+              <div onclick="preq('Research retrenchment procedure under LRA s189 and s189A. Cite SAFLII cases.')" style="font-size:11px;padding:7px 9px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);cursor:pointer;color:var(--color-text-secondary)">Labour: Retrenchment (s189)</div>
+              <div onclick="preq('Research Letter of Demand requirements under SA common law and NCA. Draft a standard template.')" style="font-size:11px;padding:7px 9px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);cursor:pointer;color:var(--color-text-secondary)">Draft: Letter of Demand</div>
+            </div>
+          </div>
+          <div class="card">
+            <div style="font-size:12px;font-weight:500;margin-bottom:8px">Attorney Review Queue</div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <div style="padding:7px 9px;background:var(--color-background-secondary);border-radius:var(--border-radius-md)">
+                <div style="font-size:11px;font-weight:500">Unfair dismissal — Mokoena</div>
+                <div style="font-size:10px;color:var(--color-text-secondary)">Research complete · 14 min ago</div>
+                <div style="display:flex;gap:4px;margin-top:5px">
+                  <button style="font-size:10px;padding:2px 7px;background:#E1F5EE;color:#0F6E56;border:none;border-radius:4px;cursor:pointer">Approve &amp; Send</button>
+                  <button style="font-size:10px;padding:2px 7px;background:var(--color-background-primary);color:var(--color-text-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:4px;cursor:pointer">Edit</button>
+                </div>
+              </div>
+              <div style="padding:7px 9px;background:var(--color-background-secondary);border-radius:var(--border-radius-md)">
+                <div style="font-size:11px;font-weight:500">Maintenance order — Sithole</div>
+                <div style="font-size:10px;color:var(--color-text-secondary)">Research complete · 1 hr ago</div>
+                <div style="display:flex;gap:4px;margin-top:5px">
+                  <button style="font-size:10px;padding:2px 7px;background:#E1F5EE;color:#0F6E56;border:none;border-radius:4px;cursor:pointer">Approve &amp; Send</button>
+                  <button style="font-size:10px;padding:2px 7px;background:var(--color-background-primary);color:var(--color-text-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:4px;cursor:pointer">Edit</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI DRAFTER PANEL -->
+    <div id="ai-panel-drafting" style="display:none">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:14px">
+        <div class="card">
+          <div style="font-size:13px;font-weight:500;margin-bottom:12px">AI Document Drafter</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" class="fg">
+            <div><label class="form-label">Document Type</label>
+              <select style="width:100%" id="draft-type" onchange="updateDraftPrompt()">
+                <option value="lod">Letter of Demand</option>
+                <option value="summons">Notice of Motion</option>
+                <option value="affidavit">Supporting Affidavit</option>
+                <option value="settlement">Settlement Agreement</option>
+                <option value="bundle">Bundle Summary (100-page)</option>
+              </select>
+            </div>
+            <div><label class="form-label">Case Reference</label><select style="width:100%"><option>MHI-2026-0441 · Dlamini</option><option>MHI-2026-0440 · Nkosi</option><option>MHI-2026-0439 · Van der Merwe</option><option>MHI-2026-0438 · Mahomed</option></select></div>
+          </div>
+          <div class="fg"><label class="form-label">Key facts &amp; instructions for AI drafter</label><textarea id="draft-instructions" rows="4" placeholder="Provide key facts, party names, amounts, dates, and any specific clauses required..." style="width:100%;resize:vertical;font-size:12px"></textarea></div>
+          <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 12px;margin-bottom:12px;font-size:11px;color:var(--color-text-secondary)">
+            <strong style="color:var(--color-text-primary)">Note:</strong> AI-drafted documents are working drafts only. All documents must be reviewed, edited, and signed off by the responsible attorney before use.
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn-s">Clear</button>
+            <button class="btn-p" onclick="runDrafter()">Generate Draft</button>
+          </div>
+          <div id="draft-output" style="display:none;margin-top:14px;padding-top:14px;border-top:0.5px solid var(--color-border-tertiary)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div style="font-size:12px;font-weight:500">Draft Output</div>
+              <div style="display:flex;gap:5px">
+                <button style="font-size:10px;padding:2px 8px;background:#E1F5EE;color:#0F6E56;border:none;border-radius:4px;cursor:pointer">Send to Review</button>
+                <button style="font-size:10px;padding:2px 8px;background:var(--color-background-primary);color:var(--color-text-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:4px;cursor:pointer">Copy</button>
+              </div>
+            </div>
+            <div id="draft-content" style="font-size:12px;line-height:1.7;white-space:pre-wrap;background:var(--color-background-secondary);padding:14px;border-radius:var(--border-radius-md)"></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="card">
+            <div style="font-size:12px;font-weight:500;margin-bottom:8px">Draft Templates</div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div onclick="setDraft('lod')" style="font-size:11px;padding:7px 9px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);cursor:pointer;color:var(--color-text-secondary)">Letter of Demand</div>
+              <div onclick="setDraft('summons')" style="font-size:11px;padding:7px 9px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);cursor:pointer;color:var(--color-text-secondary)">Notice of Motion</div>
+              <div onclick="setDraft('affidavit')" style="font-size:11px;padding:7px 9px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);cursor:pointer;color:var(--color-text-secondary)">Supporting Affidavit</div>
+              <div onclick="setDraft('settlement')" style="font-size:11px;padding:7px 9px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);cursor:pointer;color:var(--color-text-secondary)">Settlement Agreement</div>
+              <div onclick="setDraft('bundle')" style="font-size:11px;padding:7px 9px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);cursor:pointer;color:var(--color-text-secondary)">Bundle Summary</div>
+            </div>
+          </div>
+          <div class="card">
+            <div style="font-size:12px;font-weight:500;margin-bottom:6px">Recent Drafts</div>
+            <div style="display:flex;flex-direction:column;gap:5px">
+              <div style="font-size:11px;padding:6px 8px;background:var(--color-background-secondary);border-radius:var(--border-radius-md)">
+                <div style="font-weight:500">Letter of Demand</div>
+                <div style="font-size:10px;color:var(--color-text-secondary)">Dlamini · Today 09:41</div>
+              </div>
+              <div style="font-size:11px;padding:6px 8px;background:var(--color-background-secondary);border-radius:var(--border-radius-md)">
+                <div style="font-weight:500">Affidavit Draft</div>
+                <div style="font-size:10px;color:var(--color-text-secondary)">Van der Merwe · Yesterday</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DOCUMENTS -->
+<div id="v-documents" style="display:none">
+  <div class="ph">
+    <div><div class="ph-title">Document Vault</div><div class="ph-sub">Encrypted · Paperless · Version controlled · 2,847 documents</div></div>
+    <div style="display:flex;gap:8px">
+      <input placeholder="Search documents..." style="font-size:12px;padding:5px 11px;width:200px">
+      <button class="btn-p">+ Upload</button>
+    </div>
+  </div>
+  <div class="pc">
+    <div style="display:grid;grid-template-columns:170px minmax(0,1fr);gap:14px">
+      <div>
+        <div style="font-size:10px;color:var(--color-text-secondary);letter-spacing:0.5px;margin-bottom:7px">CATEGORIES</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div onclick="dcat(this)" style="padding:7px 9px;border-radius:var(--border-radius-md);font-size:12px;cursor:pointer;background:#E1F5EE;color:#0F6E56;font-weight:500">All Documents <span style="float:right;font-weight:400">2,847</span></div>
+          <div onclick="dcat(this)" style="padding:7px 9px;border-radius:var(--border-radius-md);font-size:12px;cursor:pointer;color:var(--color-text-secondary)">Affidavits <span style="float:right">412</span></div>
+          <div onclick="dcat(this)" style="padding:7px 9px;border-radius:var(--border-radius-md);font-size:12px;cursor:pointer;color:var(--color-text-secondary)">Contracts <span style="float:right">389</span></div>
+          <div onclick="dcat(this)" style="padding:7px 9px;border-radius:var(--border-radius-md);font-size:12px;cursor:pointer;color:var(--color-text-secondary)">Court Orders <span style="float:right">271</span></div>
+          <div onclick="dcat(this)" style="padding:7px 9px;border-radius:var(--border-radius-md);font-size:12px;cursor:pointer;color:var(--color-text-secondary)">Correspondence <span style="float:right">634</span></div>
+          <div onclick="dcat(this)" style="padding:7px 9px;border-radius:var(--border-radius-md);font-size:12px;cursor:pointer;color:var(--color-text-secondary)">Identity Docs <span style="float:right">891</span></div>
+          <div onclick="dcat(this)" style="padding:7px 9px;border-radius:var(--border-radius-md);font-size:12px;cursor:pointer;color:var(--color-text-secondary)">Invoices <span style="float:right">250</span></div>
+        </div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <table>
+          <thead><tr><th style="padding-left:14px">Document</th><th>Type</th><th>Case</th><th>Uploaded</th><th>Size</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td style="padding-left:14px"><div style="display:flex;align-items:center;gap:7px"><div style="width:22px;height:26px;background:#FCEBEB;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;color:#A32D2D;flex-shrink:0">PDF</div><span>Dlamini_Affidavit_v2.pdf</span></div></td>
+              <td><span class="badge b-red">Affidavit</span></td>
+              <td class="mono">MHI-2026-0441</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">Today</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">1.2 MB</td>
+              <td><button class="btn-s" style="font-size:10px;padding:2px 8px">View</button></td>
+            </tr>
+            <tr>
+              <td style="padding-left:14px"><div style="display:flex;align-items:center;gap:7px"><div style="width:22px;height:26px;background:#E6F1FB;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;color:#185FA5;flex-shrink:0">DOC</div><span>VanDerMerwe_EmploymentContract.docx</span></div></td>
+              <td><span class="badge b-blue">Contract</span></td>
+              <td class="mono">MHI-2026-0439</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">Yesterday</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">892 KB</td>
+              <td><button class="btn-s" style="font-size:10px;padding:2px 8px">View</button></td>
+            </tr>
+            <tr>
+              <td style="padding-left:14px"><div style="display:flex;align-items:center;gap:7px"><div style="width:22px;height:26px;background:#EAF3DE;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;color:#3B6D11;flex-shrink:0">PDF</div><span>Nkosi_TitleDeed_2A.pdf</span></div></td>
+              <td><span class="badge b-teal">Title Deed</span></td>
+              <td class="mono">MHI-2026-0440</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">30 Mar</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">3.4 MB</td>
+              <td><button class="btn-s" style="font-size:10px;padding:2px 8px">View</button></td>
+            </tr>
+            <tr>
+              <td style="padding-left:14px"><div style="display:flex;align-items:center;gap:7px"><div style="width:22px;height:26px;background:#FBEAF0;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;color:#993556;flex-shrink:0">PDF</div><span>Mahomed_Will_Authenticated.pdf</span></div></td>
+              <td><span class="badge b-pink">Will</span></td>
+              <td class="mono">MHI-2026-0438</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">28 Mar</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">2.1 MB</td>
+              <td><button class="btn-s" style="font-size:10px;padding:2px 8px">View</button></td>
+            </tr>
+            <tr>
+              <td style="padding-left:14px"><div style="display:flex;align-items:center;gap:7px"><div style="width:22px;height:26px;background:#FAEEDA;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;color:#854F0B;flex-shrink:0">PDF</div><span>Mthembu_CourtOrder_Final.pdf</span></div></td>
+              <td><span class="badge b-amber">Court Order</span></td>
+              <td class="mono">MHI-2026-0437</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">26 Mar</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">1.8 MB</td>
+              <td><button class="btn-s" style="font-size:10px;padding:2px 8px">View</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BILLING -->
+<div id="v-billing" style="display:none">
+  <div class="ph">
+    <div><div class="ph-title">Billing &amp; Invoicing</div><div class="ph-sub">Fee Book · High Court Tariff · Invoice generation · Payment management</div></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn-s" onclick="billingTab('feebook')">Fee Book</button>
+      <button class="btn-p" onclick="newInvoice()">+ New Invoice</button>
+    </div>
+  </div>
+  <div class="pc">
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-lbl">Outstanding</div><div class="stat-val" style="font-size:22px">R124,800</div><div class="stat-sub" style="color:#A32D2D">18 unpaid invoices</div></div>
+      <div class="stat"><div class="stat-lbl">Collected (Apr)</div><div class="stat-val" style="font-size:22px">R847,200</div><div class="stat-sub" style="color:#1D9E75">+18% vs March</div></div>
+      <div class="stat"><div class="stat-lbl">Tariff Units (Apr)</div><div class="stat-val" style="font-size:22px">1,648</div><div class="stat-sub" style="color:var(--color-text-secondary)">412 hrs @ 4 units/hr</div></div>
+      <div class="stat"><div class="stat-lbl">LegalAI Revenue</div><div class="stat-val" style="font-size:22px">R24,150</div><div class="stat-sub" style="color:#1D9E75">69 AI consultations</div></div>
+    </div>
+
+    <div class="tab-bar">
+      <div class="vtab active" id="bill-tab-invoices" onclick="billingTab('invoices')">Invoices</div>
+      <div class="vtab" id="bill-tab-feebook" onclick="billingTab('feebook')">Fee Book</div>
+      <div class="vtab" id="bill-tab-logtime" onclick="billingTab('logtime')">Log Time</div>
+    </div>
+
+    <!-- NEW INVOICE CREATOR -->
+    <div id="bill-panel-newinvoice" style="display:none">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,380px);gap:16px">
+        <!-- FORM -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <div style="font-size:14px;font-weight:700">New Invoice</div>
+            <button class="btn-s" style="font-size:11px" onclick="billingTab('invoices')">Cancel</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="fg"><label class="form-label">Client Name</label><input id="inv-client" placeholder="e.g. Sipho Dlamini" style="width:100%"></div>
+            <div class="fg"><label class="form-label">Case / Matter Reference</label><input id="inv-ref" placeholder="e.g. MHI-2026-0442" style="width:100%"></div>
+            <div class="fg"><label class="form-label">Invoice Date</label><input id="inv-date" type="date" style="width:100%"></div>
+            <div class="fg"><label class="form-label">Due Date</label><input id="inv-due" type="date" style="width:100%"></div>
+          </div>
+          <div class="fg"><label class="form-label">Cost Basis</label>
+            <div style="display:flex;gap:8px">
+              <div id="inv-pp" onclick="invBasis('pp')" style="flex:1;padding:8px;border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-md);font-size:11.5px;cursor:pointer;text-align:center;color:var(--color-text-secondary)">Party &amp; Party</div>
+              <div id="inv-ac" onclick="invBasis('ac')" style="flex:1;padding:8px;border:1px solid #1D9E75;border-radius:var(--border-radius-md);font-size:11.5px;cursor:pointer;text-align:center;background:#E1F5EE;color:#0F6E56;font-weight:600">Attorney &amp; Client</div>
+            </div>
+          </div>
+          <div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);letter-spacing:0.4px;text-transform:uppercase;margin-bottom:8px">Line Items</div>
+          <div id="inv-items">
+            <div class="inv-item" style="display:grid;grid-template-columns:1fr 60px 90px 28px;gap:7px;margin-bottom:7px;align-items:center">
+              <input placeholder="Description e.g. Consultation — 2 hours" style="font-size:12px">
+              <input placeholder="Units" type="number" min="0" step="0.5" style="font-size:12px;text-align:center" oninput="updateInvTotal()">
+              <input placeholder="Rate (R)" type="number" min="0" style="font-size:12px;text-align:right" oninput="updateInvTotal()">
+              <button onclick="removeInvItem(this)" style="background:none;border:none;color:#991B1B;cursor:pointer;font-size:16px;padding:0;line-height:1">&times;</button>
+            </div>
+            <div class="inv-item" style="display:grid;grid-template-columns:1fr 60px 90px 28px;gap:7px;margin-bottom:7px;align-items:center">
+              <input placeholder="Description e.g. Drafting pleadings" style="font-size:12px">
+              <input placeholder="Units" type="number" min="0" step="0.5" style="font-size:12px;text-align:center" oninput="updateInvTotal()">
+              <input placeholder="Rate (R)" type="number" min="0" style="font-size:12px;text-align:right" oninput="updateInvTotal()">
+              <button onclick="removeInvItem(this)" style="background:none;border:none;color:#991B1B;cursor:pointer;font-size:16px;padding:0;line-height:1">&times;</button>
+            </div>
+          </div>
+          <button class="btn-s" style="font-size:11px;width:100%;margin-bottom:14px" onclick="addInvItem()">+ Add Line Item</button>
+          <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px 14px;font-size:12.5px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="color:var(--color-text-secondary)">Subtotal</span><span id="inv-subtotal">R0.00</span></div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:var(--color-text-secondary)">VAT (15%)</span><span id="inv-vat">R0.00</span></div>
+            <div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px;border-top:1px solid var(--color-border-secondary);padding-top:8px"><span>Total</span><span id="inv-total" style="color:#1D9E75">R0.00</span></div>
+          </div>
+          <div class="fg" style="margin-top:14px"><label class="form-label">Payment Details / Notes</label><textarea id="inv-notes" rows="2" style="width:100%" placeholder="EFT: Mohanoe Inc. — FNB Acc 123456789 · Branch 250655"></textarea></div>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn-s" onclick="previewInvoice()">Preview Invoice</button>
+            <button class="btn-p" onclick="printInvoice()">Print / Save PDF</button>
+          </div>
+        </div>
+        <!-- PREVIEW -->
+        <div class="card" id="inv-preview-panel" style="font-size:12px;line-height:1.6">
+          <div style="text-align:center;color:var(--color-text-tertiary);padding:40px 20px;font-size:12px" id="inv-preview-placeholder">
+            <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin-bottom:8px;display:block;margin-left:auto;margin-right:auto"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            Fill in the form and click Preview to see your invoice
+          </div>
+          <div id="inv-preview-content" style="display:none">
+            <div style="background:linear-gradient(135deg,#0C3526,#061D14);color:white;padding:18px;border-radius:10px;margin-bottom:14px">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div><div style="font-size:16px;font-weight:700;letter-spacing:-0.3px">MOHANOE INC.</div><div style="font-size:10px;color:#9FE1CB;letter-spacing:2px">ATTORNEYS &amp; CONVEYANCERS</div></div>
+                <div style="text-align:right"><div style="font-size:10px;color:#9FE1CB">INVOICE</div><div style="font-size:18px;font-weight:700" id="prev-inv-num">INV-2026-0090</div></div>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--color-text-secondary);margin-bottom:14px">
+              <div><div style="font-weight:600;color:var(--color-text-primary);margin-bottom:2px">Bill To</div><div id="prev-client">—</div><div id="prev-ref" style="font-size:10px;margin-top:2px"></div></div>
+              <div style="text-align:right"><div>Date: <span id="prev-date">—</span></div><div>Due: <span id="prev-due">—</span></div><div style="margin-top:4px"><span id="prev-basis" class="badge b-blue">Atty &amp; Client</span></div></div>
+            </div>
+            <table style="margin-bottom:14px">
+              <thead><tr><th style="font-size:10px">Description</th><th style="font-size:10px;text-align:right">Units</th><th style="font-size:10px;text-align:right">Rate</th><th style="font-size:10px;text-align:right">Amount</th></tr></thead>
+              <tbody id="prev-items"></tbody>
+            </table>
+            <div style="border-top:1px solid var(--color-border-secondary);padding-top:10px;font-size:12px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--color-text-secondary)">Subtotal</span><span id="prev-sub">R0.00</span></div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:var(--color-text-secondary)">VAT @ 15%</span><span id="prev-vat-val">R0.00</span></div>
+              <div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px;color:#1D9E75"><span>TOTAL DUE</span><span id="prev-total">R0.00</span></div>
+            </div>
+            <div style="margin-top:12px;padding:10px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);font-size:11px;color:var(--color-text-secondary)" id="prev-notes"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INVOICES TAB -->
+    <div id="bill-panel-invoices">
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:12px 16px;font-size:13px;font-weight:500">Recent Invoices</div>
+        <table>
+          <thead><tr><th>Invoice #</th><th>Client</th><th>Cost Basis</th><th>Amount</th><th>Status</th><th>Due Date</th><th></th></tr></thead>
+          <tbody>
+            <tr><td class="mono">INV-2026-0089</td><td>S. Dlamini</td><td><span class="badge b-blue">Atty &amp; Client</span></td><td style="font-weight:500">R12,500</td><td><span class="badge b-green">Paid</span></td><td style="font-size:11px;color:var(--color-text-secondary)">01 Apr 2026</td><td><button class="btn-s" style="font-size:10px;padding:2px 8px">PDF</button></td></tr>
+            <tr><td class="mono">INV-2026-0088</td><td>T. Nkosi</td><td><span class="badge b-teal">Party &amp; Party</span></td><td style="font-weight:500">R8,750</td><td><span class="badge b-amber">Pending</span></td><td style="font-size:11px;color:#A32D2D">28 Mar 2026</td><td><button class="btn-s" style="font-size:10px;padding:2px 8px">PDF</button></td></tr>
+            <tr><td class="mono">INV-2026-0087</td><td>P. van der Merwe</td><td><span class="badge b-blue">Atty &amp; Client</span></td><td style="font-weight:500">R15,200</td><td><span class="badge b-amber">Pending</span></td><td style="font-size:11px;color:var(--color-text-secondary)">10 Apr 2026</td><td><button class="btn-s" style="font-size:10px;padding:2px 8px">PDF</button></td></tr>
+            <tr><td class="mono">INV-2026-0086</td><td>F. Mahomed</td><td><span class="badge b-teal">Party &amp; Party</span></td><td style="font-weight:500">R6,400</td><td><span class="badge b-green">Paid</span></td><td style="font-size:11px;color:var(--color-text-secondary)">30 Mar 2026</td><td><button class="btn-s" style="font-size:10px;padding:2px 8px">PDF</button></td></tr>
+            <tr><td class="mono">INV-2026-0085</td><td>N. Zulu</td><td><span class="badge b-blue">Atty &amp; Client</span></td><td style="font-weight:500">R9,800</td><td><span class="badge b-green">Paid</span></td><td style="font-size:11px;color:var(--color-text-secondary)">25 Mar 2026</td><td><button class="btn-s" style="font-size:10px;padding:2px 8px">PDF</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- FEE BOOK TAB -->
+    <div id="bill-panel-feebook" style="display:none">
+      <div style="background:#E6F1FB;border:0.5px solid #B3D1F0;border-radius:var(--border-radius-lg);padding:9px 14px;font-size:11px;color:#185FA5;margin-bottom:14px">
+        <strong>High Court Tariff</strong> — Based on GN R1004 (Magistrates&apos; Courts Act) and the High Court scale of fees. Log each unit of work (1 unit = 15 minutes) against the applicable tariff item. Party &amp; Party costs are taxable by the Taxing Master; Attorney &amp; Client costs are as agreed.
+      </div>
+      <div style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px">
+        <div class="card" style="padding:0;overflow:hidden">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
+            <div style="font-size:13px;font-weight:500">Fee Book Entries</div>
+            <div style="display:flex;gap:6px">
+              <div class="filter-pill active" onclick="fbFilter(this,'all')">All</div>
+              <div class="filter-pill" onclick="fbFilter(this,'pp')">Party &amp; Party</div>
+              <div class="filter-pill" onclick="fbFilter(this,'ac')">Atty &amp; Client</div>
+            </div>
+          </div>
+          <table>
+            <thead><tr><th>Date</th><th>Case</th><th>Tariff Item</th><th>Cost Basis</th><th>Units</th><th>Rate/Unit</th><th>Amount</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td style="font-size:11px;color:var(--color-text-secondary)">02 Apr</td>
+                <td class="mono">MHI-2026-0441</td>
+                <td style="font-size:11px">B3 — Drafting affidavit</td>
+                <td><span class="badge b-blue">A&amp;C</span></td>
+                <td style="font-weight:500">8</td>
+                <td style="font-size:11px">R312.50</td>
+                <td style="font-weight:500;color:#1D9E75">R2,500</td>
+                <td><button class="btn-s" style="font-size:10px;padding:2px 7px">Edit</button></td>
+              </tr>
+              <tr>
+                <td style="font-size:11px;color:var(--color-text-secondary)">01 Apr</td>
+                <td class="mono">MHI-2026-0439</td>
+                <td style="font-size:11px">C1 — Court appearance (full day)</td>
+                <td><span class="badge b-teal">P&amp;P</span></td>
+                <td style="font-weight:500">32</td>
+                <td style="font-size:11px">R312.50</td>
+                <td style="font-weight:500;color:#1D9E75">R10,000</td>
+                <td><button class="btn-s" style="font-size:10px;padding:2px 7px">Edit</button></td>
+              </tr>
+              <tr>
+                <td style="font-size:11px;color:var(--color-text-secondary)">01 Apr</td>
+                <td class="mono">MHI-2026-0440</td>
+                <td style="font-size:11px">A2 — Client consultation</td>
+                <td><span class="badge b-blue">A&amp;C</span></td>
+                <td style="font-weight:500">4</td>
+                <td style="font-size:11px">R312.50</td>
+                <td style="font-weight:500;color:#1D9E75">R1,250</td>
+                <td><button class="btn-s" style="font-size:10px;padding:2px 7px">Edit</button></td>
+              </tr>
+              <tr>
+                <td style="font-size:11px;color:var(--color-text-secondary)">31 Mar</td>
+                <td class="mono">MHI-2026-0438</td>
+                <td style="font-size:11px">B5 — Perusal of documents</td>
+                <td><span class="badge b-teal">P&amp;P</span></td>
+                <td style="font-weight:500">6</td>
+                <td style="font-size:11px">R312.50</td>
+                <td style="font-weight:500;color:#1D9E75">R1,875</td>
+                <td><button class="btn-s" style="font-size:10px;padding:2px 7px">Edit</button></td>
+              </tr>
+              <tr>
+                <td style="font-size:11px;color:var(--color-text-secondary)">31 Mar</td>
+                <td class="mono">MHI-2026-0441</td>
+                <td style="font-size:11px">D1 — Correspondence (letter)</td>
+                <td><span class="badge b-blue">A&amp;C</span></td>
+                <td style="font-weight:500">2</td>
+                <td style="font-size:11px">R312.50</td>
+                <td style="font-weight:500;color:#1D9E75">R625</td>
+                <td><button class="btn-s" style="font-size:10px;padding:2px 7px">Edit</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="padding:10px 16px;border-top:0.5px solid var(--color-border-tertiary);display:flex;justify-content:space-between;font-size:12px">
+            <span style="color:var(--color-text-secondary)">5 entries shown</span>
+            <span><strong>Total:</strong> R16,250 &nbsp;|&nbsp; <span style="color:var(--color-text-secondary)">P&amp;P: R11,875</span> &nbsp;|&nbsp; <span style="color:var(--color-text-secondary)">A&amp;C: R4,375</span></span>
+          </div>
+        </div>
+        <div class="card">
+          <div style="font-size:13px;font-weight:500;margin-bottom:12px">Log Fee Book Entry</div>
+          <div class="fg"><label class="form-label">Case</label><select style="width:100%"><option>MHI-2026-0441 · Dlamini</option><option>MHI-2026-0440 · Nkosi</option><option>MHI-2026-0439 · Van der Merwe</option><option>MHI-2026-0438 · Mahomed</option></select></div>
+          <div class="fg"><label class="form-label">Cost Basis</label>
+            <div style="display:flex;gap:7px">
+              <div id="fb-pp" onclick="fbBasis('pp')" style="flex:1;padding:7px;border:1px solid #1D9E75;border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;text-align:center;background:#E1F5EE;color:#0F6E56">Party &amp; Party</div>
+              <div id="fb-ac" onclick="fbBasis('ac')" style="flex:1;padding:7px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;text-align:center;color:var(--color-text-secondary)">Atty &amp; Client</div>
+            </div>
+          </div>
+          <div class="fg"><label class="form-label">Tariff Item</label>
+            <select style="width:100%">
+              <option>A1 — Attendance at court (per appearance)</option>
+              <option>A2 — Client consultation (per 15 min)</option>
+              <option>B1 — Drafting pleadings (per page)</option>
+              <option>B2 — Drafting notices &amp; motions (per page)</option>
+              <option>B3 — Drafting affidavit (per page)</option>
+              <option>B4 — Drafting agreement (per page)</option>
+              <option>B5 — Perusal of documents (per 15 min)</option>
+              <option>C1 — Court appearance full day</option>
+              <option>C2 — Court appearance half day</option>
+              <option>C3 — Counsel’s fees (refresher)</option>
+              <option>D1 — Correspondence — letter</option>
+              <option>D2 — Correspondence — email</option>
+              <option>E1 — Travel &amp; subsistence</option>
+            </select>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" class="fg">
+            <div><label class="form-label">Units (15-min each)</label><input type="number" placeholder="e.g. 4" style="width:100%" id="fb-units" oninput="calcFee()"></div>
+            <div><label class="form-label">Rate per unit (R)</label><input type="number" placeholder="312.50" style="width:100%" id="fb-rate" oninput="calcFee()" value="312.50"></div>
+          </div>
+          <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:8px 12px;font-size:12px;margin-bottom:12px;display:flex;justify-content:space-between">
+            <span style="color:var(--color-text-secondary)">Calculated fee:</span>
+            <strong id="fb-calc">R0.00</strong>
+          </div>
+          <div class="fg"><label class="form-label">Description</label><textarea rows="2" placeholder="Brief description of work done..." style="width:100%;resize:none"></textarea></div>
+          <button class="btn-p" style="width:100%">Add to Fee Book</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOG TIME TAB -->
+    <div id="bill-panel-logtime" style="display:none">
+      <div style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:14px">
+        <div class="card" style="padding:0;overflow:hidden">
+          <div style="padding:12px 16px;font-size:13px;font-weight:500">Time Entries</div>
+          <table>
+            <thead><tr><th>Date</th><th>Case</th><th>Activity</th><th>Duration</th><th>Rate</th><th>Amount</th></tr></thead>
+            <tbody>
+              <tr><td style="font-size:11px;color:var(--color-text-secondary)">02 Apr</td><td class="mono">MHI-2026-0441</td><td style="font-size:11px">Document Drafting</td><td>2.0 hrs</td><td style="font-size:11px">R2,500/hr</td><td style="font-weight:500">R5,000</td></tr>
+              <tr><td style="font-size:11px;color:var(--color-text-secondary)">01 Apr</td><td class="mono">MHI-2026-0439</td><td style="font-size:11px">Court Appearance</td><td>8.0 hrs</td><td style="font-size:11px">R2,000/hr</td><td style="font-weight:500">R16,000</td></tr>
+              <tr><td style="font-size:11px;color:var(--color-text-secondary)">01 Apr</td><td class="mono">MHI-2026-0440</td><td style="font-size:11px">Client Consultation</td><td>1.0 hrs</td><td style="font-size:11px">R2,500/hr</td><td style="font-weight:500">R2,500</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div style="font-size:13px;font-weight:500;margin-bottom:12px">Log Time Entry</div>
+          <div class="fg"><label class="form-label">Case</label><select style="width:100%"><option>MHI-2026-0441 · Dlamini</option><option>MHI-2026-0440 · Nkosi</option><option>MHI-2026-0439 · Van der Merwe</option><option>MHI-2026-0438 · Mahomed</option></select></div>
+          <div class="fg"><label class="form-label">Activity</label><select style="width:100%"><option>Legal Research</option><option>Court Appearance</option><option>Client Consultation</option><option>Document Drafting</option><option>Correspondence</option><option>Motion Preparation</option></select></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" class="fg">
+            <div><label class="form-label">Hours</label><input type="number" placeholder="0.5" style="width:100%"></div>
+            <div><label class="form-label">Rate (R/hr)</label><input type="number" placeholder="2000" style="width:100%"></div>
+          </div>
+          <div class="fg"><label class="form-label">Notes</label><textarea rows="2" placeholder="Brief description..." style="width:100%;resize:none"></textarea></div>
+          <button class="btn-p" style="width:100%">Log Time Entry</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- STAFF -->
+<div id="v-staff" style="display:none">
+  <div class="ph">
+    <div><div class="ph-title">Staff &amp; Advocates</div><div class="ph-sub">Attorneys, advocates, paralegals, and support staff</div></div>
+    <button class="btn-p">+ Add Staff Member</button>
+  </div>
+  <div class="pc">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px">
+      <div class="card"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div class="avatar" style="background:#1D9E75;width:42px;height:42px">TM</div><div><div style="font-weight:500;font-size:13px">Adv. Thabo Mohanoe</div><div style="font-size:10px;color:var(--color-text-secondary)">Senior Partner · 45+ yrs</div></div><span class="badge b-green" style="margin-left:auto">Available</span></div><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:8px">Family Law, Commercial</div><div style="display:flex;gap:14px;font-size:11px"><div><span style="color:var(--color-text-secondary)">Cases:</span> <strong>34</strong></div><div><span style="color:var(--color-text-secondary)">Hrs:</span> <strong>124</strong></div><div><span style="color:var(--color-text-secondary)">Billed:</span> <strong>R248k</strong></div></div></div>
+      <div class="card"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div class="avatar" style="background:#378ADD;width:42px;height:42px">NK</div><div><div style="font-weight:500;font-size:13px">Adv. Nomsa Khumalo</div><div style="font-size:10px;color:var(--color-text-secondary)">Associate · 8 yrs</div></div><span class="badge b-green" style="margin-left:auto">Available</span></div><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:8px">Conveyancing, Property</div><div style="display:flex;gap:14px;font-size:11px"><div><span style="color:var(--color-text-secondary)">Cases:</span> <strong>28</strong></div><div><span style="color:var(--color-text-secondary)">Hrs:</span> <strong>112</strong></div><div><span style="color:var(--color-text-secondary)">Billed:</span> <strong>R156k</strong></div></div></div>
+      <div class="card"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div class="avatar" style="background:#D85A30;width:42px;height:42px">BS</div><div><div style="font-weight:500;font-size:13px">Adv. Bongani Sithole</div><div style="font-size:10px;color:var(--color-text-secondary)">Senior Associate · 15 yrs</div></div><span class="badge b-red" style="margin-left:auto">In Court</span></div><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:8px">Labour Law, Litigation</div><div style="display:flex;gap:14px;font-size:11px"><div><span style="color:var(--color-text-secondary)">Cases:</span> <strong>41</strong></div><div><span style="color:var(--color-text-secondary)">Hrs:</span> <strong>138</strong></div><div><span style="color:var(--color-text-secondary)">Billed:</span> <strong>R210k</strong></div></div></div>
+      <div class="card"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div class="avatar" style="background:#7F77DD;width:42px;height:42px">PN</div><div><div style="font-weight:500;font-size:13px">Adv. Priya Naidoo</div><div style="font-size:10px;color:var(--color-text-secondary)">Associate · 6 yrs</div></div><span class="badge b-amber" style="margin-left:auto">Consulting</span></div><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:8px">Commercial, Deceased Estates</div><div style="display:flex;gap:14px;font-size:11px"><div><span style="color:var(--color-text-secondary)">Cases:</span> <strong>22</strong></div><div><span style="color:var(--color-text-secondary)">Hrs:</span> <strong>96</strong></div><div><span style="color:var(--color-text-secondary)">Billed:</span> <strong>R134k</strong></div></div></div>
+      <div class="card"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div class="avatar" style="background:#639922;width:42px;height:42px">LM</div><div><div style="font-weight:500;font-size:13px">Ms. Lerato Mokoena</div><div style="font-size:10px;color:var(--color-text-secondary)">Paralegal · 4 yrs</div></div><span class="badge b-green" style="margin-left:auto">Available</span></div><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:8px">All practice areas support</div><div style="display:flex;gap:14px;font-size:11px"><div><span style="color:var(--color-text-secondary)">Cases:</span> <strong>62</strong></div><div><span style="color:var(--color-text-secondary)">Hrs:</span> <strong>160</strong></div><div><span style="color:var(--color-text-secondary)">Billed:</span> <strong>R64k</strong></div></div></div>
+      <div class="card"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div class="avatar" style="background:#BA7517;width:42px;height:42px">KD</div><div><div style="font-weight:500;font-size:13px">Ms. Karen du Plessis</div><div style="font-size:10px;color:var(--color-text-secondary)">Practice Manager · 12 yrs</div></div><span class="badge b-green" style="margin-left:auto">Available</span></div><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:8px">Operations, Billing, Admin</div><div style="display:flex;gap:14px;font-size:11px"><div><span style="color:var(--color-text-secondary)">Staff:</span> <strong>12</strong></div><div><span style="color:var(--color-text-secondary)">Hrs:</span> <strong>168</strong></div><div><span style="color:var(--color-text-secondary)">Admin:</span> <strong>R0 paper</strong></div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- CALENDAR -->
+<div id="v-calendar" style="display:none">
+  <div class="ph">
+    <div><div class="ph-title">Court Calendar</div><div class="ph-sub">April 2026 · All courts and venues</div></div>
+    <button class="btn-p">+ Add Event</button>
+  </div>
+  <div class="pc">
+    <div class="card">
+      <div style="font-size:13px;font-weight:500;margin-bottom:12px">April 2026 — Court Diary</div>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <div style="display:flex;gap:10px;padding:10px 12px;background:#FCEBEB;border-left:3px solid #A32D2D;border-radius:0 var(--border-radius-md) var(--border-radius-md) 0">
+          <div style="font-weight:500;min-width:90px;font-size:12px;color:#A32D2D">Thu Apr 03</div>
+          <div style="flex:1"><div style="font-weight:500;font-size:12px">Van der Merwe v Employer Inc</div><div style="font-size:11px;color:#993C1D">Labour Court Johannesburg · Adv. Sithole · 09:00</div></div>
+          <span class="badge b-red">Tomorrow</span>
+        </div>
+        <div style="display:flex;gap:10px;padding:10px 12px;background:var(--color-background-secondary);border-left:3px solid #1D9E75;border-radius:0 var(--border-radius-md) var(--border-radius-md) 0">
+          <div style="font-weight:500;min-width:90px;font-size:12px">Mon Apr 07</div>
+          <div><div style="font-weight:500;font-size:12px">Dlamini v Dlamini (Divorce Hearing)</div><div style="font-size:11px;color:var(--color-text-secondary)">High Court Johannesburg · Adv. Mohanoe · 10:30</div></div>
+        </div>
+        <div style="display:flex;gap:10px;padding:10px 12px;background:var(--color-background-secondary);border-left:3px solid #1D9E75;border-radius:0 var(--border-radius-md) var(--border-radius-md) 0">
+          <div style="font-weight:500;min-width:90px;font-size:12px">Sat Apr 12</div>
+          <div><div style="font-weight:500;font-size:12px">Mahomed Estate — Masters Office Filing</div><div style="font-size:11px;color:var(--color-text-secondary)">Masters Office Johannesburg · Adv. Naidoo · 14:00</div></div>
+        </div>
+        <div style="display:flex;gap:10px;padding:10px 12px;background:var(--color-background-secondary);border-left:3px solid #378ADD;border-radius:0 var(--border-radius-md) var(--border-radius-md) 0">
+          <div style="font-weight:500;min-width:90px;font-size:12px">Wed Apr 16</div>
+          <div><div style="font-weight:500;font-size:12px">Mokoena Commercial Arbitration (AFSA)</div><div style="font-size:11px;color:var(--color-text-secondary)">AFSA Arbitration Centre · Adv. Khumalo · 09:00</div></div>
+        </div>
+        <div style="display:flex;gap:10px;padding:10px 12px;background:var(--color-background-secondary);border-left:3px solid #1D9E75;border-radius:0 var(--border-radius-md) var(--border-radius-md) 0">
+          <div style="font-weight:500;min-width:90px;font-size:12px">Mon Apr 22</div>
+          <div><div style="font-weight:500;font-size:12px">Zulu v Zulu — Maintenance Hearing</div><div style="font-size:11px;color:var(--color-text-secondary)">Magistrate Court Soweto · Adv. Mohanoe · 11:00</div></div>
+        </div>
+        <div style="display:flex;gap:10px;padding:10px 12px;background:var(--color-background-secondary);border-left:3px solid #7F77DD;border-radius:0 var(--border-radius-md) var(--border-radius-md) 0">
+          <div style="font-weight:500;min-width:90px;font-size:12px">Thu Apr 25</div>
+          <div><div style="font-weight:500;font-size:12px">Patel Commercial Contract Dispute</div><div style="font-size:11px;color:var(--color-text-secondary)">High Court Johannesburg · Adv. Naidoo · 09:30</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CASETRACK -->
+<div id="v-casetrack" style="display:none">
+  <div class="ph">
+    <div><div class="ph-title">CaseTrack — SA Court Integration</div><div class="ph-sub">High Court Set-down · Caselines · Court Online · Office of the Master</div></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="ct-pill ct-live"><span style="width:6px;height:6px;background:#1D9E75;border-radius:50%;display:inline-block"></span> AI-Assisted</span>
+      <a href="https://www.judiciary.org.za/index.php/court-rolls" target="_blank" style="font-size:11px;padding:5px 10px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);color:var(--color-text-secondary);text-decoration:none">View Official Roll ↗</a>
+      <button class="btn-s" style="font-size:11px" onclick="refreshCourtRoll()">&#8635; Refresh Roll</button>
+      <button class="btn-p" style="font-size:11px">+ Link Case</button>
+    </div>
+  </div>
+  <div class="pc">
+
+    <!-- Integration Status Banner -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+      <div class="stat" style="border-left:3px solid #1D9E75">
+        <div class="stat-lbl">Caselines</div>
+        <div style="display:flex;align-items:center;gap:7px;margin-top:4px">
+          <span class="ct-pill ct-live">Connected</span>
+        </div>
+        <div style="font-size:10px;color:var(--color-text-secondary);margin-top:5px">34 cases linked</div>
+      </div>
+      <div class="stat" style="border-left:3px solid #1D9E75">
+        <div class="stat-lbl">Court Online</div>
+        <div style="display:flex;align-items:center;gap:7px;margin-top:4px">
+          <span class="ct-pill ct-live">Connected</span>
+        </div>
+        <div style="font-size:10px;color:var(--color-text-secondary);margin-top:5px">High Court JHB</div>
+      </div>
+      <div class="stat" style="border-left:3px solid #854F0B">
+        <div class="stat-lbl">Office of the Master</div>
+        <div style="display:flex;align-items:center;gap:7px;margin-top:4px">
+          <span class="ct-pill ct-pend">Partial</span>
+        </div>
+        <div style="font-size:10px;color:var(--color-text-secondary);margin-top:5px">JHB ✔ · CPT pending</div>
+      </div>
+      <div class="stat" style="border-left:3px solid #A32D2D">
+        <div class="stat-lbl">CCMA eFiling</div>
+        <div style="display:flex;align-items:center;gap:7px;margin-top:4px">
+          <span class="ct-pill ct-err">Auth Required</span>
+        </div>
+        <div style="font-size:10px;color:#A32D2D;margin-top:5px">Re-authenticate</div>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <div class="vtab active" id="ct-tab-setdown" onclick="ctTab('setdown')">High Court Set-down</div>
+      <div class="vtab" id="ct-tab-caselines" onclick="ctTab('caselines')">Caselines Status</div>
+      <div class="vtab" id="ct-tab-master" onclick="ctTab('master')">Master’s Office</div>
+    </div>
+
+    <!-- HIGH COURT SET-DOWN PANEL -->
+    <div id="ct-panel-setdown">
+      <div style="background:#E6F1FB;border:0.5px solid #B3D1F0;border-radius:var(--border-radius-lg);padding:9px 14px;font-size:11px;color:#185FA5;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+        <span><strong>Note:</strong> SA courts publish no public API. Roll data below is AI-generated to simulate the weekly set-down format. Click <strong>&#8635; Refresh Roll</strong> to generate a fresh realistic roll, or view the actual roll at <a href="https://www.judiciary.org.za/index.php/court-rolls" target="_blank" style="color:#185FA5">judiciary.org.za ↗</a>.</span>
+        <span id="roll-sync-time" style="white-space:nowrap;margin-left:14px;color:#4A7AB5">Not yet refreshed</span>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
+          <div style="font-size:13px;font-weight:500">Set-down Roll — High Court Johannesburg</div>
+          <div style="display:flex;gap:6px">
+            <div class="filter-pill active" onclick="fpill(this)">All Courts</div>
+            <div class="filter-pill" onclick="fpill(this)">High Court JHB</div>
+            <div class="filter-pill" onclick="fpill(this)">Labour Court</div>
+            <div class="filter-pill" onclick="fpill(this)">Magistrate</div>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th style="padding-left:16px">Case #</th><th>Parties</th><th>Court</th><th>Set-down Date</th><th>Time</th><th>Judge / Roll</th><th>Caselines</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td style="padding-left:16px" class="mono">MHI-2026-0439</td>
+              <td><div style="font-weight:500;font-size:12px">Van der Merwe v Employer Inc</div><div style="font-size:10px;color:var(--color-text-secondary)">Labour: Unfair Dismissal</div></td>
+              <td style="font-size:11px">Labour Court JHB</td>
+              <td><span style="font-weight:600;color:#A32D2D">03 Apr 2026</span></td>
+              <td style="font-size:11px">09:00</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">J. Molefe · Motion Roll</td>
+              <td><span class="ct-pill ct-live">Uploaded</span></td>
+              <td><span class="badge b-red">Tomorrow</span></td>
+              <td><button class="btn-s" style="font-size:10px;padding:2px 8px">View Bundle</button></td>
+            </tr>
+            <tr>
+              <td style="padding-left:16px" class="mono">MHI-2026-0441</td>
+              <td><div style="font-weight:500;font-size:12px">Dlamini v Dlamini</div><div style="font-size:10px;color:var(--color-text-secondary)">Family: Divorce &amp; Custody</div></td>
+              <td style="font-size:11px">High Court JHB</td>
+              <td><span style="font-weight:600;color:#854F0B">07 Apr 2026</span></td>
+              <td style="font-size:11px">10:30</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">J. Khumalo · Opposed Motion</td>
+              <td><span class="ct-pill ct-live">Uploaded</span></td>
+              <td><span class="badge b-amber">5 days</span></td>
+              <td><button class="btn-s" style="font-size:10px;padding:2px 8px">View Bundle</button></td>
+            </tr>
+            <tr>
+              <td style="padding-left:16px" class="mono">MHI-2026-0436</td>
+              <td><div style="font-weight:500;font-size:12px">Patel Commercial v Zulu Logistics</div><div style="font-size:10px;color:var(--color-text-secondary)">Commercial: Contract Dispute</div></td>
+              <td style="font-size:11px">High Court JHB</td>
+              <td><span style="font-weight:600">25 Apr 2026</span></td>
+              <td style="font-size:11px">09:30</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">J. Nkosi · Trial Roll</td>
+              <td><span class="ct-pill ct-pend">Pending upload</span></td>
+              <td><span class="badge b-gray">23 days</span></td>
+              <td><button class="btn-p" style="font-size:10px;padding:2px 8px">Upload Bundle</button></td>
+            </tr>
+            <tr>
+              <td style="padding-left:16px" class="mono">MHI-2026-0443</td>
+              <td><div style="font-weight:500;font-size:12px">Mokoena v City of JHB</div><div style="font-size:10px;color:var(--color-text-secondary)">Litigation: Administrative</div></td>
+              <td style="font-size:11px">High Court JHB</td>
+              <td><span style="font-weight:600">12 May 2026</span></td>
+              <td style="font-size:11px">09:00</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">Unassigned · Urgent Roll</td>
+              <td><span class="ct-pill ct-na">Not linked</span></td>
+              <td><span class="badge b-gray">40 days</span></td>
+              <td><button class="btn-s" style="font-size:10px;padding:2px 8px">Link</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CASELINES STATUS PANEL -->
+    <div id="ct-panel-caselines" style="display:none">
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:12px 16px;font-size:13px;font-weight:500">Caselines Document Status</div>
+        <table>
+          <thead><tr><th style="padding-left:16px">Case #</th><th>Bundle / Index</th><th>Documents</th><th>Last Upload</th><th>Opposing Side</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td style="padding-left:16px" class="mono">MHI-2026-0439</td>
+              <td style="font-size:11px">Bundle A — Applicant</td>
+              <td style="font-size:11px">12 docs · 34 pages</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">02 Apr 2026</td>
+              <td><span class="ct-pill ct-live">Filed</span></td>
+              <td><span class="badge b-green">Complete</span></td>
+              <td><button class="btn-s" style="font-size:10px;padding:2px 8px">View</button></td>
+            </tr>
+            <tr>
+              <td style="padding-left:16px" class="mono">MHI-2026-0441</td>
+              <td style="font-size:11px">Bundle A — Applicant</td>
+              <td style="font-size:11px">8 docs · 22 pages</td>
+              <td style="font-size:11px;color:var(--color-text-secondary)">01 Apr 2026</td>
+              <td><span class="ct-pill ct-pend">Awaited</span></td>
+              <td><span class="badge b-amber">Opposing pending</span></td>
+              <td><button class="btn-s" style="font-size:10px;padding:2px 8px">View</button></td>
+            </tr>
+            <tr>
+              <td style="padding-left:16px" class="mono">MHI-2026-0436</td>
+              <td style="font-size:11px">Bundle A — Plaintiff</td>
+              <td style="font-size:11px">0 docs · 0 pages</td>
+              <td style="font-size:11px;color:#A32D2D">Not uploaded</td>
+              <td><span class="ct-pill ct-na">Unknown</span></td>
+              <td><span class="badge b-red">Action required</span></td>
+              <td><button class="btn-p" style="font-size:10px;padding:2px 8px">Upload Now</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- MASTER'S OFFICE PANEL -->
+    <div id="ct-panel-master" style="display:none">
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:12px 16px;font-size:13px;font-weight:500">Office of the Master — Estate &amp; Liquidation Status</div>
+        <table>
+          <thead><tr><th style="padding-left:16px">Case #</th><th>Estate / Matter</th><th>Master Ref</th><th>L&amp;D Account</th><th>Next Step</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td style="padding-left:16px" class="mono">MHI-2026-0438</td>
+              <td><div style="font-weight:500;font-size:12px">Mahomed, Fatima (Deceased)</div><div style="font-size:10px;color:var(--color-text-secondary)">Deceased Estate</div></td>
+              <td class="mono" style="font-size:11px">JHB/EST/2026/0112</td>
+              <td><span class="ct-pill ct-pend">In preparation</span></td>
+              <td style="font-size:11px">Submit L&amp;D by 30 Apr</td>
+              <td><span class="badge b-amber">In Progress</span></td>
+              <td><button class="btn-s" style="font-size:10px;padding:2px 8px">Open</button></td>
+            </tr>
+            <tr>
+              <td style="padding-left:16px" class="mono">MHI-2026-0425</td>
+              <td><div style="font-weight:500;font-size:12px">Nkosi, Themba (Insolvent)</div><div style="font-size:10px;color:var(--color-text-secondary)">Sequestration</div></td>
+              <td class="mono" style="font-size:11px">JHB/SEQ/2025/0889</td>
+              <td><span class="ct-pill ct-live">Accepted</span></td>
+              <td style="font-size:11px">Await creditor meeting</td>
+              <td><span class="badge b-green">L&amp;D Approved</span></td>
+              <td><button class="btn-s" style="font-size:10px;padding:2px 8px">Open</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+/* ─── API CONFIGURATION ──────────────────────────────────────────────────────
+   Paste your Anthropic API key below. Create a dedicated key at:
+   https://console.anthropic.com → API Keys → Create Key
+   WARNING: This key is visible in page source. For production, use a backend proxy.
+────────────────────────────────────────────────────────────────────────────── */
+const ANTHROPIC_API_KEY = 'YOUR_ANTHROPIC_API_KEY_HERE';
+const ANTHROPIC_HEADERS = {
+  'Content-Type': 'application/json',
+  'x-api-key': ANTHROPIC_API_KEY,
+  'anthropic-version': '2023-06-01',
+  'anthropic-dangerous-direct-browser-access': 'true'
+};
+
+function go(id, el) {
+  document.querySelectorAll('[id^="v-"]').forEach(v => v.style.display = 'none');
+  document.getElementById('v-' + id).style.display = 'block';
+  document.querySelectorAll('.ni').forEach(n => n.classList.remove('active'));
+  if (el) el.classList.add('active');
+  if (id === 'intake') {
+    document.getElementById('popia-gate').style.display = 'block';
+    document.getElementById('intake-body').style.display = 'none';
+    document.getElementById('popia-chk').checked = false;
+    document.getElementById('popia-btn').disabled = true;
+    document.getElementById('popia-btn').style.opacity = '0.5';
+  }
+}
+
+function acceptPopia() {
+  document.getElementById('popia-gate').style.display = 'none';
+  document.getElementById('intake-body').style.display = 'block';
+  istep(1);
+}
+
+function resetIntake() {
+  document.getElementById('popia-gate').style.display = 'block';
+  document.getElementById('intake-body').style.display = 'none';
+  document.getElementById('popia-chk').checked = false;
+  document.getElementById('popia-btn').disabled = true;
+  document.getElementById('popia-btn').style.opacity = '0.5';
+}
+
+document.getElementById('popia-btn').addEventListener('click', function() {
+  this.style.opacity = this.disabled ? '0.5' : '1';
+});
+
+document.getElementById('popia-chk').addEventListener('change', function() {
+  const btn = document.getElementById('popia-btn');
+  btn.disabled = !this.checked;
+  btn.style.opacity = this.checked ? '1' : '0.5';
+});
+
+function istep(n) {
+  for (let i = 1; i <= 6; i++) {
+    const el = document.getElementById('is' + i);
+    if (el) el.style.display = i === n ? 'block' : 'none';
+    const s = document.getElementById('stp' + i);
+    if (s) { s.classList.remove('active','done'); if (i < n) s.classList.add('done'); }
+  }
+  const s = document.getElementById('stp' + n);
+  if (s) s.classList.add('active');
+}
+
+function runIntakeEval() {
+  istep(5);
+}
+
+async function submitIntakeEval() {
+  const summary = document.getElementById('eval-summary').value.trim();
+  if (!summary) { alert('Please summarise the client matter before running the AI evaluation.'); return; }
+  const area = document.getElementById('eval-area').value;
+  const urgency = document.getElementById('eval-urgency').value;
+  const btn = document.getElementById('eval-btn');
+  btn.textContent = 'Evaluating...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: ANTHROPIC_HEADERS,
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1200,
+        system: `You are a South African legal case evaluator for Mohanoe Inc. Attorneys. This evaluation is STRICTLY for attorney and authorised staff use only — never shown to the client. Evaluate the intake matter and produce a structured assessment using EXACTLY this format:
+
+PRACTICE AREA: [specific area of law]
+RISK LEVEL: [High / Medium / Low] — [one sentence justification]
+
+APPLICABLE LEGISLATION:
+• [Act name and year, relevant section]
+• [Act name and year, relevant section]
+
+SAFLII CASE LAW:
+• [Case Name [Year] ZACC/ZASCA/ZAGPJHC/ZALAC reference]
+• [Case Name [Year] court reference]
+
+CONSTITUTIONAL BASIS: [Bill of Rights section if applicable, or “None directly applicable”]
+
+RECOMMENDED APPROACH:
+1. [First step]
+2. [Second step]
+3. [Third step]
+
+TIMELINE: [Realistic SA legal timeline estimate]
+FEE RANGE (High Court tariff): [Rough estimate in ZAR]
+
+ULTIMATE RISKS / FLAGS: [prescription, urgency issues, jurisdiction, defences, conflicts of interest]
+
+Be precise and practical. Use South African law only.`,
+        messages: [{role: 'user', content: `Practice Area: ${area}\nUrgency: ${urgency}\n\nClient Matter Summary:\n${summary}`}]
+      })
+    });
+    const data = await res.json();
+    const reply = data.content?.[0]?.text || 'Unable to generate evaluation. Please try again.';
+    document.getElementById('eval-result').innerHTML = reply
+      .replace(/</g, '&lt;')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/PRACTICE AREA:/g, '<span style="color:#5B21B6;font-weight:700">PRACTICE AREA:</span>')
+      .replace(/RISK LEVEL:/g, '<span style="color:#991B1B;font-weight:700">RISK LEVEL:</span>')
+      .replace(/APPLICABLE LEGISLATION:/g, '<span style="color:#1E40AF;font-weight:700">APPLICABLE LEGISLATION:</span>')
+      .replace(/SAFLII CASE LAW:/g, '<span style="color:#9D174D;font-weight:700">SAFLII CASE LAW:</span>')
+      .replace(/CONSTITUTIONAL BASIS:/g, '<span style="color:#166534;font-weight:700">CONSTITUTIONAL BASIS:</span>')
+      .replace(/RECOMMENDED APPROACH:/g, '<span style="color:#1D9E75;font-weight:700">RECOMMENDED APPROACH:</span>')
+      .replace(/TIMELINE:/g, '<span style="color:#854D0E;font-weight:700">TIMELINE:</span>')
+      .replace(/FEE RANGE.*?:/g, '<span style="color:#854D0E;font-weight:700">FEE RANGE:</span>')
+      .replace(/ULTIMATE RISKS.*?:/g, '<span style="color:#991B1B;font-weight:700">FLAGS &amp; RISKS:</span>')
+      .replace(/\n/g, '<br>');
+    document.getElementById('eval-output').style.display = 'block';
+  } catch(e) {
+    alert('Connection error during AI evaluation. Please check your internet connection.');
+  } finally {
+    btn.textContent = '\u26A1 Evaluate with AI';
+    btn.disabled = false;
+  }
+}
+
+function slang(el) {
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function surg(el) {
+  el.parentElement.querySelectorAll('div').forEach(b => {
+    b.style.borderColor = 'var(--color-border-tertiary)';
+    b.style.borderWidth = '0.5px';
+    b.style.background = 'transparent';
+    b.style.color = 'var(--color-text-secondary)';
+  });
+  el.style.borderColor = '#1D9E75';
+  el.style.borderWidth = '1px';
+  el.style.background = '#E1F5EE';
+  el.style.color = '#0F6E56';
+}
+
+function fpill(el) {
+  const parent = el.closest('div[style*="gap"]') || el.parentElement;
+  parent.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function dcat(el) {
+  document.querySelectorAll('[onclick="dcat(this)"]').forEach(d => {
+    d.style.background = 'transparent';
+    d.style.color = 'var(--color-text-secondary)';
+    d.style.fontWeight = '400';
+  });
+  el.style.background = '#E1F5EE';
+  el.style.color = '#0F6E56';
+  el.style.fontWeight = '500';
+}
+
+function preq(t) {
+  const qi = document.getElementById('qi');
+  if (qi) qi.value = t;
+  aiTab('research');
+}
+
+function aiTab(t) {
+  ['client','research','drafting'].forEach(id => {
+    document.getElementById('ai-panel-' + id).style.display = id === t ? 'block' : 'none';
+    const tab = document.getElementById('ai-tab-' + id);
+    if (tab) tab.classList.toggle('active', id === t);
+  });
+}
+
+function billingTab(t) {
+  ['newinvoice','invoices','feebook','logtime'].forEach(id => {
+    const panel = document.getElementById('bill-panel-' + id);
+    if (panel) panel.style.display = id === t ? 'block' : 'none';
+    const tab = document.getElementById('bill-tab-' + id);
+    if (tab) tab.classList.toggle('active', id === t);
+  });
+}
+
+let invBasisVal = 'ac';
+
+function newInvoice() {
+  go('billing', document.querySelectorAll('.ni')[7]);
+  billingTab('newinvoice');
+  const today = new Date();
+  const due = new Date(today); due.setDate(due.getDate() + 30);
+  const fmt = d => d.toISOString().split('T')[0];
+  document.getElementById('inv-date').value = fmt(today);
+  document.getElementById('inv-due').value = fmt(due);
+}
+
+function invBasis(b) {
+  invBasisVal = b;
+  const pp = document.getElementById('inv-pp');
+  const ac = document.getElementById('inv-ac');
+  if (b === 'pp') {
+    pp.style.cssText = 'flex:1;padding:8px;border:1px solid #1D9E75;border-radius:var(--border-radius-md);font-size:11.5px;cursor:pointer;text-align:center;background:#E1F5EE;color:#0F6E56;font-weight:600';
+    ac.style.cssText = 'flex:1;padding:8px;border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-md);font-size:11.5px;cursor:pointer;text-align:center;color:var(--color-text-secondary)';
+  } else {
+    ac.style.cssText = 'flex:1;padding:8px;border:1px solid #1D9E75;border-radius:var(--border-radius-md);font-size:11.5px;cursor:pointer;text-align:center;background:#E1F5EE;color:#0F6E56;font-weight:600';
+    pp.style.cssText = 'flex:1;padding:8px;border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-md);font-size:11.5px;cursor:pointer;text-align:center;color:var(--color-text-secondary)';
+  }
+}
+
+function addInvItem() {
+  const row = document.createElement('div');
+  row.className = 'inv-item';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 60px 90px 28px;gap:7px;margin-bottom:7px;align-items:center';
+  row.innerHTML = `
+    <input placeholder="Description" style="font-size:12px">
+    <input placeholder="Units" type="number" min="0" step="0.5" style="font-size:12px;text-align:center" oninput="updateInvTotal()">
+    <input placeholder="Rate (R)" type="number" min="0" style="font-size:12px;text-align:right" oninput="updateInvTotal()">
+    <button onclick="removeInvItem(this)" style="background:none;border:none;color:#991B1B;cursor:pointer;font-size:16px;padding:0;line-height:1">&times;</button>`;
+  document.getElementById('inv-items').appendChild(row);
+}
+
+function removeInvItem(btn) {
+  const items = document.querySelectorAll('.inv-item');
+  if (items.length > 1) { btn.closest('.inv-item').remove(); updateInvTotal(); }
+}
+
+function updateInvTotal() {
+  let sub = 0;
+  document.querySelectorAll('.inv-item').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    const u = parseFloat(inputs[1]?.value) || 0;
+    const r = parseFloat(inputs[2]?.value) || 0;
+    sub += u * r;
+  });
+  const vat = sub * 0.15;
+  const fmt = n => 'R' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  document.getElementById('inv-subtotal').textContent = fmt(sub);
+  document.getElementById('inv-vat').textContent = fmt(vat);
+  document.getElementById('inv-total').textContent = fmt(sub + vat);
+}
+
+function previewInvoice() {
+  updateInvTotal();
+  const num = 'INV-' + new Date().getFullYear() + '-' + String(Math.floor(Math.random()*900+90)).padStart(4,'0');
+  document.getElementById('prev-inv-num').textContent = num;
+  document.getElementById('prev-client').textContent = document.getElementById('inv-client').value || '—';
+  document.getElementById('prev-ref').textContent = document.getElementById('inv-ref').value || '';
+  const fmtDate = v => { if (!v) return '—'; const d = new Date(v); return d.toLocaleDateString('en-ZA',{day:'2-digit',month:'short',year:'numeric'}); };
+  document.getElementById('prev-date').textContent = fmtDate(document.getElementById('inv-date').value);
+  document.getElementById('prev-due').textContent = fmtDate(document.getElementById('inv-due').value);
+  const basisEl = document.getElementById('prev-basis');
+  basisEl.textContent = invBasisVal === 'pp' ? 'Party & Party' : 'Atty & Client';
+  basisEl.className = 'badge ' + (invBasisVal === 'pp' ? 'b-teal' : 'b-blue');
+  let sub = 0;
+  const tbody = document.getElementById('prev-items');
+  tbody.innerHTML = '';
+  document.querySelectorAll('.inv-item').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    const desc = inputs[0]?.value || '—';
+    const u = parseFloat(inputs[1]?.value) || 0;
+    const r = parseFloat(inputs[2]?.value) || 0;
+    const amt = u * r; sub += amt;
+    const fmt = n => 'R' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    if (desc !== '—' || u || r) tbody.innerHTML += `<tr><td>${desc}</td><td style="text-align:right">${u}</td><td style="text-align:right">${fmt(r)}</td><td style="text-align:right;font-weight:500">${fmt(amt)}</td></tr>`;
+  });
+  const fmt = n => 'R' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const vat = sub * 0.15;
+  document.getElementById('prev-sub').textContent = fmt(sub);
+  document.getElementById('prev-vat-val').textContent = fmt(vat);
+  document.getElementById('prev-total').textContent = fmt(sub + vat);
+  document.getElementById('prev-notes').textContent = document.getElementById('inv-notes').value || '';
+  document.getElementById('inv-preview-placeholder').style.display = 'none';
+  document.getElementById('inv-preview-content').style.display = 'block';
+}
+
+function printInvoice() {
+  previewInvoice();
+  setTimeout(() => window.print(), 150);
+}
+
+function ctTab(t) {
+  ['setdown','caselines','master'].forEach(id => {
+    const panel = document.getElementById('ct-panel-' + id);
+    if (panel) panel.style.display = id === t ? 'block' : 'none';
+    const tab = document.getElementById('ct-tab-' + id);
+    if (tab) tab.classList.toggle('active', id === t);
+  });
+}
+
+function fbBasis(b) {
+  const pp = document.getElementById('fb-pp');
+  const ac = document.getElementById('fb-ac');
+  if (b === 'pp') {
+    pp.style.cssText = 'flex:1;padding:7px;border:1px solid #1D9E75;border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;text-align:center;background:#E1F5EE;color:#0F6E56';
+    ac.style.cssText = 'flex:1;padding:7px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;text-align:center;color:var(--color-text-secondary)';
+  } else {
+    ac.style.cssText = 'flex:1;padding:7px;border:1px solid #1D9E75;border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;text-align:center;background:#E1F5EE;color:#0F6E56';
+    pp.style.cssText = 'flex:1;padding:7px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;text-align:center;color:var(--color-text-secondary)';
+  }
+}
+
+function fbFilter(el, type) {
+  el.closest('div').querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function calcFee() {
+  const u = parseFloat(document.getElementById('fb-units').value) || 0;
+  const r = parseFloat(document.getElementById('fb-rate').value) || 0;
+  document.getElementById('fb-calc').textContent = 'R' + (u * r).toFixed(2);
+}
+
+function submitClientIssue() {
+  const issue = document.getElementById('client-issue').value.trim();
+  if (!issue) { alert('Please describe your legal issue before submitting.'); return; }
+  alert('Submission received. Reference: AI-2026-' + Math.floor(Math.random()*9000+1000) + '\n\nAn attorney and AI researcher will review your matter and respond within 24 hours.');
+  document.getElementById('client-issue').value = '';
+  document.getElementById('client-facts').value = '';
+}
+
+function loadResearch(client) {
+  const queries = {
+    mokoena: 'Research unfair dismissal under the Labour Relations Act 66 of 1995, s186 and s193. Client: T. Mokoena was dismissed without a hearing after 8 years of employment. Cite relevant SAFLII cases and applicable legislation.',
+    sithole: 'Research maintenance order procedure under the Maintenance Act 99 of 1998. Client: N. Sithole seeks variation of existing maintenance order due to change in circumstances. Cite SAFLII and relevant legislation.',
+    khumalo: 'Research grounds for contesting a will under the Wills Act 7 of 1953 and Administration of Estates Act 66 of 1965. Client: B. Khumalo believes deceased lacked testamentary capacity. Cite SAFLII cases.'
+  };
+  document.getElementById('qi').value = queries[client] || '';
+  aiTab('research');
+}
+
+function setDraft(type) {
+  document.getElementById('draft-type').value = type;
+}
+
+function updateDraftPrompt() {}
+
+async function runDrafter() {
+  const type = document.getElementById('draft-type').value;
+  const instructions = document.getElementById('draft-instructions').value.trim();
+  if (!instructions) { alert('Please provide key facts and instructions for the drafter.'); return; }
+  const btn = document.querySelector('[onclick="runDrafter()"]');
+  btn.textContent = 'Generating...';
+  btn.disabled = true;
+  const typeNames = {lod:'Letter of Demand',summons:'Notice of Motion',affidavit:'Supporting Affidavit',settlement:'Settlement Agreement',bundle:'Bundle Summary'};
+  const typeName = typeNames[type] || type;
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: ANTHROPIC_HEADERS,
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1500,
+        system: `You are a South African legal document drafter for Mohanoe Inc. Attorneys. Draft a ${typeName} based on the attorney's instructions. Use proper South African legal conventions, formal language, and correct headings. Include all standard clauses. Mark any blanks requiring attorney input with [ATTORNEY TO COMPLETE]. End with: "DRAFT — For attorney review and sign-off only. Not for issue without attorney authorisation."`,
+        messages: [{role:'user', content: instructions}]
+      })
+    });
+    const data = await res.json();
+    const reply = data.content?.[0]?.text || 'Unable to generate draft. Please try again.';
+    document.getElementById('draft-output').style.display = 'block';
+    document.getElementById('draft-content').textContent = reply;
+  } catch(e) {
+    alert('Connection error. Please check your internet connection and try again.');
+  } finally {
+    btn.textContent = 'Generate Draft';
+    btn.disabled = false;
+  }
+}
+
+async function askAI() {
+  const input = document.getElementById('qi');
+  const msg = input.value.trim();
+  if (!msg) return;
+  const langEl = document.getElementById('ai-lang');
+  const lang = langEl ? langEl.value : 'English';
+  const c = document.getElementById('research-msgs');
+
+  c.innerHTML += `<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:4px">
+    <div class="chat-bubble" style="background:#1D9E75;color:white;font-size:11px">${msg.replace(/</g,'&lt;')}</div>
+    <div class="avatar" style="width:26px;height:26px;font-size:10px;background:#E1F5EE;color:#0F6E56;flex-shrink:0">ATY</div>
+  </div>`;
+  input.value = '';
+
+  const lid = 'r' + Date.now();
+  c.innerHTML += `<div id="${lid}" style="display:flex;gap:8px;margin-bottom:8px">
+    <div class="avatar" style="width:26px;height:26px;font-size:10px;background:#EEEDFE;color:#534AB7;flex-shrink:0">AI</div>
+    <div class="chat-bubble" style="background:var(--color-background-secondary);color:var(--color-text-secondary);font-style:italic">Searching SAFLII and SA legislation...</div>
+  </div>`;
+  c.scrollTop = c.scrollHeight;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: ANTHROPIC_HEADERS,
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1200,
+        system: `You are a South African legal researcher assisting attorneys at Mohanoe Inc. Attorneys. Your role is to provide structured legal research — NOT to give advice directly to clients. When given a legal question or client issue, respond with a structured research memorandum in ${lang} using this format:
+
+**APPLICABLE LEGISLATION**
+List the relevant Acts, section numbers, and regulations.
+
+**SAFLII CASE LAW**
+Cite relevant South African cases (format: Party v Party [Year] ZACC/ZASCA/ZAGPJHC/ZALAC etc. [paragraph]). Focus on binding or persuasive precedent.
+
+**CONSTITUTIONAL BASIS**
+Identify any applicable Bill of Rights provisions (Constitution of the Republic of South Africa, 1996).
+
+**LEGAL POSITION SUMMARY**
+Concise statement of the applicable law and how it applies to the facts.
+
+**SUGGESTED DRAFTING / ACTION POINTS**
+Key points for the attorney to address in their response or pleadings.
+
+Note: This is research for attorney use only. Do not address the client directly. Be precise with citations. Flag where case law may have developed or where there is uncertainty.`,
+        messages: [{role: 'user', content: msg}]
+      })
+    });
+    const data = await res.json();
+    const reply = data.content?.[0]?.text || 'Unable to process research request. Please try again.';
+    document.getElementById(lid).innerHTML = `
+      <div class="avatar" style="width:26px;height:26px;font-size:10px;background:#EEEDFE;color:#534AB7;flex-shrink:0">AI</div>
+      <div style="flex:1">
+        <div style="font-size:10px;color:var(--color-text-secondary);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+          <span><span class="badge b-purple" style="font-size:9px">SAFLII Research</span> &nbsp;Pending attorney review</span>
+          <div style="display:flex;gap:4px">
+            <button style="font-size:10px;padding:2px 7px;background:#E1F5EE;color:#0F6E56;border:none;border-radius:4px;cursor:pointer">Approve &amp; Send</button>
+            <button style="font-size:10px;padding:2px 7px;background:var(--color-background-primary);color:var(--color-text-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:4px;cursor:pointer">Edit</button>
+            <button style="font-size:10px;padding:2px 7px;background:var(--color-background-primary);color:var(--color-text-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:4px;cursor:pointer">Save</button>
+          </div>
+        </div>
+        <div style="font-size:12px;line-height:1.65;white-space:pre-wrap;background:var(--color-background-secondary);padding:12px 14px;border-radius:var(--border-radius-md)">${reply.replace(/</g,'&lt;').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>')}</div>
+        <div style="margin-top:8px;padding:7px 10px;background:#F0F7FF;border-radius:var(--border-radius-md);border:0.5px solid #B3D1F0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:10px;color:#4A7AB5;font-weight:500">Verify sources:</span>
+          <a href="${safliiSearchUrl(msg)}" target="_blank" style="font-size:10px;padding:2px 8px;background:#185FA5;color:white;border-radius:4px;text-decoration:none">Search SAFLII &#8599;</a>
+          <a href="https://www.saflii.org/za/legis/" target="_blank" style="font-size:10px;padding:2px 8px;background:var(--color-background-primary);color:#185FA5;border:0.5px solid #B3D1F0;border-radius:4px;text-decoration:none">SA Legislation &#8599;</a>
+          <a href="https://www.justice.gov.za/legislation/index.html" target="_blank" style="font-size:10px;padding:2px 8px;background:var(--color-background-primary);color:#185FA5;border:0.5px solid #B3D1F0;border-radius:4px;text-decoration:none">Dept of Justice &#8599;</a>
+          <a href="https://www.constitutionalcourt.org.za/" target="_blank" style="font-size:10px;padding:2px 8px;background:var(--color-background-primary);color:#185FA5;border:0.5px solid #B3D1F0;border-radius:4px;text-decoration:none">ConCourt &#8599;</a>
+        </div>
+      </div>`;
+    c.scrollTop = c.scrollHeight;
+  } catch(e) {
+    document.getElementById(lid).innerHTML = `<div class="avatar" style="width:26px;height:26px;font-size:10px;background:#FCEBEB;color:#A32D2D;flex-shrink:0">!</div><div class="chat-bubble" style="background:#FCEBEB;color:#A32D2D;font-size:12px">Connection error. Please try again.</div>`;
+  }
+}
+
+document.addEventListener('keydown', e => {
+  const qi = document.getElementById('qi');
+  if (e.ctrlKey && e.key === 'Enter' && qi === document.activeElement) askAI();
+});
+
+async function refreshCourtRoll() {
+  const btn = document.querySelector('[onclick="refreshCourtRoll()"]');
+  const tbody = document.querySelector('#ct-panel-setdown table tbody');
+  const syncEl = document.getElementById('roll-sync-time');
+  btn.textContent = 'Fetching...';
+  btn.disabled = true;
+  tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:28px;color:var(--color-text-secondary);font-size:12px;font-style:italic">Generating realistic High Court set-down roll...</td></tr>`;
+
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-ZA', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: ANTHROPIC_HEADERS,
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1400,
+        system: `You are a South African court roll data generator. Generate a realistic High Court Johannesburg weekly set-down roll for the week of ${dateStr}. Return ONLY a JSON array (no markdown, no explanation) with 7 cases. Each object must have these exact keys:
+- caseNo: realistic SA High Court case number format e.g. "47291/25" or "2024/14872"
+- applicant: realistic South African surname + description e.g. "Dlamini v Minister of Home Affairs"
+- practiceArea: one of "Labour", "Family", "Commercial", "Property", "Estates", "Urgent", "Administrative"
+- court: one of "High Court JHB", "Labour Court JHB", "High Court JHB (Urgent)"
+- setdownDate: a date within the next 30 days in format "DD Mon YYYY" e.g. "08 Apr 2026"
+- time: time like "09:00", "09:30", "10:00", "14:00"
+- judge: realistic SA judge surname with title e.g. "J. Makume", "AJ Satchwell", "J. Molefe"
+- roll: one of "Motion Roll", "Trial Roll", "Urgent Roll", "Opposed Motion", "Default Judgment"
+- caselineStatus: one of "Uploaded", "Pending upload", "Not linked"
+Use realistic South African names (Zulu, Xhosa, Sotho, Afrikaans, Indian, English). Include a mix of urgent and non-urgent matters.`,
+        messages: [{role: 'user', content: 'Generate the court roll JSON array now.'}]
+      })
+    });
+    const data = await res.json();
+    const raw = data.content?.[0]?.text || '[]';
+    let cases;
+    try {
+      const jsonMatch = raw.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      cases = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
+    } catch(e) { cases = []; }
+
+    if (!cases.length) throw new Error('No data');
+
+    const statusColor = (s) => {
+      if (s === 'Uploaded') return 'ct-live';
+      if (s === 'Pending upload') return 'ct-pend';
+      return 'ct-na';
+    };
+    const urgencyBadge = (d) => {
+      const diff = Math.ceil((new Date(d.split(' ').reverse().join('-').replace(/([A-Za-z]+)/, m => ({'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06','Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'})[m] || m)) - today) / 86400000);
+      if (diff <= 1) return '<span class="badge b-red">Tomorrow</span>';
+      if (diff <= 7) return `<span class="badge b-amber">${diff} days</span>`;
+      return `<span class="badge b-gray">${diff} days</span>`;
+    };
+
+    tbody.innerHTML = cases.map(c => `
+      <tr>
+        <td style="padding-left:16px" class="mono">${c.caseNo}</td>
+        <td><div style="font-weight:500;font-size:12px">${c.applicant}</div><div style="font-size:10px;color:var(--color-text-secondary)">${c.practiceArea}</div></td>
+        <td style="font-size:11px">${c.court}</td>
+        <td style="font-weight:600;font-size:12px">${c.setdownDate}</td>
+        <td style="font-size:11px">${c.time}</td>
+        <td style="font-size:11px;color:var(--color-text-secondary)">${c.judge} &middot; ${c.roll}</td>
+        <td><span class="ct-pill ${statusColor(c.caselineStatus)}">${c.caselineStatus}</span></td>
+        <td>${urgencyBadge(c.setdownDate)}</td>
+        <td><a href="https://www.judiciary.org.za/index.php/court-rolls" target="_blank" style="font-size:10px;padding:2px 8px;background:var(--color-background-secondary);color:var(--color-text-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:4px;text-decoration:none">Official ↗</a></td>
+      </tr>`).join('');
+
+    syncEl.textContent = 'AI roll generated · ' + today.toLocaleTimeString('en-ZA', {hour:'2-digit',minute:'2-digit'});
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px;color:#A32D2D;font-size:12px">Could not generate roll. Check your API key or connection.</td></tr>`;
+    syncEl.textContent = 'Generation failed';
+  } finally {
+    btn.innerHTML = '&#8635; Refresh Roll';
+    btn.disabled = false;
+  }
+}
+
+function safliiSearchUrl(query) {
+  const terms = query.replace(/[^a-zA-Z0-9 ]/g,' ').trim().split(/\s+/).slice(0,6).join('+');
+  return `https://www.saflii.org/cgi-bin/sinosrch.cgi?query=${terms}&method=boolean&results=10`;
+}
+</script>
