@@ -1,5 +1,23 @@
 import React from 'react';
 
+function ensureStringArray(value) {
+  if (Array.isArray(value)) {
+    return value.filter((item) => item != null && item !== '').map(String);
+  }
+  if (value == null || value === '') {
+    return [];
+  }
+  if (typeof value === 'string') {
+    return [value];
+  }
+  if (typeof value === 'object') {
+    return Object.values(value)
+      .filter((item) => item != null && item !== '')
+      .map(String);
+  }
+  return [String(value)];
+}
+
 function AssessmentCard({ matter }) {
   if (!matter) {
     return (
@@ -14,6 +32,7 @@ function AssessmentCard({ matter }) {
   }
 
   const assessment = matter.assessment || {};
+  const popiaNotes = ensureStringArray(assessment.popiaNotes);
 
   return (
     <div className="panel assessment-panel">
@@ -55,11 +74,11 @@ function AssessmentCard({ matter }) {
         </div>
       </div>
 
-      {assessment.popiaNotes?.length ? (
+      {popiaNotes.length ? (
         <div className="popia-callout">
           <div className="mini-label">POPIA notes</div>
           <ul>
-            {assessment.popiaNotes.map((note) => (
+            {popiaNotes.map((note) => (
               <li key={note}>{note}</li>
             ))}
           </ul>
@@ -70,7 +89,8 @@ function AssessmentCard({ matter }) {
 }
 
 function Section({ title, items }) {
-  if (!items || !items.length) {
+  const list = ensureStringArray(items);
+  if (!list.length) {
     return null;
   }
 
@@ -78,7 +98,7 @@ function Section({ title, items }) {
     <div className="assessment-section">
       <div className="mini-label">{title}</div>
       <ul>
-        {items.map((item) => (
+        {list.map((item) => (
           <li key={item}>{item}</li>
         ))}
       </ul>

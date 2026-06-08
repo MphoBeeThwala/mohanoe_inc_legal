@@ -1,5 +1,6 @@
 const { randomUUID } = require('crypto');
 const { getSupabaseClient } = require('../config/supabase');
+const { ensureStringArray } = require('./ai.service');
 const intakeService = require('./intake.service');
 const caseService = require('./case.service');
 const documentsService = require('./documents.service');
@@ -35,15 +36,15 @@ function formatAssessmentExport(assessment) {
     matterType: assessment.matter_type,
     urgency: assessment.urgency,
     summary: assessment.summary,
-    keyFacts: assessment.key_facts || [],
-    attorneyQuestions: assessment.attorney_questions || [],
-    recommendedDocuments: assessment.recommended_documents || [],
-    complianceFlags: assessment.compliance_flags || [],
-    nextActions: assessment.next_actions || [],
+    keyFacts: ensureStringArray(assessment.key_facts),
+    attorneyQuestions: ensureStringArray(assessment.attorney_questions),
+    recommendedDocuments: ensureStringArray(assessment.recommended_documents),
+    complianceFlags: ensureStringArray(assessment.compliance_flags),
+    nextActions: ensureStringArray(assessment.next_actions),
     confidence: assessment.confidence,
     model: assessment.model_name,
     provider: assessment.provider,
-    popiaNotes: assessment.popia_notes || [],
+    popiaNotes: ensureStringArray(assessment.popia_notes),
     createdAt: assessment.created_at,
   };
 }

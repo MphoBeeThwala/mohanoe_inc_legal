@@ -1,3 +1,33 @@
+function ensureStringArray(value) {
+  if (Array.isArray(value)) {
+    return value.filter((item) => item != null && item !== '').map(String);
+  }
+  if (value == null || value === '') {
+    return [];
+  }
+  if (typeof value === 'string') {
+    return [value];
+  }
+  if (typeof value === 'object') {
+    return Object.values(value)
+      .filter((item) => item != null && item !== '')
+      .map(String);
+  }
+  return [String(value)];
+}
+
+function normalizeAssessmentFields(assessment) {
+  return {
+    ...assessment,
+    keyFacts: ensureStringArray(assessment.keyFacts),
+    attorneyQuestions: ensureStringArray(assessment.attorneyQuestions),
+    recommendedDocuments: ensureStringArray(assessment.recommendedDocuments),
+    complianceFlags: ensureStringArray(assessment.complianceFlags),
+    nextActions: ensureStringArray(assessment.nextActions),
+    popiaNotes: ensureStringArray(assessment.popiaNotes),
+  };
+}
+
 function inferUrgency(text) {
   const lowered = text.toLowerCase();
 
@@ -161,11 +191,11 @@ async function anthropicAssessment(input) {
   const text = payload?.content?.[0]?.text || '';
   const parsed = extractJsonObject(text);
 
-  return {
+  return normalizeAssessmentFields({
     provider: 'anthropic',
     model,
     ...parsed,
-  };
+  });
 }
 
 async function assessMatter(input) {
@@ -179,4 +209,5 @@ async function assessMatter(input) {
 module.exports = {
   assessMatter,
   fallbackAssessment,
+  ensureStringArray,
 };

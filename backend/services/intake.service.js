@@ -1,6 +1,6 @@
 const { randomUUID } = require('crypto');
 const { getSupabaseClient } = require('../config/supabase');
-const { assessMatter } = require('./ai.service');
+const { assessMatter, ensureStringArray } = require('./ai.service');
 const {
   decryptJson,
   encryptJson,
@@ -211,15 +211,15 @@ function toPublicSubmission(submission, assessment = null, caseRecord = null) {
         matterType: assessment.matter_type,
         urgency: assessment.urgency,
         summary: assessment.summary,
-        keyFacts: assessment.key_facts || [],
-        attorneyQuestions: assessment.attorney_questions || [],
-        recommendedDocuments: assessment.recommended_documents || [],
-        complianceFlags: assessment.compliance_flags || [],
-        nextActions: assessment.next_actions || [],
+        keyFacts: ensureStringArray(assessment.key_facts),
+        attorneyQuestions: ensureStringArray(assessment.attorney_questions),
+        recommendedDocuments: ensureStringArray(assessment.recommended_documents),
+        complianceFlags: ensureStringArray(assessment.compliance_flags),
+        nextActions: ensureStringArray(assessment.next_actions),
         confidence: assessment.confidence,
         model: assessment.model_name,
         provider: assessment.provider,
-        popiaNotes: assessment.popia_notes || [],
+        popiaNotes: ensureStringArray(assessment.popia_notes),
         createdAt: assessment.created_at,
       },
     matterCase:
@@ -375,13 +375,13 @@ async function assessSubmission(id) {
     matter_type: assessment.matterType,
     urgency: assessment.urgency,
     summary: assessment.summary,
-    key_facts: assessment.keyFacts || [],
-    attorney_questions: assessment.attorneyQuestions || [],
-    recommended_documents: assessment.recommendedDocuments || [],
-    compliance_flags: assessment.complianceFlags || [],
-    next_actions: assessment.nextActions || [],
+    key_facts: ensureStringArray(assessment.keyFacts),
+    attorney_questions: ensureStringArray(assessment.attorneyQuestions),
+    recommended_documents: ensureStringArray(assessment.recommendedDocuments),
+    compliance_flags: ensureStringArray(assessment.complianceFlags),
+    next_actions: ensureStringArray(assessment.nextActions),
     confidence: assessment.confidence,
-    popia_notes: assessment.popiaNotes || [],
+    popia_notes: ensureStringArray(assessment.popiaNotes),
     raw_redacted_brief: redactedBrief,
     created_at: now,
   };
