@@ -25,7 +25,7 @@ Legal practice management app for Mohanoe Inc. Attorneys with encrypted intake, 
 - Store `INTAKE_ENCRYPTION_KEY` as a 32-byte base64 or hex key.
 - Keep Supabase as the production datastore for the first live release.
 - Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to persist intake data in Postgres.
-- If account registration returns a 500 about a missing `users` column (e.g. `is_active`), run the SQL in [`SUPABASE_FIX.md`](SUPABASE_FIX.md) in the Supabase SQL Editor.
+- If API calls fail with missing tables or columns in Supabase, run the SQL in [`SUPABASE_FIX.md`](SUPABASE_FIX.md) (`backend/migrations/002_full_schema_bootstrap.sql`).
 - Set `ANTHROPIC_API_KEY` to enable live AI triage. Without it, the backend falls back to rules-based assessment.
 
 ## Deployment
@@ -36,6 +36,19 @@ Legal practice management app for Mohanoe Inc. Attorneys with encrypted intake, 
 - The health check endpoint is `/ready`.
 - Admin auto-seeding is **deferred by default** (`SEED_ADMIN_ON_STARTUP=false`). For client demo/bootstrap, set `ALLOW_PUBLIC_REGISTRATION=true` and create the first staff account from the sign-in screen. Later, enable `SEED_ADMIN_ON_STARTUP=true` with `DEFAULT_ADMIN_EMAIL` and `DEFAULT_ADMIN_PASSWORD` to restore boot-time admin provisioning.
 - See `PROD_OPERATIONS.md` for backup, restore, and smoke-test procedures.
+
+## Install as a PWA
+
+The React app ships a minimal progressive web app shell for demos:
+
+1. Deploy or build the frontend (`npm run build --prefix frontend`) and serve over HTTPS (Render does this automatically).
+2. Open the site in Chrome or Edge on desktop or Android.
+3. Use **Install app** from the address bar (or browser menu → **Install Mohanoe Legal**).
+4. The installed app opens in standalone mode with the Mohanoe brand colors.
+
+Offline behavior is limited to the app shell (navigation and cached static assets). API calls require network access.
+
+Files: `frontend/public/manifest.json`, `frontend/public/sw.js`, `frontend/public/icons/icon.svg`.
 
 ## Compliance
 - Raw client PII stays encrypted at rest.

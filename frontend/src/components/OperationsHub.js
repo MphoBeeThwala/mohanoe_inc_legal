@@ -86,31 +86,55 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
     [cases, selectedCaseId],
   );
 
-  const loadData = async () => {
-    const [documentsResponse, billingResponse, invoicesResponse, ledgerResponse, calendarResponse, auditResponse, notificationsResponse, reportsResponse, complianceSummaryResponse, complianceRequestsResponse] =
-      await Promise.all([
-        api.get('/documents'),
-        api.get('/billing/summary'),
-        api.get('/billing/invoices'),
-        api.get('/billing/ledger'),
-        api.get('/calendar/upcoming'),
-        api.get('/audit'),
-        api.get('/notifications'),
-        api.get('/reports'),
-        api.get('/compliance/summary'),
-        api.get('/compliance/requests'),
-      ]);
+  const loadBatch = async (paths) => {
+    const results = await Promise.allSettled(paths.map((path) => api.get(path)));
+    return results.map((result, index) => ({
+      path: paths[index],
+      ok: result.status === 'fulfilled',
+      data: result.status === 'fulfilled' ? result.value.data : null,
+    }));
+  };
 
-    setDocuments(documentsResponse.data);
-    setBillingSummary(billingResponse.data);
-    setBillingInvoices(invoicesResponse.data);
-    setBillingLedger(ledgerResponse.data);
-    setCalendar(calendarResponse.data);
-    setAudit(auditResponse.data);
-    setNotifications(notificationsResponse.data);
-    setReports(reportsResponse.data);
-    setComplianceSummary(complianceSummaryResponse.data);
-    setComplianceRequests(complianceRequestsResponse.data);
+  const loadData = async () => {
+    const batchOne = await loadBatch([
+      '/documents',
+      '/billing/summary',
+      '/billing/invoices',
+      '/billing/ledger',
+      '/calendar/upcoming',
+    ]);
+    const batchTwo = await loadBatch([
+      '/audit',
+      '/notifications',
+      '/reports',
+      '/compliance/summary',
+      '/compliance/requests',
+    ]);
+    const responses = [...batchOne, ...batchTwo];
+    const byPath = Object.fromEntries(responses.map((item) => [item.path, item]));
+    const failed = responses.filter((item) => !item.ok);
+
+    if (byPath['/documents']?.ok) setDocuments(byPath['/documents'].data);
+    if (byPath['/billing/summary']?.ok) setBillingSummary(byPath['/billing/summary'].data);
+    if (byPath['/billing/invoices']?.ok) setBillingInvoices(byPath['/billing/invoices'].data);
+    if (byPath['/billing/ledger']?.ok) setBillingLedger(byPath['/billing/ledger'].data);
+    if (byPath['/calendar/upcoming']?.ok) setCalendar(byPath['/calendar/upcoming'].data);
+    if (byPath['/audit']?.ok) setAudit(byPath['/audit'].data);
+    if (byPath['/notifications']?.ok) setNotifications(byPath['/notifications'].data);
+    if (byPath['/reports']?.ok) setReports(byPath['/reports'].data);
+    if (byPath['/compliance/summary']?.ok) setComplianceSummary(byPath['/compliance/summary'].data);
+    if (byPath['/compliance/requests']?.ok) setComplianceRequests(byPath['/compliance/requests'].data);
+
+    if (failed.length === responses.length) {
+      throw new Error('All operations endpoints failed');
+    }
+
+    if (failed.length > 0) {
+      setNotice({
+        tone: 'warn',
+        message: `Some operations data could not be loaded (${failed.length} of ${responses.length} requests).`,
+      });
+    }
   };
 
   useEffect(() => {

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Mohanoe Inc. Attorneys">
+  <rect width="512" height="512" rx="96" fill="#0d1f19"/>
+  <path fill="#1b7a58" d="M128 352V160h72c44 0 72 24 72 64 0 24-8 44-24 56l40 72h-64l-32-60h-24v60H128zm48-100h20c16 0 24-8 24-20s-8-20-24-20h-20v40z"/>
+  <path fill="#effaf4" d="M280 352l56-192h56l56 192h-52l-10-36H342l-10 36H280zm72-76h28l-14-48-14 48z"/>
+</svg>

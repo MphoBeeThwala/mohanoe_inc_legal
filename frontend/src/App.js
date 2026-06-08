@@ -9,7 +9,7 @@ import './App.css';
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 20000,
+  timeout: 35000,
 });
 
 api.interceptors.request.use((config) => {
