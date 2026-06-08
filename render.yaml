@@ -40,3 +40,5 @@ services:
         sync: false
       - key: DEFAULT_ADMIN_PASSWORD
         sync: false
+      - key: ADMIN_SEED_TOKEN
+        sync: false

@@ -22,7 +22,9 @@
 ## Admin Provisioning
 - Do not enable public registration in production.
 - Set `DEFAULT_ADMIN_EMAIL` and `DEFAULT_ADMIN_PASSWORD` during deployment so the app seeds the initial admin account.
-- Use the admin account to create additional staff as needed.
+- `DEFAULT_ADMIN_PASSWORD` must be at least 12 characters and include upper-case, lower-case, and a number.
+- Set `ADMIN_SEED_TOKEN` so the first admin can be bootstrapped with `POST /api/auth/seed-admin` if startup seeding failed before the env vars were corrected.
+- Use the admin account to create additional staff with `POST /api/auth/users`; public registration remains disabled.
 
 ## Deploy Smoke Test
 - After Render deploys, run:

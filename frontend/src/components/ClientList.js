@@ -2,6 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
+function getAuthHeaders() {
+  const token = window.localStorage.getItem('mhl_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 const ClientList = () => {
   const [clients, setClients] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -9,7 +14,9 @@ const ClientList = () => {
   useEffect(() => {
     const fetchClients = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/api/clients');
+        const response = await axios.get('/api/clients', {
+          headers: getAuthHeaders(),
+        });
         setClients(response.data);
         setLoading(false);
       } catch (error) {
@@ -30,7 +37,7 @@ const ClientList = () => {
         ) : clients && clients.length > 0 ? (
           <ul className="space-y-4">
             {clients.map((client) => (
-              <li key={client._id} className="border-b pb-4">
+              <li key={client.id} className="border-b pb-4">
                 <p className="text-lg font-semibold">{client.name}</p>
                 <p className="text-gray-600">{client.email}</p>
                 <p className="text-gray-600">{client.phone}</p>

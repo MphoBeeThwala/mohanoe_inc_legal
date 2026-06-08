@@ -9,11 +9,16 @@ function getSupabaseClient() {
   }
 
   const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl && !supabaseKey) {
+    return null;
+  }
 
   if (!supabaseUrl || !supabaseKey) {
-    return null;
+    throw new Error(
+      'Supabase persistence requires both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY',
+    );
   }
 
   cachedClient = createClient(supabaseUrl, supabaseKey, {

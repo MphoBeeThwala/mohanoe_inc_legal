@@ -31,6 +31,18 @@ async function me(req, res) {
   }
 }
 
+async function provisionUser(req, res) {
+  try {
+    const result = await authService.registerUser(req.body, {
+      allowRoleOverride: true,
+      role: req.body.role || 'attorney',
+    });
+    res.status(201).json({ user: result.user });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ message: error.message });
+  }
+}
+
 async function seedAdmin(req, res) {
   try {
     const user = await authService.seedDefaultUsers();
@@ -49,6 +61,7 @@ async function seedAdmin(req, res) {
 module.exports = {
   login,
   me,
+  provisionUser,
   seedAdmin,
   register,
 };

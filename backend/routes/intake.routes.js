@@ -1,7 +1,11 @@
 const express = require('express');
 const intakeController = require('../controllers/intake.controller');
+const { authenticateRequest, requireRoles } = require('../services/auth.service');
 
 const router = express.Router();
+
+router.use(authenticateRequest);
+router.use(requireRoles('admin', 'attorney', 'paralegal'));
 
 router.get('/summary', intakeController.getSummary);
 router.get('/submissions', intakeController.listSubmissions);

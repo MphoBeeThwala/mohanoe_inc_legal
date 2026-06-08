@@ -61,16 +61,24 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/ready', (req, res) => {
+  const hasSupabaseUrl = Boolean(process.env.SUPABASE_URL);
+  const hasSupabaseServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const adminSeedConfigured = Boolean(
+    process.env.DEFAULT_ADMIN_EMAIL && process.env.DEFAULT_ADMIN_PASSWORD,
+  );
   const configured = Boolean(
     process.env.JWT_SECRET &&
       (process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL) &&
-      process.env.SUPABASE_URL &&
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      hasSupabaseUrl &&
+      hasSupabaseServiceRole &&
+      adminSeedConfigured,
   );
 
   res.json({
     status: configured ? 'ready' : 'degraded',
     configured,
+    adminSeedConfigured,
+    supabaseConfigured: hasSupabaseUrl && hasSupabaseServiceRole,
     retentionDays: Number(process.env.CLIENT_DATA_RETENTION_DAYS || 3650),
     timestamp: new Date().toISOString(),
   });
@@ -99,10 +107,20 @@ if (frontendBuildPath) {
 }
 
 if (require.main === module) {
-  seedDefaultUsers().catch(() => {});
-  app.listen(port, () => {
-    console.log(`Mohanoe backend listening at http://localhost:${port}`);
-  });
+  seedDefaultUsers()
+    .then((user) => {
+      if (user) {
+        console.log(`Default admin ready: ${user.email}`);
+      }
+    })
+    .catch((error) => {
+      console.error(`Default admin seed failed: ${error.message}`);
+    })
+    .finally(() => {
+      app.listen(port, () => {
+        console.log(`Mohanoe backend listening at http://localhost:${port}`);
+      });
+    });
 }
 
 module.exports = app;
