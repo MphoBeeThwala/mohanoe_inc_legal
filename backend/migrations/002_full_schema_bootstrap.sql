@@ -9,6 +9,75 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- --------------------------------------------------------------------
+-- ID type conventions (must match backend/services/*.js):
+--   users.id, submissions.id, assessments.id, cases.id  → uuid
+--   clients.id                                            → bigint (identity)
+--   all case_id / intake_submission_id FK columns         → uuid
+-- CREATE TABLE IF NOT EXISTS leaves wrong legacy PK types in place;
+-- helpers below drop only EMPTY tables with incompatible types.
+-- --------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public._mohanoe_column_type(p_table text, p_column text)
+RETURNS text
+LANGUAGE sql
+STABLE
+SET search_path = public
+AS $$
+  SELECT c.data_type
+  FROM information_schema.columns c
+  WHERE c.table_schema = 'public'
+    AND c.table_name = p_table
+    AND c.column_name = p_column
+$$;
+
+CREATE OR REPLACE FUNCTION public._mohanoe_drop_empty_wrong_pk(
+  p_table text,
+  p_expected_type text DEFAULT 'uuid'
+)
+RETURNS void
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+DECLARE
+  actual_type text;
+  row_count bigint;
+BEGIN
+  IF to_regclass('public.' || p_table) IS NULL THEN
+    RETURN;
+  END IF;
+
+  actual_type := public._mohanoe_column_type(p_table, 'id');
+  IF actual_type IS NULL OR actual_type = p_expected_type THEN
+    RETURN;
+  END IF;
+
+  EXECUTE format('SELECT COUNT(*) FROM public.%I', p_table) INTO row_count;
+  IF row_count > 0 THEN
+    RAISE EXCEPTION
+      'public.% has id type % (% rows). App requires %. Backup or truncate before re-running.',
+      p_table, actual_type, row_count, p_expected_type;
+  END IF;
+
+  EXECUTE format('DROP TABLE public.%I CASCADE', p_table);
+  RAISE NOTICE 'Dropped empty public.% (id was %, expected %)', p_table, actual_type, p_expected_type;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public._mohanoe_drop_case_dependents()
+RETURNS void
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  DROP TABLE IF EXISTS public.calendar_events CASCADE;
+  DROP TABLE IF EXISTS public.billing_ledger CASCADE;
+  DROP TABLE IF EXISTS public.billing_invoices CASCADE;
+  DROP TABLE IF EXISTS public.documents CASCADE;
+  DROP TABLE IF EXISTS public.case_timeline CASCADE;
+  DROP TABLE IF EXISTS public.case_tasks CASCADE;
+END;
+$$;
+
+-- --------------------------------------------------------------------
 -- TABLE: users
 -- --------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.users (
@@ -36,6 +105,39 @@ CREATE TABLE IF NOT EXISTS public.clients (
   address TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Drop legacy tables with wrong PK/FK types before creating intake/case chain.
+DO $$
+DECLARE
+  submissions_id_type text;
+  cases_id_type text;
+BEGIN
+  submissions_id_type := public._mohanoe_column_type('submissions', 'id');
+  cases_id_type := public._mohanoe_column_type('cases', 'id');
+
+  IF submissions_id_type IS NOT NULL AND submissions_id_type <> 'uuid' THEN
+    PERFORM public._mohanoe_drop_case_dependents();
+    PERFORM public._mohanoe_drop_empty_wrong_pk('cases');
+    PERFORM public._mohanoe_drop_empty_wrong_pk('assessments');
+    PERFORM public._mohanoe_drop_empty_wrong_pk('submissions');
+  END IF;
+
+  IF cases_id_type IS NOT NULL AND cases_id_type <> 'uuid' THEN
+    PERFORM public._mohanoe_drop_case_dependents();
+    PERFORM public._mohanoe_drop_empty_wrong_pk('cases');
+  END IF;
+
+  IF public._mohanoe_column_type('assessments', 'intake_submission_id') IS NOT NULL
+     AND public._mohanoe_column_type('assessments', 'intake_submission_id') <> 'uuid' THEN
+    PERFORM public._mohanoe_drop_empty_wrong_pk('assessments');
+  END IF;
+
+  IF public._mohanoe_column_type('cases', 'intake_submission_id') IS NOT NULL
+     AND public._mohanoe_column_type('cases', 'intake_submission_id') <> 'uuid' THEN
+    PERFORM public._mohanoe_drop_case_dependents();
+    PERFORM public._mohanoe_drop_empty_wrong_pk('cases');
+  END IF;
+END $$;
 
 -- --------------------------------------------------------------------
 -- TABLE: submissions
