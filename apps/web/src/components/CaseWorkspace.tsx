@@ -10,9 +10,17 @@ interface CaseWorkspaceProps {
   selectedCaseId: string | null;
   onSelectCase?: (caseRow: Pick<MatterCase, 'id' | 'submissionId' | 'caseNumber'>) => void;
   onChanged: () => Promise<void>;
+  /** matters.write: show the forms that change the matter. */
+  canEdit?: boolean;
 }
 
-function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }: CaseWorkspaceProps) {
+function CaseWorkspace({
+  api,
+  selectedCaseId,
+  onSelectCase,
+  onChanged,
+  canEdit = true,
+}: CaseWorkspaceProps) {
   const [caseRecord, setCaseRecord] = useState<CaseDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [taskForm, setTaskForm] = useState({ title: '', description: '' });
@@ -161,90 +169,94 @@ function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }: CaseWor
             </div>
           </div>
 
-          <div className="workspace-grid">
-            <section>
-              <div className="mini-label">Update status</div>
-              <form onSubmit={changeStatus} className="stack-form">
-                <select
-                  value={statusForm.status}
-                  onChange={(event) =>
-                    setStatusForm((current) => ({
-                      ...current,
-                      status: event.target.value,
-                    }))
-                  }
-                >
-                  <option value="">Select status</option>
-                  <option value="triage">Triage</option>
-                  <option value="priority-review">Priority review</option>
-                  <option value="in-progress">In progress</option>
-                  <option value="awaiting-client">Awaiting client</option>
-                  <option value="awaiting-court">Awaiting court</option>
-                  <option value="closed">Closed</option>
-                </select>
-                <textarea
-                  rows={3}
-                  value={statusForm.nextAction}
-                  onChange={(event) =>
-                    setStatusForm((current) => ({
-                      ...current,
-                      nextAction: event.target.value,
-                    }))
-                  }
-                  placeholder="Describe the next action..."
-                />
-                <button className="secondary-button" disabled={busy}>
-                  Save status
-                </button>
-              </form>
-            </section>
+          {canEdit ? (
+            <div className="workspace-grid">
+              <section>
+                <div className="mini-label">Update status</div>
+                <form onSubmit={changeStatus} className="stack-form">
+                  <select
+                    value={statusForm.status}
+                    onChange={(event) =>
+                      setStatusForm((current) => ({
+                        ...current,
+                        status: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">Select status</option>
+                    <option value="triage">Triage</option>
+                    <option value="priority-review">Priority review</option>
+                    <option value="in-progress">In progress</option>
+                    <option value="awaiting-client">Awaiting client</option>
+                    <option value="awaiting-court">Awaiting court</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                  <textarea
+                    rows={3}
+                    value={statusForm.nextAction}
+                    onChange={(event) =>
+                      setStatusForm((current) => ({
+                        ...current,
+                        nextAction: event.target.value,
+                      }))
+                    }
+                    placeholder="Describe the next action..."
+                  />
+                  <button className="secondary-button" disabled={busy}>
+                    Save status
+                  </button>
+                </form>
+              </section>
 
-            <section>
-              <div className="mini-label">Add task</div>
-              <form onSubmit={submitTask} className="stack-form">
-                <input
-                  value={taskForm.title}
-                  onChange={(event) =>
-                    setTaskForm((current) => ({
-                      ...current,
-                      title: event.target.value,
-                    }))
-                  }
-                  placeholder="Draft notice, chase signature, prepare bundle..."
-                />
-                <textarea
-                  rows={3}
-                  value={taskForm.description}
-                  onChange={(event) =>
-                    setTaskForm((current) => ({
-                      ...current,
-                      description: event.target.value,
-                    }))
-                  }
-                  placeholder="Task details..."
-                />
-                <button className="secondary-button" disabled={busy}>
-                  Add task
-                </button>
-              </form>
-            </section>
-          </div>
+              <section>
+                <div className="mini-label">Add task</div>
+                <form onSubmit={submitTask} className="stack-form">
+                  <input
+                    value={taskForm.title}
+                    onChange={(event) =>
+                      setTaskForm((current) => ({
+                        ...current,
+                        title: event.target.value,
+                      }))
+                    }
+                    placeholder="Draft notice, chase signature, prepare bundle..."
+                  />
+                  <textarea
+                    rows={3}
+                    value={taskForm.description}
+                    onChange={(event) =>
+                      setTaskForm((current) => ({
+                        ...current,
+                        description: event.target.value,
+                      }))
+                    }
+                    placeholder="Task details..."
+                  />
+                  <button className="secondary-button" disabled={busy}>
+                    Add task
+                  </button>
+                </form>
+              </section>
+            </div>
+          ) : null}
 
           <div className="workspace-grid">
-            <section>
-              <div className="mini-label">Timeline note</div>
-              <form onSubmit={addNote} className="stack-form">
-                <textarea
-                  rows={4}
-                  value={noteForm}
-                  onChange={(event) => setNoteForm(event.target.value)}
-                  placeholder="Add an internal note, client call summary, or court event..."
-                />
-                <button className="secondary-button" disabled={busy}>
-                  Add note
-                </button>
-              </form>
-            </section>
+            {canEdit ? (
+              <section>
+                <div className="mini-label">Timeline note</div>
+                <form onSubmit={addNote} className="stack-form">
+                  <textarea
+                    rows={4}
+                    value={noteForm}
+                    onChange={(event) => setNoteForm(event.target.value)}
+                    placeholder="Add an internal note, client call summary, or court event..."
+                  />
+                  <button className="secondary-button" disabled={busy}>
+                    Add note
+                  </button>
+                </form>
+              </section>
+            ) : null}
 
             <section>
               <div className="mini-label">Tasks</div>
@@ -255,13 +267,17 @@ function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }: CaseWor
                       <strong>{task.title}</strong>
                       <div className="muted">{task.description}</div>
                     </div>
-                    <button
-                      type="button"
-                      className="link-button"
-                      onClick={() => completeTask(task.id)}
-                    >
-                      {task.status === 'done' ? 'Done' : 'Complete'}
-                    </button>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        className="link-button"
+                        onClick={() => completeTask(task.id)}
+                      >
+                        {task.status === 'done' ? 'Done' : 'Complete'}
+                      </button>
+                    ) : (
+                      <span className="muted">{task.status === 'done' ? 'Done' : 'Open'}</span>
+                    )}
                   </div>
                 ))}
               </div>
