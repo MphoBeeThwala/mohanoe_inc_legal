@@ -170,6 +170,7 @@ describe('per-firm envelope encryption', () => {
       time: 0,
       billing: 0,
       calendar: 0,
+      research: 0,
     });
   });
 

@@ -71,3 +71,12 @@ resource "azurerm_role_assignment" "app_acr_pull" {
   role_definition_name = "AcrPull"
   principal_id         = azurerm_user_assigned_identity.app.principal_id
 }
+
+# Keyless access to Claude in Microsoft Foundry (Sweden Central, provisioned
+# separately because of quota): the app identity may call its deployments.
+resource "azurerm_role_assignment" "app_foundry" {
+  count                = var.ai_foundry_resource_id == "" ? 0 : 1
+  scope                = var.ai_foundry_resource_id
+  role_definition_name = "Azure AI User"
+  principal_id         = azurerm_user_assigned_identity.app.principal_id
+}

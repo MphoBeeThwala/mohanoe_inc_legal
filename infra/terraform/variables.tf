@@ -195,3 +195,35 @@ variable "platform_vat_rate" {
   type        = number
   default     = 0.15
 }
+
+# AI (Claude in Microsoft Foundry, roadmap §7). Leave ai_endpoint empty to run
+# without AI: intakes then open as "not assessed".
+variable "ai_endpoint" {
+  description = "Foundry Claude endpoint: https://<resource>.services.ai.azure.com/anthropic"
+  type        = string
+  default     = ""
+}
+
+variable "ai_model" {
+  description = "Foundry deployment name used for triage."
+  type        = string
+  default     = ""
+}
+
+variable "ai_research_model" {
+  description = "Foundry deployment name used for research (defaults to ai_model)."
+  type        = string
+  default     = ""
+}
+
+variable "ai_foundry_resource_id" {
+  description = "Resource ID of the Foundry resource; the app identity gets Azure AI User on it (keyless Entra ID authentication)."
+  type        = string
+  default     = ""
+}
+
+variable "ai_firm_monthly_tokens" {
+  description = "Default monthly AI token allowance per firm."
+  type        = number
+  default     = 2000000
+}

@@ -27,29 +27,31 @@ import { httpError } from '../lib/http';
 import { SYSTEM_ACTOR, type Actor } from '../lib/actor';
 import { iso } from '../lib/time';
 import { intakeSubmissionSchema, parse, type IntakeSubmission } from '../validation/schemas';
-import { assessMatter, ensureStringArray, type MatterBrief } from './ai.service';
-import {
-  blindIndex,
-  blindIndexCandidates,
-  decryptJson,
-  encryptJson,
-  redactMatterForAi,
-  redactText,
-} from './privacy.service';
+import { ensureStringArray, triage, type TriageInput } from './ai.service';
+import { deidentify, type KnownPerson } from './deidentify';
+import { blindIndex, blindIndexCandidates, decryptJson, encryptJson } from './privacy.service';
 import * as auditService from './audit.service';
 
-/** The de-identified brief sent for AI triage. Never contains raw PII. */
-function toMatterBrief(submission: IntakeSubmission): MatterBrief {
-  const redacted = redactMatterForAi(submission);
+/** The client as triage knows them: their name and contact details are removed. */
+function intakePeople(submission: IntakeSubmission): KnownPerson[] {
+  return [
+    {
+      role: 'client',
+      name: submission.fullName,
+      identifiers: [submission.email, submission.phone],
+    },
+  ];
+}
+
+function triageInput(submission: IntakeSubmission): TriageInput {
   return {
-    clientLabel: redacted.clientLabel,
-    practiceArea: redacted.practiceArea,
-    jurisdiction: redacted.jurisdiction,
-    urgencyHint: redacted.urgencyHint,
-    matterSummary: redactText(redacted.matterSummary, {
-      clientName: submission.fullName,
-      fullName: submission.fullName,
-    }),
+    practiceArea: submission.practiceArea,
+    jurisdiction: submission.jurisdiction,
+    urgencyHint: submission.urgencyHint,
+    matterSummary: submission.matterSummary,
+    requestedOutcome: submission.requestedOutcome,
+    documentsMentioned: submission.documentsMentioned,
+    people: intakePeople(submission),
   };
 }
 
@@ -144,7 +146,7 @@ async function selectSubmissions(where?: SQL, limit = 100) {
 
 export async function createSubmission(input: unknown): Promise<PublicSubmission> {
   const submission = parse(intakeSubmissionSchema, input);
-  const brief = toMatterBrief(submission);
+  const summary = deidentify(submission.matterSummary, intakePeople(submission));
 
   const [saved] = await db()
     .insert(submissions)
@@ -154,7 +156,7 @@ export async function createSubmission(input: unknown): Promise<PublicSubmission
       jurisdiction: submission.jurisdiction,
       urgencyHint: submission.urgencyHint,
       status: 'received',
-      summaryRedacted: brief.matterSummary ?? '',
+      summaryRedacted: summary.text,
       rawPayloadEncrypted: await encryptJson(submission),
       emailLookup: await blindIndex(submission.email),
       consentToAi: submission.consentToAi,
@@ -236,9 +238,12 @@ export async function assessSubmission(id: string, actor: Actor = {}): Promise<P
   if (!raw) {
     throw httpError('Intake submission could not be decrypted', 500);
   }
-  const brief = toMatterBrief(raw);
-  // The AI call happens outside any transaction: it can take seconds.
-  const result = await assessMatter(brief);
+  // A failed AI call is an error (the user can retry); nothing is saved.
+  const { assessment: result, brief } = await triage(triageInput(raw), {
+    subjectType: 'submission',
+    subjectId: id,
+    actor,
+  });
   const nextAction =
     result.nextActions?.[0] || 'Attorney to review the intake and confirm next steps.';
   const caseNumber = existing.matterCase ? null : await nextCaseNumber();
@@ -258,7 +263,7 @@ export async function assessSubmission(id: string, actor: Actor = {}): Promise<P
       nextActions: ensureStringArray(result.nextActions),
       confidence: Number.isFinite(result.confidence) ? result.confidence : 0,
       popiaNotes: ensureStringArray(result.popiaNotes),
-      rawRedactedBrief: brief as Record<string, unknown>,
+      rawRedactedBrief: brief as unknown as Record<string, unknown>,
     };
     const [savedAssessment] = await tx
       .insert(assessments)

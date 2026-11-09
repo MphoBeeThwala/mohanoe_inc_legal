@@ -99,6 +99,13 @@
       "when": 1794257614441,
       "tag": "0013_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794266037328,
+      "tag": "0014_ai_research",
+      "breakpoints": true
     }
   ]
 }

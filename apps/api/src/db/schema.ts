@@ -316,6 +316,72 @@ export const subscriptionPayments = pgTable(
   ],
 );
 
+// ------------------------------------------------------------------- AI
+//
+// Every model call, for metering, per-firm caps and the redacted prompt and
+// response log (roadmap §7). Prompts are de-identified before they are sent,
+// and both are still encrypted here: they describe a client's matter.
+export const aiCalls = pgTable(
+  'ai_calls',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    /** 'triage' | 'research' | 'evaluation' */
+    purpose: text('purpose').notNull(),
+    /** What the call was for, e.g. 'submission' or 'research_request', and its id. */
+    subjectType: text('subject_type'),
+    subjectId: uuid('subject_id'),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    /** 'ok' | 'failed' */
+    status: text('status').notNull(),
+    /** Our own error message (never the provider's body). */
+    error: text('error'),
+    durationMs: integer('duration_ms'),
+    /** Encrypted {system, messages} as sent (already de-identified). */
+    promptEncrypted: text('prompt_encrypted'),
+    /** Encrypted model answer. */
+    responseEncrypted: text('response_encrypted'),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [index('ai_calls_firm_month_idx').on(t.firmId, t.createdAt), tenantPolicy('ai_calls')],
+);
+
+/** A research question on a matter, its de-identified brief and (later) its answer. */
+export const researchRequests = pgTable(
+  'research_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id, { onDelete: 'cascade' }),
+    /** 'draft' | 'confirmed' */
+    status: text('status').notNull().default('draft'),
+    /** Encrypted question as the attorney asked it. */
+    questionEncrypted: text('question_encrypted').notNull(),
+    /** Encrypted {text, replacements, warnings}: exactly what the model will see. */
+    briefEncrypted: text('brief_encrypted').notNull(),
+    /** Encrypted token -> original mapping (never sent anywhere). */
+    mappingEncrypted: text('mapping_encrypted').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    confirmedBy: uuid('confirmed_by').references(() => users.id, { onDelete: 'set null' }),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    ...updatable,
+  },
+  (t) => [
+    index('research_requests_case_idx').on(t.caseId, t.createdAt),
+    tenantPolicy('research_requests'),
+    matterPolicy('research_requests'),
+  ],
+);
+
+export type AiCallRow = typeof aiCalls.$inferSelect;
+export type ResearchRequestRow = typeof researchRequests.$inferSelect;
+
 export type FirmSubscriptionRow = typeof firmSubscriptions.$inferSelect;
 export type SubscriptionCheckoutRow = typeof subscriptionCheckouts.$inferSelect;
 export type SubscriptionPaymentRow = typeof subscriptionPayments.$inferSelect;

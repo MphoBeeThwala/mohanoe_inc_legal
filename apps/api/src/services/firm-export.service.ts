@@ -126,6 +126,25 @@ export async function exportFirm(firm: FirmRow): Promise<FirmExport> {
         contentBase64: content.toString('base64'),
       }));
 
+      // The research brief and what was sent to AI are the firm's records too.
+      const research = await db().select().from(schema.researchRequests);
+      tables.researchRequests = await Promise.all(
+        research.map(async ({ questionEncrypted, briefEncrypted, mappingEncrypted, ...rest }) => ({
+          ...rest,
+          question: await decryptJson(questionEncrypted),
+          brief: await decryptJson(briefEncrypted),
+          mapping: await decryptJson(mappingEncrypted),
+        })),
+      );
+      const calls = await db().select().from(schema.aiCalls);
+      tables.aiCalls = await Promise.all(
+        calls.map(async ({ promptEncrypted, responseEncrypted, ...rest }) => ({
+          ...rest,
+          prompt: promptEncrypted ? await decryptJson(promptEncrypted) : null,
+          response: responseEncrypted ? await decryptJson(responseEncrypted) : null,
+        })),
+      );
+
       const events = await db().select().from(schema.calendarEvents);
       tables.calendarEvents = await Promise.all(
         events.map(async ({ contentEncrypted, ...rest }) => ({

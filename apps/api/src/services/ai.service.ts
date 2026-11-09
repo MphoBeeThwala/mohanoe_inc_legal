@@ -1,11 +1,133 @@
-/** The de-identified brief sent for AI triage (never contains raw PII). */
-export interface MatterBrief {
-  clientLabel?: string;
-  practiceArea?: string;
-  jurisdiction?: string;
-  urgencyHint?: string;
-  matterSummary?: string;
+// Every model call goes through callModel(): it enforces the firm's monthly
+// allowance, records the call (tokens, encrypted de-identified prompt and
+// answer) and lets failures through as errors (roadmap §7: no silent
+// fallback). Intake triage is built on it.
+import { and, eq, gte, sql } from 'drizzle-orm';
+import type { AiUsage } from '@ahava88/shared';
+import { db } from '../db/client';
+import { aiCalls } from '../db/schema';
+import {
+  aiClient,
+  aiConfigured,
+  parseJsonAnswer,
+  type AiRequest,
+  type AiResult,
+} from '../lib/ai-client';
+import { HttpError, httpError } from '../lib/http';
+import type { Actor } from '../lib/actor';
+import { encryptJson } from './privacy.service';
+import { deidentify, type KnownPerson } from './deidentify';
+
+export type AiPurpose = 'triage' | 'research' | 'evaluation';
+
+export interface CallContext {
+  purpose: AiPurpose;
+  subjectType?: string;
+  subjectId?: string;
+  actor?: Actor;
+}
+
+/** Tokens a firm may use per calendar month (South African time). */
+export function monthlyTokenLimit(): number {
+  const value = Number(process.env.AI_FIRM_MONTHLY_TOKENS);
+  return Number.isFinite(value) && value > 0 ? value : 2_000_000;
+}
+
+function monthStart(now = new Date()): Date {
+  const sast = new Date(now.getTime() + 2 * 3_600_000);
+  return new Date(Date.UTC(sast.getUTCFullYear(), sast.getUTCMonth(), 1) - 2 * 3_600_000);
+}
+
+async function tokensThisMonth(now = new Date()): Promise<number> {
+  const [row] = await db()
+    .select({
+      tokens: sql<number>`coalesce(sum(${aiCalls.inputTokens} + ${aiCalls.outputTokens}), 0)::int`,
+    })
+    .from(aiCalls)
+    .where(gte(aiCalls.createdAt, monthStart(now)));
+  return row?.tokens ?? 0;
+}
+
+export async function callModel(request: AiRequest, context: CallContext): Promise<AiResult> {
+  const client = aiClient();
+  if ((await tokensThisMonth()) >= monthlyTokenLimit()) {
+    throw httpError(
+      "This firm's AI allowance for the month is used up. An administrator can ask platform support to raise it.",
+      429,
+    );
+  }
+  const started = Date.now();
+  const base = {
+    purpose: context.purpose,
+    subjectType: context.subjectType ?? null,
+    subjectId: context.subjectId ?? null,
+    provider: client.provider,
+    userId: context.actor?.userId ?? null,
+    promptEncrypted: await encryptJson({ system: request.system, messages: request.messages }),
+  };
+  try {
+    const result = await client.complete(request);
+    await db()
+      .insert(aiCalls)
+      .values({
+        ...base,
+        model: result.model,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        status: 'ok',
+        durationMs: Date.now() - started,
+        responseEncrypted: await encryptJson({ text: result.text, stopReason: result.stopReason }),
+      });
+    return result;
+  } catch (error) {
+    await db()
+      .insert(aiCalls)
+      .values({
+        ...base,
+        model: request.model ?? 'default',
+        status: 'failed',
+        error: error instanceof HttpError ? error.message : 'Unexpected failure',
+        durationMs: Date.now() - started,
+      });
+    throw error;
+  }
+}
+
+export async function usage(now = new Date()): Promise<AiUsage> {
+  const since = monthStart(now);
+  const rows = await db()
+    .select({
+      purpose: aiCalls.purpose,
+      calls: sql<number>`count(*)::int`,
+      failures: sql<number>`count(*) filter (where ${aiCalls.status} = 'failed')::int`,
+      tokens: sql<number>`coalesce(sum(${aiCalls.inputTokens} + ${aiCalls.outputTokens}), 0)::int`,
+    })
+    .from(aiCalls)
+    .where(and(gte(aiCalls.createdAt, since)))
+    .groupBy(aiCalls.purpose);
+  const sast = new Date(since.getTime() + 2 * 3_600_000);
+  return {
+    month: sast.toISOString().slice(0, 7),
+    tokensUsed: rows.reduce((sum, row) => sum + row.tokens, 0),
+    tokenLimit: monthlyTokenLimit(),
+    calls: rows.reduce((sum, row) => sum + row.calls, 0),
+    failures: rows.reduce((sum, row) => sum + row.failures, 0),
+    byPurpose: rows.map(({ purpose, calls, tokens }) => ({ purpose, calls, tokens })),
+    configured: aiConfigured(),
+  };
+}
+
+// ------------------------------------------------------------------ triage
+
+/** The intake facts triage works from (raw; de-identified before sending). */
+export interface TriageInput {
+  practiceArea: string;
+  jurisdiction: string;
+  urgencyHint: string;
+  matterSummary: string;
   requestedOutcome?: string;
+  documentsMentioned?: string;
+  people: KnownPerson[];
 }
 
 export interface AiAssessment {
@@ -23,7 +145,9 @@ export interface AiAssessment {
   popiaNotes: string[];
 }
 
-function ensureStringArray(value: unknown): string[] {
+const URGENCIES = ['critical', 'high', 'medium', 'low'];
+
+export function ensureStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.filter((item) => item != null && item !== '').map(String);
   }
@@ -41,188 +165,99 @@ function ensureStringArray(value: unknown): string[] {
   return [String(value)];
 }
 
-function normalizeAssessmentFields(assessment: Record<string, unknown>): AiAssessment {
+/** The text triage sends: every field de-identified together. */
+export function triageBrief(input: TriageInput) {
+  const sections = [
+    `Practice area: ${input.practiceArea || 'Not stated'}`,
+    `Jurisdiction: ${input.jurisdiction || 'South Africa'}`,
+    `Urgency given by the client: ${input.urgencyHint || 'unspecified'}`,
+    `Facts:\n${input.matterSummary}`,
+    input.requestedOutcome ? `Outcome the client wants:\n${input.requestedOutcome}` : '',
+    input.documentsMentioned ? `Documents mentioned:\n${input.documentsMentioned}` : '',
+  ].filter(Boolean);
+  return deidentify(sections.join('\n\n'), input.people);
+}
+
+const TRIAGE_SYSTEM = [
+  'You help attorneys at a South African law firm triage new client intakes.',
+  'You receive a de-identified intake: people appear as tokens such as [Client]; keep the tokens as they are and do not guess who anyone is.',
+  'This is triage for the attorney, not legal advice and not a legal opinion: do not state what the law is or cite authority.',
+  'Point out facts that suggest deadlines (prescription, court dates, notice periods) so the attorney checks them.',
+  'Answer with one JSON object and nothing else, with keys:',
+  'matterType (string), urgency ("critical" | "high" | "medium" | "low"), summary (string, at most 120 words),',
+  'keyFacts (string[]), attorneyQuestions (string[]), recommendedDocuments (string[]),',
+  'complianceFlags (string[]), nextActions (string[]), confidence (number 0-1).',
+].join(' ');
+
+/** No model configured: an honest "not assessed" record, never invented advice. */
+function notAssessed(input: TriageInput): AiAssessment {
+  const hint = input.urgencyHint.toLowerCase();
   return {
-    ...(assessment as unknown as AiAssessment),
-    keyFacts: ensureStringArray(assessment.keyFacts),
-    attorneyQuestions: ensureStringArray(assessment.attorneyQuestions),
-    recommendedDocuments: ensureStringArray(assessment.recommendedDocuments),
-    complianceFlags: ensureStringArray(assessment.complianceFlags),
-    nextActions: ensureStringArray(assessment.nextActions),
-    popiaNotes: ensureStringArray(assessment.popiaNotes),
+    provider: 'none',
+    model: 'none',
+    matterType: input.practiceArea || 'General',
+    urgency: URGENCIES.includes(hint) ? hint : 'medium',
+    summary:
+      'Not assessed by AI (AI is not configured for this platform). An attorney must review the intake.',
+    keyFacts: [],
+    attorneyQuestions: [],
+    recommendedDocuments: [],
+    complianceFlags: [],
+    nextActions: ['Attorney to review the intake and confirm next steps.'],
+    confidence: 0,
+    popiaNotes: ['No information was sent to an AI service.'],
   };
 }
 
-function inferUrgency(text: string): string {
-  const lowered = text.toLowerCase();
-
-  if (
-    lowered.includes('urgent') ||
-    lowered.includes('interdict') ||
-    lowered.includes('evict') ||
-    lowered.includes('summons') ||
-    lowered.includes('arrest') ||
-    lowered.includes('dismissal tomorrow')
-  ) {
-    return 'critical';
-  }
-
-  if (
-    lowered.includes('court') ||
-    lowered.includes('deadline') ||
-    lowered.includes('divorce') ||
-    lowered.includes('maintenance') ||
-    lowered.includes('warrant')
-  ) {
-    return 'high';
-  }
-
-  if (lowered.includes('agreement') || lowered.includes('contract')) {
-    return 'medium';
-  }
-
-  return 'medium';
+export interface TriageOutcome {
+  assessment: AiAssessment;
+  /** What was sent (or would have been), for the assessment record. */
+  brief: { text: string; replacements: Array<{ token: string; kind: string; count: number }> };
 }
 
-function inferPracticeArea(text: string, fallback = 'General'): string {
-  const lowered = text.toLowerCase();
-
-  if (lowered.includes('divorce') || lowered.includes('custody')) {
-    return 'Family Law';
+/**
+ * Triage an intake. With AI configured, a failed or malformed answer is an
+ * error the user sees (and can retry); without it, the matter is opened as
+ * "not assessed".
+ */
+export async function triage(
+  input: TriageInput,
+  context: Omit<CallContext, 'purpose'>,
+): Promise<TriageOutcome> {
+  const brief = triageBrief(input);
+  const sent = { text: brief.text, replacements: brief.replacements };
+  if (!aiConfigured()) {
+    return { assessment: notAssessed(input), brief: sent };
   }
-  if (
-    lowered.includes('dismissal') ||
-    lowered.includes('labour') ||
-    lowered.includes('employment')
-  ) {
-    return 'Labour Law';
-  }
-  if (lowered.includes('property') || lowered.includes('transfer')) {
-    return 'Conveyancing';
-  }
-  if (lowered.includes('estate') || lowered.includes('will') || lowered.includes('deceased')) {
-    return 'Estate Administration';
-  }
-  if (lowered.includes('contract') || lowered.includes('shareholder')) {
-    return 'Commercial';
-  }
-  if (lowered.includes('criminal') || lowered.includes('bail')) {
-    return 'Criminal Defence';
-  }
-  return fallback;
-}
-
-function fallbackAssessment(input: MatterBrief): AiAssessment {
-  const text = input.matterSummary || '';
-  const urgency = inferUrgency(text);
-  const practiceArea = inferPracticeArea(text, input.practiceArea);
-
-  return {
-    provider: 'rules',
-    model: 'offline-triage',
-    matterType: practiceArea,
-    urgency,
-    summary: `The intake indicates a ${urgency} priority ${practiceArea.toLowerCase()} matter. The attorney should review the facts, confirm jurisdiction, and validate all dates and deadlines before proceeding.`,
-    keyFacts: [
-      input.jurisdiction ? `Jurisdiction: ${input.jurisdiction}` : null,
-      input.requestedOutcome ? `Requested outcome: ${input.requestedOutcome}` : null,
-      'Raw PII was excluded from the model prompt.',
-    ].filter((fact): fact is string => Boolean(fact)),
-    attorneyQuestions: [
-      'What is the exact date the issue first arose?',
-      'Are there signed documents, notices, or correspondence?',
-      'Has any court process or statutory deadline already started running?',
-    ],
-    recommendedDocuments: [
-      'Signed mandate or engagement letter',
-      'Identity and contact verification kept in the encrypted client record',
-      'Any notices, summonses, contracts, or correspondence relevant to the dispute',
-    ],
-    complianceFlags: [
-      'Raw intake data stored encrypted at rest',
-      'Redacted matter brief only was used for model assessment',
-    ],
-    nextActions: [
-      'Attorney intake review',
-      'Confirm jurisdiction and limitation periods',
-      'Request missing source documents from the client',
-    ],
-    confidence: 0.66,
-    popiaNotes: [
-      'POPIA purpose limitation applied.',
-      'Only the redacted brief was sent for model assessment.',
-    ],
-  };
-}
-
-function extractJsonObject(text: string): Record<string, unknown> {
-  const trimmed = String(text || '').trim();
-
-  try {
-    return JSON.parse(trimmed);
-  } catch (error) {
-    const match = trimmed.match(/\{[\s\S]*\}/);
-    if (!match) {
-      throw error;
-    }
-    return JSON.parse(match[0]);
-  }
-}
-
-async function anthropicAssessment(input: MatterBrief): Promise<AiAssessment> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return fallbackAssessment(input);
-  }
-
-  const model = process.env.AI_MODEL || 'claude-sonnet-4-20250514';
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+  const result = await callModel(
+    {
+      system: TRIAGE_SYSTEM,
+      messages: [{ role: 'user', content: brief.text }],
+      maxTokens: 1500,
+      temperature: 0,
     },
-    body: JSON.stringify({
-      model,
-      max_tokens: 1200,
-      temperature: 0.2,
-      system: [
-        'You are the attorney-facing triage assistant for a South African legal practice.',
-        'Use only the redacted matter brief provided.',
-        'Do not infer or repeat personally identifying information.',
-        'Return JSON only with keys: matterType, urgency, summary, keyFacts, attorneyQuestions, recommendedDocuments, complianceFlags, nextActions, confidence, popiaNotes.',
-      ].join(' '),
-      messages: [
-        {
-          role: 'user',
-          content: JSON.stringify(input, null, 2),
-        },
+    { ...context, purpose: 'triage' },
+  );
+  const parsed = parseJsonAnswer<Record<string, unknown>>(result.text);
+  const urgency = String(parsed.urgency ?? '').toLowerCase();
+  const confidence = Number(parsed.confidence);
+  return {
+    assessment: {
+      provider: result.provider,
+      model: result.model,
+      matterType: String(parsed.matterType || input.practiceArea || 'General').slice(0, 100),
+      urgency: URGENCIES.includes(urgency) ? urgency : 'medium',
+      summary: String(parsed.summary ?? '').slice(0, 2000),
+      keyFacts: ensureStringArray(parsed.keyFacts),
+      attorneyQuestions: ensureStringArray(parsed.attorneyQuestions),
+      recommendedDocuments: ensureStringArray(parsed.recommendedDocuments),
+      complianceFlags: ensureStringArray(parsed.complianceFlags),
+      nextActions: ensureStringArray(parsed.nextActions),
+      confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0,
+      popiaNotes: [
+        `Only a de-identified brief was sent (${brief.replacements.reduce((n, r) => n + r.count, 0)} identifiers removed).`,
       ],
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Anthropic request failed with ${response.status}`);
-  }
-
-  const payload = (await response.json()) as { content?: Array<{ text?: string }> };
-  const text = payload?.content?.[0]?.text || '';
-  const parsed = extractJsonObject(text);
-
-  return normalizeAssessmentFields({
-    provider: 'anthropic',
-    model,
-    ...parsed,
-  });
+    },
+    brief: sent,
+  };
 }
-
-async function assessMatter(input: MatterBrief): Promise<AiAssessment> {
-  try {
-    return await anthropicAssessment(input);
-  } catch (error) {
-    return fallbackAssessment(input);
-  }
-}
-
-export { assessMatter, fallbackAssessment, ensureStringArray };

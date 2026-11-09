@@ -6,6 +6,7 @@ import type { Notice } from './DismissibleNotice';
 import MatterAccessPanel from './MatterAccessPanel';
 import MatterPartiesPanel from './MatterPartiesPanel';
 import MatterCourtPanel from './MatterCourtPanel';
+import ResearchPanel from './ResearchPanel';
 
 interface CaseWorkspaceProps {
   api: ApiClient;
@@ -16,6 +17,8 @@ interface CaseWorkspaceProps {
   canEdit?: boolean;
   /** calendar.write: add prescriptions and change their status. */
   canEditCalendar?: boolean;
+  /** research.use: prepare de-identified research briefs. */
+  canResearch?: boolean;
 }
 
 function CaseWorkspace({
@@ -25,6 +28,7 @@ function CaseWorkspace({
   onChanged,
   canEdit = true,
   canEditCalendar = false,
+  canResearch = false,
 }: CaseWorkspaceProps) {
   const [caseRecord, setCaseRecord] = useState<CaseDetail | null>(null);
   const [busy, setBusy] = useState(false);
@@ -310,6 +314,10 @@ function CaseWorkspace({
             canEditMatter={canEdit}
             canEditCalendar={canEditCalendar}
           />
+
+          {canResearch ? (
+            <ResearchPanel key={`research-${caseRecord.id}`} caseId={caseRecord.id} />
+          ) : null}
 
           <MatterPartiesPanel
             key={`parties-${caseRecord.id}`}

@@ -99,7 +99,12 @@ When the firms table is empty, the server creates a `default` firm from these va
 - **Keep `INTAKE_ENCRYPTION_KEY` and `AUDIT_CHAIN_SECRET` safe.** With `KEY_PROVIDER=local` the first wraps every firm's keys: losing it makes stored client data unreadable. Changing the second makes the audit chain fail verification. See *Encryption and records* for rotating keys.
 - The server applies pending migrations on start (`DB_MIGRATE_ON_START=false` to run `npm run db:migrate -w apps/api` as a separate release step instead).
 - `/ready` returns 503 until the database answers.
-- `ANTHROPIC_API_KEY` enables live AI triage; without it the backend uses rules-based triage.
+- **AI** goes through one client (`apps/api/src/lib/ai-client.ts`):
+  - **Providers.** `AI_PROVIDER=foundry` (Claude in Microsoft Foundry at `AI_ENDPOINT`, keyless via the managed identity or with `AI_API_KEY`) or `anthropic` (development). `AI_MODEL` / `AI_RESEARCH_MODEL` name the model or deployment.
+  - **No AI.** Without a provider, intakes open as "not assessed".
+  - **Failures.** A failed AI call is an error the user can retry; there is no rules-based fallback.
+  - **Logging and limits.** Every call is logged per firm (tokens, encrypted de-identified prompt and answer) and capped by `AI_FIRM_MONTHLY_TOKENS`. Administrators see usage at `GET /api/ai/usage`.
+  - **De-identification.** Everything sent is de-identified first (`services/deidentify.ts`); research briefs are previewed, edited and confirmed by the attorney.
 - Interim hosting is Render (`render.yaml`: `npm ci --include=dev && npm run build`, then `npm start`).
 - **Azure** (South Africa North, DR South Africa West): Terraform in `infra/terraform`, the container image from `Dockerfile`, GitHub Actions for CI (`ci.yml`, including an image smoke test and `terraform validate`), infrastructure (`infra.yml`) and releases (`deploy.yml`). See [`docs/runbooks/deployment.md`](docs/runbooks/deployment.md).
 - **Subscriptions**: firms pay through PayFast recurring billing (`PAYFAST_MERCHANT_ID`, `PAYFAST_MERCHANT_KEY`, `PAYFAST_PASSPHRASE`, `PAYFAST_SANDBOX`; trial, grace and VAT settings `SUBSCRIPTION_TRIAL_DAYS`, `SUBSCRIPTION_TRIAL_SEATS`, `SUBSCRIPTION_GRACE_DAYS`, `PLATFORM_VAT_RATE`). Plans: `npm run ops -w apps/api -- plans set …`; daily notices and read-only mode: `ops subscriptions`. See [`docs/runbooks/subscriptions.md`](docs/runbooks/subscriptions.md).
