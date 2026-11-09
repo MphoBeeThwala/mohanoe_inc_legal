@@ -13,6 +13,7 @@ import usersRoutes from './users.routes';
 import firmRoutes from './firm.routes';
 import supportRoutes from './support.routes';
 import timeRoutes from './time.routes';
+import courtRollRoutes from './court-roll.routes';
 import { clients, conflicts, partiesRouter } from './clients.routes';
 
 const router = express.Router();
@@ -31,6 +32,7 @@ router.use('/users', usersRoutes);
 router.use('/firm', firmRoutes);
 router.use('/support', supportRoutes);
 router.use('/time', timeRoutes);
+router.use('/court-rolls', courtRollRoutes);
 router.use('/clients', clients);
 router.use('/parties', partiesRouter);
 router.use('/conflicts', conflicts);

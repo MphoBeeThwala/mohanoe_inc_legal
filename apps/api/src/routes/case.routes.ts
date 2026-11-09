@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import { sendError } from '../lib/http';
+import * as courtService from '../services/court.service';
 import * as clientsService from '../services/clients.service';
 import * as caseController from '../controllers/case.controller';
 import { authenticateRequest, requirePermission } from '../services/auth.service';
@@ -17,6 +18,13 @@ router.post(
   caseController.completeTask,
 );
 router.post('/:caseId/status', requirePermission('matters.write'), caseController.updateStatus);
+router.put('/:caseId/court', requirePermission('matters.write'), async (req, res) => {
+  try {
+    res.json(await courtService.setMatterCourt(String(req.params.caseId), req.body, req.auth));
+  } catch (error) {
+    sendError(res, error);
+  }
+});
 router.post('/:caseId/timeline', requirePermission('matters.write'), caseController.addTimeline);
 
 // Opening a matter for a client, and who is on a matter.

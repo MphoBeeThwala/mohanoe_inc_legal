@@ -13,7 +13,7 @@ import * as auditService from '../services/audit.service';
 import { createStaff, signInAgain, type TestStaff } from './helpers';
 
 /** Platform-level tables: no firm_id, and no access for app_tenant. */
-const PLATFORM_TABLES = ['platform_operators'];
+const PLATFORM_TABLES = ['platform_operators', 'court_roll_documents', 'court_roll_entries'];
 
 const HOST_A = 'portal.alpha-law.test';
 const HOST_B = 'portal.beta-law.test';

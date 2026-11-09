@@ -451,10 +451,17 @@ export const cases = pgTable(
     nextAction: text('next_action').notNull(),
     /** 'firm': all staff with matter access; 'restricted': members (and admins) only. */
     access: text('access').notNull().default('firm'),
+    /** Court division code (COURT_DIVISIONS in shared), once the matter is in court. */
+    courtDivision: text('court_division'),
+    /** The court's case number as given, e.g. 12345/2025 or 2025-012345 (not personal information). */
+    courtCaseNumber: text('court_case_number'),
+    /** courtCaseNumber normalised (number/yyyy) for matching court rolls. */
+    courtCaseKey: text('court_case_key'),
     ...updatable,
   },
   (t) => [
     index('cases_created_at_idx').on(t.createdAt),
+    index('cases_court_case_key_idx').on(t.courtDivision, t.courtCaseKey),
     uniqueIndex('cases_firm_case_number_idx').on(t.firmId, t.caseNumber),
     tenantPolicy('cases'),
     pgPolicy('cases_matter_access', {
@@ -1037,21 +1044,66 @@ export const calendarEvents = pgTable(
       .notNull()
       .references(() => cases.id, { onDelete: 'cascade' }),
     caseNumber: text('case_number').notNull(),
-    title: text('title').notNull(),
+    /** Events from before epic 7 only; newer ones keep title, location and notes encrypted. */
+    title: text('title').notNull().default(''),
     eventType: text('event_type').notNull().default('deadline'),
     startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
     endsAt: timestamp('ends_at', { withTimezone: true }),
+    allDay: boolean('all_day').notNull().default(false),
     location: text('location').notNull().default(''),
     notes: text('notes').notNull().default(''),
+    /** { title, location, notes } encrypted with privacy.service. */
+    contentEncrypted: text('content_encrypted'),
+    /** 'scheduled' | 'done' | 'cancelled' */
+    status: text('status').notNull().default('scheduled'),
+    /** 'manual' | 'prescription' | 'court_roll' */
+    source: text('source').notNull().default('manual'),
+    sourceRef: text('source_ref'),
+    assigneeUserId: uuid('assignee_user_id').references(() => users.id, { onDelete: 'set null' }),
+    /** Minutes before the start when reminders go out. */
+    reminderOffsets: jsonb('reminder_offsets').$type<number[]>().notNull().default([]),
+    /** Offsets already sent. */
+    remindersSent: jsonb('reminders_sent').$type<number[]>().notNull().default([]),
     createdBy: text('created_by').notNull(),
     ...timestamps,
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('calendar_events_starts_at_idx').on(t.startsAt),
+    index('calendar_events_status_idx').on(t.status, t.startsAt),
     tenantPolicy('calendar_events'),
     matterPolicy('calendar_events'),
   ],
 );
+
+/** A limitation period on a matter, with its last day on the calendar. */
+export const matterPrescriptions = pgTable(
+  'matter_prescriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id, { onDelete: 'cascade' }),
+    /** PRESCRIPTION_RULES code in shared. */
+    rule: text('rule').notNull(),
+    startsOn: date('starts_on').notNull(),
+    lastDay: date('last_day').notNull(),
+    /** 'running' | 'interrupted' (e.g. summons served) | 'closed' */
+    status: text('status').notNull().default('running'),
+    notesEncrypted: text('notes_encrypted'),
+    eventId: uuid('event_id').references(() => calendarEvents.id, { onDelete: 'set null' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    ...updatable,
+  },
+  (t) => [
+    index('matter_prescriptions_case_idx').on(t.caseId),
+    tenantPolicy('matter_prescriptions'),
+    matterPolicy('matter_prescriptions'),
+  ],
+);
+
+export type MatterPrescriptionRow = typeof matterPrescriptions.$inferSelect;
 
 export const notifications = pgTable(
   'notifications',
@@ -1076,6 +1128,100 @@ export const notifications = pgTable(
     tenantPolicy('notifications'),
   ],
 );
+
+// ---------------------------------------------------------------- court rolls
+
+/**
+ * A published court roll fetched by the sync job. Platform-level: rolls are
+ * public and shared by every firm, and requests (app_tenant) can't read them.
+ * Only case numbers, courtrooms, times and judges are kept, never party names.
+ */
+export const courtRollDocuments = pgTable(
+  'court_roll_documents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** The configured source it came from (its index URL). */
+    source: text('source').notNull(),
+    division: text('division').notNull(),
+    url: text('url').notNull(),
+    title: text('title').notNull(),
+    rollDate: date('roll_date'),
+    contentHash: text('content_hash').notNull(),
+    contentType: text('content_type').notNull(),
+    /** 'active' | 'superseded' (an amended version replaced it) | 'failed' */
+    status: text('status').notNull().default('active'),
+    supersededBy: uuid('superseded_by'),
+    entryCount: integer('entry_count').notNull().default(0),
+    error: text('error'),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('court_roll_documents_version_idx').on(t.url, t.contentHash),
+    index('court_roll_documents_division_idx').on(t.division, t.rollDate),
+  ],
+);
+
+/** One matter on a roll: where and when it is heard. */
+export const courtRollEntries = pgTable(
+  'court_roll_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => courtRollDocuments.id, { onDelete: 'cascade' }),
+    division: text('division').notNull(),
+    /** Normalised court case number (lib/court.ts). */
+    caseKey: text('case_key').notNull(),
+    hearingDate: date('hearing_date'),
+    hearingTime: text('hearing_time'),
+    courtroom: text('courtroom'),
+    judge: text('judge'),
+    /** e.g. 'Opposed motions', 'Civil trials'. */
+    section: text('section'),
+  },
+  (t) => [index('court_roll_entries_case_idx').on(t.division, t.caseKey)],
+);
+
+/** A firm's matter found on a court roll, for staff to put on the calendar or dismiss. */
+export const courtRollMatches = pgTable(
+  'court_roll_matches',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id, { onDelete: 'cascade' }),
+    /** 'sync' (published roll) | 'upload' (a roll the firm uploaded) */
+    origin: text('origin').notNull(),
+    /** The roll's URL, or upload:<sha256> for an uploaded file. */
+    documentRef: text('document_ref').notNull(),
+    documentTitle: text('document_title').notNull(),
+    division: text('division').notNull(),
+    hearingDate: date('hearing_date'),
+    hearingTime: text('hearing_time'),
+    courtroom: text('courtroom'),
+    judge: text('judge'),
+    section: text('section'),
+    /** division|date|section|courtroom|time: one match per listing. */
+    listingKey: text('listing_key').notNull(),
+    /** 'new' | 'accepted' | 'dismissed' | 'removed' (no longer on an amended roll) */
+    status: text('status').notNull().default('new'),
+    eventId: uuid('event_id').references(() => calendarEvents.id, { onDelete: 'set null' }),
+    reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    ...updatable,
+  },
+  (t) => [
+    uniqueIndex('court_roll_matches_listing_idx').on(t.caseId, t.listingKey),
+    index('court_roll_matches_status_idx').on(t.status),
+    tenantPolicy('court_roll_matches'),
+    matterPolicy('court_roll_matches'),
+  ],
+);
+
+export type CourtRollDocumentRow = typeof courtRollDocuments.$inferSelect;
+export type CourtRollEntryRow = typeof courtRollEntries.$inferSelect;
+export type CourtRollMatchRow = typeof courtRollMatches.$inferSelect;
 
 // ---------------------------------------------------------------- audit, reports, compliance
 

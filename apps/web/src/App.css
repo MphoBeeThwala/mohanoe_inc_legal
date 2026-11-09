@@ -1214,3 +1214,58 @@
 .time-table td:nth-child(6) {
   font-variant-numeric: tabular-nums;
 }
+
+/* Calendar */
+.agenda-day h4 {
+  margin: 1rem 0 0.35rem;
+}
+
+.agenda-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.agenda-item {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr auto;
+  gap: 0.75rem;
+  padding: 0.4rem 0.5rem;
+  border-left: 3px solid var(--line, #d5dbe0);
+  margin-bottom: 0.25rem;
+}
+
+.agenda-court_date {
+  border-left-color: #b03a2e;
+}
+
+.agenda-prescription {
+  border-left-color: #c77c02;
+}
+
+.agenda-deadline {
+  border-left-color: #1f4e79;
+}
+
+.agenda-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, #5b6670);
+}
+
+.time-table tr.urgent td {
+  background: #fdf1e6;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.roll-removed {
+  border-left-color: #b03a2e;
+  background: #fdf1e6;
+}

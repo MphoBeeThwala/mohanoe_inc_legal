@@ -20,6 +20,8 @@ import {
   users,
   invoices,
   disbursements,
+  calendarEvents,
+  matterPrescriptions,
   type FirmRow,
 } from '../db/schema';
 import { activeKey, deleteKey } from './keys.service';
@@ -105,6 +107,20 @@ function staleDisbursements(version: number): SQL {
   return notOnVersion(disbursements.descriptionEncrypted, version);
 }
 
+function staleEvents(version: number): SQL {
+  return and(
+    isNotNull(calendarEvents.contentEncrypted),
+    notOnVersion(calendarEvents.contentEncrypted, version),
+  ) as SQL;
+}
+
+function stalePrescriptions(version: number): SQL {
+  return and(
+    isNotNull(matterPrescriptions.notesEncrypted),
+    notOnVersion(matterPrescriptions.notesEncrypted, version),
+  ) as SQL;
+}
+
 function staleUsers(version: number): SQL {
   return and(
     isNotNull(users.mfaSecretEncrypted),
@@ -121,6 +137,7 @@ export interface ReencryptCounts {
   fica: number;
   time: number;
   billing: number;
+  calendar: number;
 }
 
 export interface ReencryptStatus {
@@ -134,6 +151,7 @@ export interface ReencryptStatus {
     fica: number;
     time: number;
     billing: number;
+    calendar: number;
   };
 }
 
@@ -149,6 +167,10 @@ export async function pendingReencryption(): Promise<ReencryptStatus> {
   const [[bi], [bd]] = await Promise.all([
     db().select({ value: count() }).from(invoices).where(staleInvoices(version)),
     db().select({ value: count() }).from(disbursements).where(staleDisbursements(version)),
+  ]);
+  const [[ce], [mp]] = await Promise.all([
+    db().select({ value: count() }).from(calendarEvents).where(staleEvents(version)),
+    db().select({ value: count() }).from(matterPrescriptions).where(stalePrescriptions(version)),
   ]);
   const [[s], [d], [u], [p], [c]] = await Promise.all([
     db().select({ value: count() }).from(submissions).where(staleSubmissions(version)),
@@ -168,6 +190,7 @@ export async function pendingReencryption(): Promise<ReencryptStatus> {
       fica: (fp?.value ?? 0) + (fd?.value ?? 0),
       time: (te?.value ?? 0) + (tm?.value ?? 0),
       billing: (bi?.value ?? 0) + (bd?.value ?? 0),
+      calendar: (ce?.value ?? 0) + (mp?.value ?? 0),
     },
   };
 }
@@ -314,6 +337,25 @@ async function reencryptBatch(): Promise<ReencryptCounts> {
       .where(eq(disbursements.id, row.id));
   }
 
+  const events = await db().select().from(calendarEvents).where(staleEvents(version)).limit(BATCH);
+  for (const row of events) {
+    await db()
+      .update(calendarEvents)
+      .set({ contentEncrypted: await encryptJson(await decryptJson(row.contentEncrypted)) })
+      .where(eq(calendarEvents.id, row.id));
+  }
+  const periods = await db()
+    .select()
+    .from(matterPrescriptions)
+    .where(stalePrescriptions(version))
+    .limit(BATCH);
+  for (const row of periods) {
+    await db()
+      .update(matterPrescriptions)
+      .set({ notesEncrypted: await encryptJson(await decryptJson(row.notesEncrypted)) })
+      .where(eq(matterPrescriptions.id, row.id));
+  }
+
   return {
     submissions: subs.length,
     documents: docs.length,
@@ -323,6 +365,7 @@ async function reencryptBatch(): Promise<ReencryptCounts> {
     fica: profiles.length + kyc.length,
     time: entries.length + running.length,
     billing: bills.length + costs.length,
+    calendar: events.length + periods.length,
   };
 }
 
@@ -337,6 +380,7 @@ export async function reencryptFirm(firm: FirmRow) {
     fica: 0,
     time: 0,
     billing: 0,
+    calendar: 0,
   };
   for (;;) {
     const done = await withTenant(firm, () => reencryptBatch(), { system: true });
@@ -348,6 +392,7 @@ export async function reencryptFirm(firm: FirmRow) {
     total.fica += done.fica;
     total.time += done.time;
     total.billing += done.billing;
+    total.calendar += done.calendar;
     if (Object.values(done).every((value) => value === 0)) {
       return total;
     }
@@ -433,7 +478,17 @@ export async function pruneRetiredKeys(): Promise<number[]> {
         .from(disbursements)
         .where(sql`${disbursements.descriptionEncrypted} like ${prefix}`),
     ]);
-    const inUse = [s, d, u, p, c, fp, fd, te, tm, bi, bd].some((row) => row?.value);
+    const [[ce], [mp]] = await Promise.all([
+      db()
+        .select({ value: count() })
+        .from(calendarEvents)
+        .where(sql`${calendarEvents.contentEncrypted} like ${prefix}`),
+      db()
+        .select({ value: count() })
+        .from(matterPrescriptions)
+        .where(sql`${matterPrescriptions.notesEncrypted} like ${prefix}`),
+    ]);
+    const inUse = [s, d, u, p, c, fp, fd, te, tm, bi, bd, ce, mp].some((row) => row?.value);
     if (!inUse) {
       await deleteKey(key.id);
       pruned.push(key.version);
