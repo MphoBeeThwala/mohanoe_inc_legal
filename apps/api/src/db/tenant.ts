@@ -14,7 +14,7 @@
 import { sql } from 'drizzle-orm';
 import { db, rootDb, type Tx } from './client';
 import type { FirmRow } from './schema';
-import { tenantStorage } from './tenant-context';
+import { currentTenant, tenantStorage } from './tenant-context';
 
 export const TENANT_ROLE = 'app_tenant';
 
@@ -96,4 +96,20 @@ export async function withSystemScope<T>(fn: () => Promise<T>): Promise<T> {
   } finally {
     await tx.execute(sql`select set_config('app.principal', ${previous}, true)`);
   }
+}
+
+/**
+ * Runs fn in a savepoint of the request's transaction: if it throws, all of
+ * its writes are undone, even when the request then answers with a 4xx
+ * (which otherwise commits). Use it for multi-step changes that must happen
+ * together, such as issuing an invoice with its number.
+ */
+export async function atomically<T>(fn: () => Promise<T>): Promise<T> {
+  const tenant = currentTenant();
+  if (!tenant) {
+    throw new Error('No tenant context');
+  }
+  return tenant.tx.transaction((savepoint: Tx) =>
+    tenantStorage.run({ ...tenant, tx: savepoint }, fn),
+  );
 }

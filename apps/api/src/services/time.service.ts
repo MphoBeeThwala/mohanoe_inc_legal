@@ -35,6 +35,7 @@ import {
   type TimerRow,
 } from '../db/schema';
 import { httpError } from '../lib/http';
+import { isUuid } from '../lib/ids';
 import type { Actor } from '../lib/actor';
 import { fromCents, toCents } from '../lib/money';
 import { iso, localDate } from '../lib/time';
@@ -50,7 +51,7 @@ import {
 import { decryptJson, encryptJson } from './privacy.service';
 import * as intakeService from './intake.service';
 import * as auditService from './audit.service';
-import { CLOSED_STATUSES } from './compliance.service';
+import { isClosed } from '../lib/matter-status';
 
 // ---------------------------------------------------------------- helpers
 
@@ -82,13 +83,16 @@ async function requireOpenMatter(ref: string): Promise<CaseRow> {
   if (!matter) {
     throw httpError('Matter not found', 404);
   }
-  if (CLOSED_STATUSES.includes(matter.status)) {
+  if (isClosed(matter.status)) {
     throw httpError(`Matter ${matter.caseNumber} is closed; time can't be recorded on it`, 409);
   }
   return matter;
 }
 
 async function requireFeeEarner(userId: string) {
+  if (!isUuid(userId)) {
+    throw httpError('Fee earner not found', 404);
+  }
   const [person] = await db().select().from(users).where(eq(users.id, userId)).limit(1);
   if (!person || !person.isActive || !STAFF_ROLES.includes(person.role as UserRole)) {
     throw httpError('Fee earner not found', 404);
@@ -302,6 +306,9 @@ export async function recordTime(input: unknown, actor: Actor): Promise<TimeEntr
 
 async function requireEditable(id: string, actor: Actor): Promise<TimeEntryRow> {
   const self = requireActor(actor);
+  if (!isUuid(id)) {
+    throw httpError('Time entry not found', 404);
+  }
   const [row] = await db().select().from(timeEntries).where(eq(timeEntries.id, id)).limit(1);
   if (!row) {
     throw httpError('Time entry not found', 404);
@@ -314,6 +321,9 @@ async function requireEditable(id: string, actor: Actor): Promise<TimeEntryRow> 
   }
   if (row.status === 'written_off') {
     throw httpError('This time has been written off', 409);
+  }
+  if (row.invoiceId) {
+    throw httpError('This time is on a draft invoice; delete the draft to change it', 409);
   }
   return row;
 }

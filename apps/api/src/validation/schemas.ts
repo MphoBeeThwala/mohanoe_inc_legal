@@ -6,7 +6,12 @@
 
 import { z } from 'zod';
 import { httpError } from '../lib/http';
-import { MAX_UNITS_PER_DAY, MINUTES_PER_UNIT, TIME_ACTIVITIES } from '@ahava88/shared';
+import {
+  MAX_UNITS_PER_DAY,
+  MINUTES_PER_UNIT,
+  PAYMENT_METHODS,
+  TIME_ACTIVITIES,
+} from '@ahava88/shared';
 
 const MAX_TEXT = 20_000;
 
@@ -189,6 +194,16 @@ export type DocumentInput = z.infer<typeof documentSchema>;
 
 // ---------------------------------------------------------------- billing
 
+/** A calendar date, YYYY-MM-DD, that exists. */
+const calendarDate = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date (YYYY-MM-DD)')
+  .refine((value) => {
+    const parsed = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value);
+  }, 'must be a real date');
+
 const lineItemSchema = z
   .object({
     description: optionalText(500),
@@ -198,29 +213,58 @@ const lineItemSchema = z
     ),
     rate: money.optional(),
     amount: money.optional(),
+    vatable: z.boolean().default(true),
   })
   .transform((item) => ({
     description: item.description ?? '',
     quantity: item.quantity,
     rate: item.rate ?? item.amount ?? 0,
+    vatable: item.vatable,
   }))
   .refine((item) => item.rate > 0, { message: 'each line item needs a positive rate or amount' });
 
-export const invoiceSchema = z
+const idSelection = z.union([z.literal('all'), z.array(z.string().uuid()).max(2_000)]);
+
+export const invoiceDraftSchema = z
   .object({
     subject: requiredText(300),
-    invoiceNumber: optionalText(60),
-    currency: optionalText(3).transform((value) => (value ?? 'ZAR').toUpperCase()),
-    status: optionalText(40).transform((value) => value ?? 'issued'),
-    lineItems: z.array(lineItemSchema).min(1).max(200),
-    vatIncluded: z.boolean().optional(),
-    issuedAt: optionalDateTime,
-    dueAt: optionalDateTime,
-    paidAt: optionalDateTime,
+    notes: optionalText(2_000),
+    timeEntryIds: idSelection.default('all'),
+    disbursementIds: idSelection.default('all'),
+    lines: z.array(lineItemSchema).max(200).optional(),
+    /** Older clients send lineItems. */
+    lineItems: z.array(lineItemSchema).max(200).optional(),
   })
   .and(z.object({ caseId: optionalText(100), caseRef: optionalText(100) }))
-  .transform(({ caseId, caseRef, ...rest }) => ({ ...rest, caseRef: caseId || caseRef || '' }));
-export type InvoiceInput = z.infer<typeof invoiceSchema>;
+  .transform(({ caseId, caseRef, lines, lineItems, ...rest }) => ({
+    ...rest,
+    lines: lines ?? lineItems ?? [],
+    caseRef: caseId || caseRef || '',
+  }));
+export type InvoiceDraftInput = z.infer<typeof invoiceDraftSchema>;
+
+export const invoiceUpdateSchema = z.object({
+  subject: requiredText(300).optional(),
+  notes: optionalText(2_000),
+  lines: z.array(lineItemSchema).max(200).optional(),
+});
+
+export const paymentSchema = z.object({
+  amount: money.refine((value) => value > 0, 'amount must be more than zero'),
+  receivedOn: calendarDate.optional(),
+  method: z.enum(PAYMENT_METHODS),
+  reference: optionalText(120).transform((value) => value ?? ''),
+});
+
+export const disbursementSchema = z.object({
+  caseRef: requiredText(120),
+  incurredOn: calendarDate.optional(),
+  description: requiredText(500),
+  amount: money.refine((value) => value > 0, 'amount must be more than zero'),
+  vatable: z.boolean().default(true),
+});
+
+export const invoiceSendSchema = z.object({ to: email.optional() });
 
 export const ledgerEntrySchema = z
   .object({
@@ -410,16 +454,6 @@ export const matterPartySchema = z
 // ---------------------------------------------------------------- time recording
 
 const timeActivity = z.enum(TIME_ACTIVITIES);
-
-/** A calendar date, YYYY-MM-DD, that exists. */
-const calendarDate = z
-  .string()
-  .trim()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date (YYYY-MM-DD)')
-  .refine((value) => {
-    const parsed = new Date(`${value}T00:00:00Z`);
-    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value);
-  }, 'must be a real date');
 
 const optionalCount = (max: number) =>
   z.preprocess(
