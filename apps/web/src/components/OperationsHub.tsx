@@ -19,6 +19,7 @@ import { ROLE_LABELS, STAFF_ROLES, hasPermission, type Permission } from '@ahava
 import type { Notice } from './DismissibleNotice';
 import DismissibleNotice from './DismissibleNotice';
 import BillingPanel, { rand } from './BillingPanel';
+import CalendarPanel from './CalendarPanel';
 
 const ALL_TABS: Array<[OpsTab, string, Permission]> = [
   ['documents', 'Documents', 'documents.read'],
@@ -56,14 +57,6 @@ const initialLedgerForm = {
   account: 'trust',
   amount: '',
   reference: '',
-  notes: '',
-};
-
-const initialEventForm = {
-  title: '',
-  startsAt: '',
-  eventType: 'deadline',
-  location: '',
   notes: '',
 };
 
@@ -125,7 +118,6 @@ function OperationsHub({
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
   const [billingLedger, setBillingLedger] = useState<LedgerEntry[]>([]);
-  const [calendar, setCalendar] = useState<UpcomingItem[]>([]);
   const [audit, setAudit] = useState<AuditEventRecord[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [reports, setReports] = useState<ReportSnapshot[]>([]);
@@ -137,7 +129,6 @@ function OperationsHub({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [documentForm, setDocumentForm] = useState(initialDocumentForm);
   const [ledgerForm, setLedgerForm] = useState(initialLedgerForm);
-  const [eventForm, setEventForm] = useState(initialEventForm);
   const [notificationForm, setNotificationForm] = useState(initialNotificationForm);
   const [reportForm, setReportForm] = useState(initialReportForm);
   const [complianceForm, setComplianceForm] = useState(initialComplianceForm);
@@ -160,12 +151,7 @@ function OperationsHub({
 
   const loadData = async () => {
     setLoading(true);
-    const batchOne = await loadBatch([
-      '/documents',
-      '/billing/summary',
-      '/billing/ledger',
-      '/calendar/upcoming',
-    ]);
+    const batchOne = await loadBatch(['/documents', '/billing/summary', '/billing/ledger']);
     const batchTwo = await loadBatch([
       '/audit',
       '/notifications',
@@ -184,8 +170,6 @@ function OperationsHub({
       setBillingSummary(byPath['/billing/summary'].data as BillingSummary);
     if (byPath['/billing/ledger']?.ok)
       setBillingLedger(byPath['/billing/ledger'].data as LedgerEntry[]);
-    if (byPath['/calendar/upcoming']?.ok)
-      setCalendar(byPath['/calendar/upcoming'].data as UpcomingItem[]);
     if (byPath['/audit']?.ok) setAudit(byPath['/audit'].data as AuditEventRecord[]);
     if (byPath['/notifications']?.ok)
       setNotifications(byPath['/notifications'].data as NotificationRecord[]);
@@ -275,35 +259,6 @@ function OperationsHub({
       setNotice({
         tone: 'error',
         message: apiErrorMessage(error, 'Could not record ledger entry.'),
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const submitEvent = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!activeCaseId || !eventForm.title || !eventForm.startsAt) {
-      return;
-    }
-
-    setBusy(true);
-    try {
-      await api.post('/calendar', {
-        caseId: activeCaseId,
-        title: eventForm.title,
-        eventType: eventForm.eventType,
-        startsAt: eventForm.startsAt,
-        location: eventForm.location,
-        notes: eventForm.notes,
-      });
-      setEventForm(initialEventForm);
-      await Promise.all([loadData(), onChanged?.()]);
-      setNotice({ tone: 'success', message: 'Calendar event added.' });
-    } catch (error) {
-      setNotice({
-        tone: 'error',
-        message: apiErrorMessage(error, 'Could not add calendar event.'),
       });
     } finally {
       setBusy(false);
@@ -658,85 +613,12 @@ function OperationsHub({
 
       {!loading && tab === 'calendar' ? (
         <section className="ops-section">
-          {can('calendar.write') ? (
-            <form className="stack-form" onSubmit={submitEvent}>
-              <input
-                value={eventForm.title}
-                onChange={(event) =>
-                  setEventForm((current) => ({
-                    ...current,
-                    title: event.target.value,
-                  }))
-                }
-                placeholder="High court appearance"
-              />
-              <input
-                type="datetime-local"
-                value={eventForm.startsAt}
-                onChange={(event) =>
-                  setEventForm((current) => ({
-                    ...current,
-                    startsAt: event.target.value,
-                  }))
-                }
-              />
-              <select
-                value={eventForm.eventType}
-                onChange={(event) =>
-                  setEventForm((current) => ({
-                    ...current,
-                    eventType: event.target.value,
-                  }))
-                }
-              >
-                <option value="deadline">Deadline</option>
-                <option value="hearing">Hearing</option>
-                <option value="client_meeting">Client meeting</option>
-                <option value="internal">Internal</option>
-              </select>
-              <input
-                value={eventForm.location}
-                onChange={(event) =>
-                  setEventForm((current) => ({
-                    ...current,
-                    location: event.target.value,
-                  }))
-                }
-                placeholder="Courtroom / virtual link"
-              />
-              <textarea
-                rows={3}
-                value={eventForm.notes}
-                onChange={(event) =>
-                  setEventForm((current) => ({
-                    ...current,
-                    notes: event.target.value,
-                  }))
-                }
-                placeholder="Notes"
-              />
-              <button className="secondary-button" disabled={busy}>
-                Add event
-              </button>
-            </form>
-          ) : null}
-
-          <div className="mini-list">
-            {calendar.length ? (
-              calendar.slice(0, 6).map((item) => (
-                <div key={item.id} className="mini-item">
-                  <div>
-                    <strong>{item.title}</strong>
-                    <div className="muted">
-                      {item.startsAt} - {'type' in item ? 'task due' : item.eventType}
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <EmptyHint message="No upcoming events." hint="Add a deadline or hearing above." />
-            )}
-          </div>
+          <CalendarPanel
+            currentUser={currentUser}
+            cases={cases}
+            selectedCaseId={activeCaseId || null}
+            onChanged={onChanged}
+          />
         </section>
       ) : null}
 

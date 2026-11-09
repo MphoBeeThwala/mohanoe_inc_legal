@@ -5,6 +5,7 @@ import type { CaseDetail, MatterCase } from '@ahava88/shared';
 import type { Notice } from './DismissibleNotice';
 import MatterAccessPanel from './MatterAccessPanel';
 import MatterPartiesPanel from './MatterPartiesPanel';
+import MatterCourtPanel from './MatterCourtPanel';
 
 interface CaseWorkspaceProps {
   api: ApiClient;
@@ -13,6 +14,8 @@ interface CaseWorkspaceProps {
   onChanged: () => Promise<void>;
   /** matters.write: show the forms that change the matter. */
   canEdit?: boolean;
+  /** calendar.write: add prescriptions and change their status. */
+  canEditCalendar?: boolean;
 }
 
 function CaseWorkspace({
@@ -21,6 +24,7 @@ function CaseWorkspace({
   onSelectCase,
   onChanged,
   canEdit = true,
+  canEditCalendar = false,
 }: CaseWorkspaceProps) {
   const [caseRecord, setCaseRecord] = useState<CaseDetail | null>(null);
   const [busy, setBusy] = useState(false);
@@ -299,6 +303,13 @@ function CaseWorkspace({
               ))}
             </div>
           </section>
+
+          <MatterCourtPanel
+            key={`court-${caseRecord.id}`}
+            matter={caseRecord}
+            canEditMatter={canEdit}
+            canEditCalendar={canEditCalendar}
+          />
 
           <MatterPartiesPanel
             key={`parties-${caseRecord.id}`}
