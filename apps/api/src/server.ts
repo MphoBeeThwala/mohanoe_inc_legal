@@ -7,9 +7,7 @@ import { describeError, errorMessage, errorStatus } from './lib/http';
 import routes from './routes';
 import { assertConfig, configWarnings } from './config/env';
 import { getPublicBranding } from './config/brand';
-import { seedDefaultUsers } from './services/auth.service';
 import { closeDb, dbDriver, initDb, pingDb } from './db/client';
-import { withTenant } from './db/tenant';
 import { tenantContext } from './middleware/tenant';
 import { ensureDefaultFirm } from './services/firm.service';
 import { createRateLimiter, requestLogger, securityHeaders } from './middleware/security';
@@ -41,13 +39,12 @@ app.use((req, res, next) => {
 });
 app.use(
   cors({
+    // Only listed origins get CORS headers (development front ends). Others
+    // get none, so browsers block cross-origin reads; same-origin requests
+    // from any firm's domain don't need CORS. Writes from foreign origins are
+    // refused by the session CSRF check (auth.service.ts).
     origin(origin, callback) {
-      if (!origin || allowedOrigins.has(origin)) {
-        callback(null, true);
-        return;
-      }
-
-      callback(new Error('Origin not allowed by CORS'));
+      callback(null, Boolean(origin && allowedOrigins.has(origin)));
     },
     credentials: true,
   }),
@@ -143,11 +140,6 @@ if (require.main === module) {
       const defaultFirm = await ensureDefaultFirm();
       if (defaultFirm) {
         console.log(`Default firm: ${defaultFirm.slug} (${defaultFirm.legalName})`);
-      }
-      if (defaultFirm && String(process.env.SEED_ADMIN_ON_STARTUP || '').toLowerCase() === 'true') {
-        await withTenant(defaultFirm, () => seedDefaultUsers()).catch((error: unknown) => {
-          console.error('Admin seed on startup failed:', errorMessage(error));
-        });
       }
 
       const server = app.listen(port, () => {

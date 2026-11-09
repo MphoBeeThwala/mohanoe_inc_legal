@@ -9,6 +9,7 @@ import documentsRoutes from './documents.routes';
 import notificationsRoutes from './notifications.routes';
 import reportsRoutes from './reports.routes';
 import intakeRoutes from './intake.routes';
+import usersRoutes from './users.routes';
 
 const router = express.Router();
 
@@ -22,5 +23,6 @@ router.use('/documents', documentsRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/reports', reportsRoutes);
 router.use('/intake', intakeRoutes);
+router.use('/users', usersRoutes);
 
 export default router;

@@ -3,6 +3,7 @@ import type { ApiClient } from '../api';
 import { apiErrorMessage } from '../api';
 import type { CaseDetail, MatterCase } from '@ahava88/shared';
 import type { Notice } from './DismissibleNotice';
+import MatterAccessPanel from './MatterAccessPanel';
 
 interface CaseWorkspaceProps {
   api: ApiClient;
@@ -281,6 +282,16 @@ function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }: CaseWor
               ))}
             </div>
           </section>
+
+          <MatterAccessPanel
+            key={caseRecord.id}
+            caseId={caseRecord.id}
+            onLostAccess={() => {
+              setCaseRecord(null);
+              setNotice({ tone: 'info', message: 'You no longer have access to that matter.' });
+              onChanged().catch(() => undefined);
+            }}
+          />
         </>
       )}
 

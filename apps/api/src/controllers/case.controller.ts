@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { sendError } from '../lib/http';
 import * as caseService from '../services/case.service';
+import * as matterAccess from '../services/matter-access.service';
 
 async function index(req: Request, res: Response) {
   try {
@@ -68,4 +69,51 @@ async function addTimeline(req: Request, res: Response) {
   }
 }
 
-export { addTask, addTimeline, completeTask, index, show, updateStatus };
+function accessHandler(fn: (caseRef: string, req: Request) => Promise<unknown>, status = 200) {
+  return async (req: Request, res: Response) => {
+    try {
+      const result = await fn(String(req.params.caseId), req);
+      if (result === null) {
+        // The caller removed their own access to a restricted matter.
+        return res.status(204).end();
+      }
+      res.status(status).json(result);
+    } catch (error) {
+      sendError(res, error);
+    }
+  };
+}
+
+const getAccess = accessHandler((ref, req) => matterAccess.getAccess(ref, req.auth ?? {}));
+const setAccess = accessHandler((ref, req) =>
+  matterAccess.setAccess(ref, req.body, req.auth ?? {}),
+);
+const addMember = accessHandler(
+  (ref, req) => matterAccess.addMember(ref, req.body, req.auth ?? {}),
+  201,
+);
+const removeMember = accessHandler((ref, req) =>
+  matterAccess.removeMember(ref, String(req.params.userId), req.auth ?? {}),
+);
+const addExclusion = accessHandler(
+  (ref, req) => matterAccess.addExclusion(ref, req.body, req.auth ?? {}),
+  201,
+);
+const removeExclusion = accessHandler((ref, req) =>
+  matterAccess.removeExclusion(ref, String(req.params.userId), req.auth ?? {}),
+);
+
+export {
+  addExclusion,
+  addMember,
+  getAccess,
+  removeExclusion,
+  removeMember,
+  setAccess,
+  addTask,
+  addTimeline,
+  completeTask,
+  index,
+  show,
+  updateStatus,
+};

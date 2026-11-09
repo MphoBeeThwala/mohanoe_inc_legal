@@ -15,11 +15,13 @@
 
 import { sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
   bigint,
   bigserial,
   boolean,
   date,
   index,
+  integer,
   jsonb,
   numeric,
   pgPolicy,
@@ -89,6 +91,20 @@ const tenantPolicy = (table: string) =>
     withCheck: sql`firm_id = nullif(current_setting('app.firm_id', true), '')::uuid`,
   });
 
+/**
+ * Matter-level access for a table whose rows belong to a case: a row is
+ * visible only when its case is (the subquery is itself filtered by the
+ * cases_matter_access policy). Applies to app_tenant, i.e. every request.
+ */
+const matterPolicy = (table: string) =>
+  pgPolicy(`${table}_matter_access`, {
+    as: 'restrictive',
+    for: 'all',
+    to: 'app_tenant',
+    using: sql.raw(`exists (select 1 from cases c where c.id = ${table}.case_id)`),
+    withCheck: sql.raw(`exists (select 1 from cases c where c.id = ${table}.case_id)`),
+  });
+
 // ---------------------------------------------------------------- identity
 
 export const users = pgTable(
@@ -99,13 +115,105 @@ export const users = pgTable(
     email: text('email').notNull(),
     fullName: text('full_name').notNull(),
     role: text('role').notNull().default('attorney'),
-    passwordHash: text('password_hash').notNull(),
-    passwordSalt: text('password_salt').notNull(),
+    /** Null for accounts that only sign in with Entra External ID. */
+    passwordHash: text('password_hash'),
+    passwordSalt: text('password_salt'),
+    passwordChangedAt: timestamp('password_changed_at', { withTimezone: true }),
+    /** Entra External ID (OIDC) identity, linked through an invite. */
+    oidcIssuer: text('oidc_issuer'),
+    oidcSubject: text('oidc_subject'),
+    /** TOTP secret, encrypted with privacy.service. Null until enrolled. */
+    mfaSecretEncrypted: text('mfa_secret_encrypted'),
+    mfaEnabledAt: timestamp('mfa_enabled_at', { withTimezone: true }),
+    /** Last accepted TOTP time step, so a code can't be replayed. */
+    mfaLastStep: bigint('mfa_last_step', { mode: 'number' }),
+    failedLoginCount: integer('failed_login_count').notNull().default(0),
+    lockedUntil: timestamp('locked_until', { withTimezone: true }),
     isActive: boolean('is_active').notNull().default(true),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
     ...timestamps,
   },
-  (t) => [uniqueIndex('users_firm_email_idx').on(t.firmId, t.email), tenantPolicy('users')],
+  (t) => [
+    uniqueIndex('users_firm_email_idx').on(t.firmId, t.email),
+    uniqueIndex('users_firm_oidc_idx').on(t.firmId, t.oidcIssuer, t.oidcSubject),
+    tenantPolicy('users'),
+  ],
+);
+
+/**
+ * Signed-in sessions. The browser holds a random token in an httpOnly cookie;
+ * only its SHA-256 hash is stored, so a database leak yields no usable session.
+ */
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    /** 'password' (with TOTP) or 'oidc' (MFA enforced by Entra). */
+    method: text('method').notNull(),
+    userAgent: text('user_agent'),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index('sessions_user_id_idx').on(t.userId), tenantPolicy('sessions')],
+);
+
+/** One-time MFA recovery codes (hashed). */
+export const mfaRecoveryCodes = pgTable(
+  'mfa_recovery_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index('mfa_recovery_codes_user_id_idx').on(t.userId), tenantPolicy('mfa_recovery_codes')],
+);
+
+/** Staff invitations: the only way to create an account in a firm. */
+export const invites = pgTable(
+  'invites',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    email: text('email').notNull(),
+    fullName: text('full_name').notNull(),
+    role: text('role').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    invitedBy: uuid('invited_by').references(() => users.id, { onDelete: 'set null' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index('invites_firm_email_idx').on(t.firmId, t.email), tenantPolicy('invites')],
+);
+
+/** Password reset links (hashed tokens, single use, short-lived). */
+export const passwordResets = pgTable(
+  'password_resets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index('password_resets_user_id_idx').on(t.userId), tenantPolicy('password_resets')],
 );
 
 // ---------------------------------------------------------------- sequences
@@ -143,12 +251,22 @@ export const submissions = pgTable(
     emailLookup: text('email_lookup').notNull(),
     consentToAi: boolean('consent_to_ai').notNull().default(false),
     consentToStorage: boolean('consent_to_storage').notNull().default(false),
+    /** The matter this intake became (set in the same transaction as the case). */
+    caseId: uuid('case_id').references((): AnyPgColumn => cases.id, { onDelete: 'set null' }),
     ...updatable,
   },
   (t) => [
     index('submissions_created_at_idx').on(t.createdAt),
     index('submissions_email_lookup_idx').on(t.emailLookup),
     tenantPolicy('submissions'),
+    // An intake is hidden when the matter it became is hidden.
+    pgPolicy('submissions_matter_access', {
+      as: 'restrictive',
+      for: 'all',
+      to: 'app_tenant',
+      using: sql`case_id is null or exists (select 1 from cases c where c.id = submissions.case_id)`,
+      withCheck: sql`case_id is null or exists (select 1 from cases c where c.id = submissions.case_id)`,
+    }),
   ],
 );
 
@@ -181,7 +299,16 @@ export const assessments = pgTable(
       .default({}),
     ...timestamps,
   },
-  () => [tenantPolicy('assessments')],
+  () => [
+    tenantPolicy('assessments'),
+    pgPolicy('assessments_matter_access', {
+      as: 'restrictive',
+      for: 'all',
+      to: 'app_tenant',
+      using: sql`exists (select 1 from submissions s where s.id = assessments.intake_submission_id)`,
+      withCheck: sql`exists (select 1 from submissions s where s.id = assessments.intake_submission_id)`,
+    }),
+  ],
 );
 
 // ---------------------------------------------------------------- matters
@@ -201,12 +328,68 @@ export const cases = pgTable(
     urgency: text('urgency').notNull(),
     status: text('status').notNull().default('triage'),
     nextAction: text('next_action').notNull(),
+    /** 'firm': all staff with matter access; 'restricted': members (and admins) only. */
+    access: text('access').notNull().default('firm'),
     ...updatable,
   },
   (t) => [
     index('cases_created_at_idx').on(t.createdAt),
     uniqueIndex('cases_firm_case_number_idx').on(t.firmId, t.caseNumber),
     tenantPolicy('cases'),
+    pgPolicy('cases_matter_access', {
+      as: 'restrictive',
+      for: 'all',
+      to: 'app_tenant',
+      using: sql`app_case_visible(access, id)`,
+      withCheck: sql`app_case_visible(access, id)`,
+    }),
+  ],
+);
+
+/** Staff on a matter. A restricted matter is visible only to its members and admins. */
+export const caseMembers = pgTable(
+  'case_members',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** 'lead' can manage the matter's access; 'member' can work on it. */
+    memberRole: text('member_role').notNull().default('member'),
+    addedBy: uuid('added_by').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('case_members_case_user_idx').on(t.caseId, t.userId),
+    index('case_members_user_id_idx').on(t.userId),
+    tenantPolicy('case_members'),
+  ],
+);
+
+/** Ethical walls: these staff can never see the matter, whatever their role. */
+export const caseExclusions = pgTable(
+  'case_exclusions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    reason: text('reason').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('case_exclusions_case_user_idx').on(t.caseId, t.userId),
+    index('case_exclusions_user_id_idx').on(t.userId),
+    tenantPolicy('case_exclusions'),
   ],
 );
 
@@ -227,7 +410,11 @@ export const caseTasks = pgTable(
     completedAt: timestamp('completed_at', { withTimezone: true }),
     ...timestamps,
   },
-  (t) => [index('case_tasks_case_id_idx').on(t.caseId), tenantPolicy('case_tasks')],
+  (t) => [
+    index('case_tasks_case_id_idx').on(t.caseId),
+    tenantPolicy('case_tasks'),
+    matterPolicy('case_tasks'),
+  ],
 );
 
 export const caseTimeline = pgTable(
@@ -244,7 +431,11 @@ export const caseTimeline = pgTable(
     actorName: text('actor_name').notNull(),
     ...timestamps,
   },
-  (t) => [index('case_timeline_case_id_idx').on(t.caseId), tenantPolicy('case_timeline')],
+  (t) => [
+    index('case_timeline_case_id_idx').on(t.caseId),
+    tenantPolicy('case_timeline'),
+    matterPolicy('case_timeline'),
+  ],
 );
 
 export const documents = pgTable(
@@ -267,7 +458,11 @@ export const documents = pgTable(
     signedAt: timestamp('signed_at', { withTimezone: true }),
     ...updatable,
   },
-  (t) => [index('documents_case_id_idx').on(t.caseId), tenantPolicy('documents')],
+  (t) => [
+    index('documents_case_id_idx').on(t.caseId),
+    tenantPolicy('documents'),
+    matterPolicy('documents'),
+  ],
 );
 
 // ---------------------------------------------------------------- billing
@@ -307,6 +502,7 @@ export const invoices = pgTable(
     index('billing_invoices_case_id_idx').on(t.caseId),
     uniqueIndex('billing_invoices_firm_number_idx').on(t.firmId, t.invoiceNumber),
     tenantPolicy('billing_invoices'),
+    matterPolicy('billing_invoices'),
   ],
 );
 
@@ -327,7 +523,11 @@ export const ledgerEntries = pgTable(
     createdBy: text('created_by').notNull(),
     ...timestamps,
   },
-  (t) => [index('billing_ledger_case_id_idx').on(t.caseId), tenantPolicy('billing_ledger')],
+  (t) => [
+    index('billing_ledger_case_id_idx').on(t.caseId),
+    tenantPolicy('billing_ledger'),
+    matterPolicy('billing_ledger'),
+  ],
 );
 
 // ---------------------------------------------------------------- calendar & notifications
@@ -350,7 +550,11 @@ export const calendarEvents = pgTable(
     createdBy: text('created_by').notNull(),
     ...timestamps,
   },
-  (t) => [index('calendar_events_starts_at_idx').on(t.startsAt), tenantPolicy('calendar_events')],
+  (t) => [
+    index('calendar_events_starts_at_idx').on(t.startsAt),
+    tenantPolicy('calendar_events'),
+    matterPolicy('calendar_events'),
+  ],
 );
 
 export const notifications = pgTable(
@@ -443,6 +647,10 @@ export const complianceRequests = pgTable(
 );
 
 // Row types for services.
+export type SessionRow = typeof sessions.$inferSelect;
+export type InviteRow = typeof invites.$inferSelect;
+export type CaseMemberRow = typeof caseMembers.$inferSelect;
+export type CaseExclusionRow = typeof caseExclusions.$inferSelect;
 export type FirmRow = typeof firms.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type SubmissionRow = typeof submissions.$inferSelect;

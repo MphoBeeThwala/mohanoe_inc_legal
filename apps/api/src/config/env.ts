@@ -46,19 +46,38 @@ function validateConfig(env: NodeJS.ProcessEnv = process.env): string[] {
     }
   });
 
+  if (String(env.OIDC_ISSUER || '').trim()) {
+    if (!String(env.OIDC_CLIENT_ID || '').trim()) {
+      problems.push('OIDC_CLIENT_ID must be set when OIDC_ISSUER is set');
+    }
+    if (!/^https:\/\//i.test(String(env.OIDC_ISSUER))) {
+      problems.push('OIDC_ISSUER must be an https:// URL');
+    }
+  }
+  if (String(env.SESSION_COOKIE_SECURE || '').toLowerCase() === 'false') {
+    problems.push('SESSION_COOKIE_SECURE cannot be false in production');
+  }
+
   return problems;
 }
 
 function configWarnings(env: NodeJS.ProcessEnv = process.env): string[] {
   const warnings: string[] = [];
-  if (
-    env.NODE_ENV === 'production' &&
-    String(env.ALLOW_PUBLIC_REGISTRATION || '').toLowerCase() === 'true'
-  ) {
+  if (env.NODE_ENV !== 'production') {
+    return warnings;
+  }
+  if (!String(env.SMTP_URL || '').trim()) {
     warnings.push(
-      'ALLOW_PUBLIC_REGISTRATION is true in production: disable it once the first admin exists',
+      'SMTP_URL is not set: invite and reset links are shown to administrators but not emailed',
     );
   }
+  ['ALLOW_PUBLIC_REGISTRATION', 'SEED_ADMIN_ON_STARTUP', 'DEFAULT_ADMIN_PASSWORD'].forEach(
+    (name) => {
+      if (env[name]) {
+        warnings.push(`${name} is no longer used: staff join by invite (see README)`);
+      }
+    },
+  );
   return warnings;
 }
 

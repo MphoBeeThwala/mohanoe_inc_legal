@@ -10,7 +10,7 @@
 //    with status >= 500 roll the transaction back.
 
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import { RollbackSignal, withTenant } from '../db/tenant';
+import { RollbackSignal, elevateToSystem, withTenant } from '../db/tenant';
 import { resolveFirmForHost } from '../services/firm.service';
 import { errorMessage } from '../lib/http';
 
@@ -81,3 +81,16 @@ export function tenantContext(): RequestHandler {
       .catch(next);
   };
 }
+
+/**
+ * Lifts matter-level access for the rest of the request, for statutory work
+ * that must cover every matter: POPIA access requests and exports, erasure and
+ * retention. Use only after requirePermission('compliance.admin'); the
+ * services audit the operations themselves.
+ */
+export const fullFirmScope: RequestHandler = (_req, _res, next) => {
+  elevateToSystem().then(
+    () => next(),
+    (error: unknown) => next(error),
+  );
+};

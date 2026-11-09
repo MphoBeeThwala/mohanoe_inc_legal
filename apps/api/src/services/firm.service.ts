@@ -7,17 +7,16 @@
 //      When PLATFORM_BASE_DOMAIN is set and DEFAULT_FIRM_SLUG is not, unknown
 //      hosts resolve to no firm at all, so they can never fall into a tenant.
 
-import { randomBytes } from 'crypto';
 import { asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { isHexColor, type UserRole } from '@ahava88/shared';
+import { PLATFORM_LEGAL_NAME, isHexColor } from '@ahava88/shared';
 import { rootDb } from '../db/client';
 import { firms, type FirmRow } from '../db/schema';
 import { withTenant } from '../db/tenant';
 import { envFirmDefaults } from '../config/brand';
 import { httpError } from '../lib/http';
 import { parse } from '../validation/schemas';
-import * as authService from './auth.service';
+import * as userService from './user.service';
 
 const CACHE_TTL_MS = 30_000;
 const cache = new Map<string, { firm: FirmRow | null; expires: number }>();
@@ -177,18 +176,34 @@ export async function ensureDefaultFirm(): Promise<FirmRow | null> {
   });
 }
 
-/** Creates the firm's first admin with a generated one-time password. */
-export async function createFirmAdmin(
+/**
+ * The firm's public address, used for links in invites and reset emails.
+ * Never taken from a request's Host header.
+ */
+export function firmOrigin(firm: FirmRow): string {
+  if (firm.domains[0]) {
+    return `https://${firm.domains[0]}`;
+  }
+  const base = baseDomain();
+  if (base) {
+    return `https://${firm.slug}.${base}`;
+  }
+  return (process.env.APP_ORIGIN || 'http://localhost:3000').replace(/\/+$/, '');
+}
+
+/** Invites a firm administrator. Returns the invite link (shown once). */
+export async function inviteFirmAdmin(
   firm: FirmRow,
-  admin: { email: string; fullName: string; password?: string },
-): Promise<{ email: string; password: string; role: UserRole }> {
-  // Satisfies the password policy: upper, lower, digit, 20+ characters.
-  const password = admin.password || `Aa1-${randomBytes(18).toString('base64url')}`;
-  const created = await withTenant(firm, () =>
-    authService.registerUser(
-      { fullName: admin.fullName, email: admin.email, password },
-      { role: 'admin' },
-    ),
+  admin: { email: string; fullName: string },
+): Promise<{ email: string; url: string; emailed: boolean }> {
+  const issued = await withTenant(
+    firm,
+    () =>
+      userService.createInvite(
+        { email: admin.email, fullName: admin.fullName, role: 'admin' },
+        { fullName: `${PLATFORM_LEGAL_NAME} onboarding`, role: 'system' },
+      ),
+    { system: true },
   );
-  return { email: created.user.email, password, role: created.user.role };
+  return { email: issued.item.email, url: issued.url, emailed: issued.emailed };
 }

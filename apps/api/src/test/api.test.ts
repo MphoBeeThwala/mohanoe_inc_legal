@@ -2,29 +2,15 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import request from 'supertest';
 
 import app from '../server';
+import { createStaff } from './helpers';
 
 // HTTP-level tests against the real Express app (in-memory datastore).
 let adminToken: string;
 let token: string;
 
 beforeAll(async () => {
-  // The first account becomes the admin; the second is an ordinary attorney.
-  const admin = await request(app).post('/api/auth/register').send({
-    fullName: 'Founding Partner',
-    email: 'partner@example.com',
-    password: 'CorrectHorse123',
-  });
-  expect(admin.status).toBe(201);
-  expect(admin.body.user.role).toBe('admin');
-  adminToken = admin.body.token;
-
-  const res = await request(app).post('/api/auth/register').send({
-    fullName: 'Test Attorney',
-    email: 'attorney@example.com',
-    password: 'CorrectHorse123',
-  });
-  expect(res.status).toBe(201);
-  token = res.body.token;
+  adminToken = (await createStaff({ email: 'partner@example.com', role: 'admin' })).token;
+  token = (await createStaff({ email: 'attorney@example.com', role: 'attorney' })).token;
 });
 
 describe('public endpoints', () => {
@@ -77,7 +63,6 @@ describe('authentication and roles', () => {
 
   test('admin-only routes return 403 for an attorney', async () => {
     const auth = { authorization: `Bearer ${token}` };
-    expect((await request(app).post('/api/auth/seed-admin').set(auth)).status).toBe(403);
     expect((await request(app).get('/api/compliance/export').set(auth)).status).toBe(403);
     expect((await request(app).get('/api/audit/verify').set(auth)).status).toBe(403);
   });

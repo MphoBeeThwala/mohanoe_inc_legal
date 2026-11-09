@@ -26,7 +26,7 @@ Requires Node 22+.
 1. Copy `.env.example` to `.env` at the repo root. Leave `DATABASE_URL` empty to use an embedded Postgres (PGlite) stored in `.data/pglite` — no database install needed. Delete that folder to start fresh.
 2. `npm install` at the repo root (installs every workspace).
 3. `npm run build --workspace packages/shared` once (the API imports the compiled shared types).
-4. For the first login, set `ALLOW_PUBLIC_REGISTRATION=true`, then use **Create account** on the sign-in screen. Turn it off afterwards.
+4. Create your first administrator: `npm run build -w apps/api && npm run firm -w apps/api -- invite --slug default --email you@example.com --name "Your Name"`, then open the printed link (set `APP_ORIGIN=http://localhost:3000` so it points at the dev web server). You'll choose a password and connect an authenticator app.
 5. In two terminals: `npm run dev:api` (port `3001`, reloads on change) and `npm run dev:web` (port `3000`, proxies `/api` to the API).
 
 | Command (repo root) | What it does |
@@ -46,6 +46,15 @@ Requires Node 22+.
 2. `npm run db:generate -w apps/api -- --name short_description` and commit the new file in `apps/api/drizzle/`.
 3. Never edit a migration that has been applied anywhere, and never change a shared database by hand.
 
+## Staff accounts and sign-in
+- **Invite only.** There is no public registration. Administrators invite staff under **Account & team**; the firm's first administrator is invited with the CLI (`npm run firm -w apps/api -- create … --admin-email …` or `… invite --slug … --email …`). Invite and reset links are emailed when `SMTP_URL` is set, and are always shown once to whoever created them.
+- **Two-factor sign-in is mandatory** for password accounts: after the password, an authenticator-app code (TOTP) or a one-time recovery code. New accounts set up the authenticator before their first session. Codes can't be replayed.
+- **Microsoft Entra External ID** sign-in is enabled with `OIDC_ISSUER`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET`. Enforce MFA in Entra (user flow / Conditional Access); `OIDC_REQUIRE_MFA_CLAIM=true` also checks the token. An Entra identity is linked to an account only by accepting an invite with it — emails are never used to match accounts. Register `https://<firm address>/api/auth/oidc/callback` as a redirect URI for every firm.
+- **Lockout:** 5 failed attempts lock an account for 15 minutes (`LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCKOUT_MINUTES`). A password reset lifts the lock.
+- **Sessions** are server-side, in httpOnly `SameSite=Lax` cookies (`__Host-` and `Secure` in production). They end after `SESSION_IDLE_MINUTES` idle or `SESSION_MAX_HOURS`, and are revoked by sign-out, password change or reset, MFA reset and deactivation. Cookie-authenticated writes must come from the workspace's own origin (CSRF protection). API clients can send the session token as a bearer token.
+- **Roles** (per firm): Administrator, Attorney, Paralegal, Secretary, Bookkeeper. Each grants permissions (`ROLE_PERMISSIONS` in `packages/shared`); routes check them with `requirePermission(...)`. Role changes apply on the next request.
+- **Matter access:** a matter is visible firm-wide by default. Its lead (whoever opened it) or an administrator can restrict it to named members, and add **ethical walls** that hide it from specific people, administrators included. PostgreSQL row-level security enforces this, and hides the matter's tasks, documents, invoices, ledger, calendar and intake record with it. POPIA exports, erasure and retention sweeps (information officer only) still cover every matter.
+
 ## Firms (multi-tenancy)
 One deployment serves many firms. Every tenant table has a `firm_id`, and PostgreSQL row-level security keeps each firm's rows invisible to the others.
 
@@ -60,7 +69,7 @@ One deployment serves many firms. Every tenant table has a `firm_id`, and Postgr
   npm run firm -w apps/api -- list
   ```
 
-  The admin's one-time password is printed once; share it securely.
+  The admin's invitation link is printed once (and emailed when `SMTP_URL` is set); share it securely. To invite another administrator later: `npm run firm -w apps/api -- invite --slug nkosi --email it@nkosi.co.za --name "IT Admin"`.
 - The app connects as the database owner but runs every request as the `app_tenant` role (`SET LOCAL ROLE`), which cannot bypass RLS. Migration `0001` creates that role and grants it to the connecting user; see `PROD_OPERATIONS.md` if your server does not allow that.
 
 ### Bootstrap branding
