@@ -27,7 +27,7 @@ import {
 } from '@ahava88/shared';
 import { HttpError, errorMessage, httpError } from '../lib/http';
 import { requireSecret } from '../config/env';
-import { authSettings, oidcSettings } from '../config/auth';
+import { authSettings, oidcSettings, workforceSettings } from '../config/auth';
 import { getFirmBrand } from '../config/brand';
 import { db } from '../db/client';
 import { setPrincipal } from '../db/tenant';
@@ -234,6 +234,19 @@ export async function signInWithPassword(input: unknown): Promise<SignInResult> 
   }
   const { email, password } = parse(loginSchema, input);
   const user = await findUserByEmail(email);
+  // A firm that requires Microsoft 365 sign-in: work addresses on its domains
+  // can't use passwords, except administrators (break-glass, still with MFA).
+  // Same answer whether or not the account exists.
+  const firm = currentFirm();
+  const domain = email.split('@')[1] ?? '';
+  if (
+    firm.ssoEnforced &&
+    workforceSettings(firm) &&
+    firm.ssoDomains.includes(domain) &&
+    user?.role !== 'admin'
+  ) {
+    throw httpError('Your firm uses Microsoft 365 sign-in. Use "Sign in with Microsoft 365".', 403);
+  }
   const passwordOk = verifyPassword(
     password,
     user?.passwordSalt ?? null,
@@ -516,9 +529,16 @@ export function requireRoles(...roles: UserRole[]) {
 
 export function getAuthConfig(): AuthConfig {
   const oidc = oidcSettings();
+  const firm = currentFirm();
+  const microsoft = workforceSettings(firm);
   return {
     passwordLogin: authSettings().passwordLogin,
     oidc: { enabled: Boolean(oidc), label: oidc?.label ?? '' },
+    microsoft: {
+      enabled: Boolean(microsoft),
+      label: microsoft?.label ?? '',
+      enforced: Boolean(microsoft) && firm.ssoEnforced,
+    },
     selfServiceReset: authSettings().passwordLogin && mailEnabled(),
   };
 }

@@ -176,6 +176,8 @@ export interface AuthConfig {
   passwordLogin: boolean;
   /** Entra External ID sign-in, when configured. */
   oidc: { enabled: boolean; label: string };
+  /** The firm's own Microsoft 365 directory, when the firm has set it up. */
+  microsoft: { enabled: boolean; label: string; enforced: boolean };
   /** Self-service password reset needs outgoing email. */
   selfServiceReset: boolean;
 }
@@ -265,6 +267,24 @@ export interface FirmSettings {
   retentionDays: number;
   /** Whether retentionDays is the platform default (not set for this firm). */
   retentionIsDefault: boolean;
+  /** Microsoft 365 staff sign-in. */
+  microsoft: {
+    /** The platform's Microsoft 365 app is configured, so firms can turn this on. */
+    available: boolean;
+    /** The firm's Entra directory (tenant) id. */
+    tenantId: string | null;
+    /** Work email domains in that directory. */
+    domains: string[];
+    /** Staff other than administrators must use Microsoft sign-in. */
+    enforced: boolean;
+    /** Consent link for the firm's Microsoft 365 administrator. */
+    adminConsentUrl: string | null;
+  };
+}
+
+export interface FirmSettingsUpdate {
+  retentionDays?: number | null;
+  microsoft?: { tenantId: string | null; domains: string[]; enforced: boolean };
 }
 
 export interface UserUpdateInput {
