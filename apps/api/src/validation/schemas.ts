@@ -670,3 +670,12 @@ export const subscriptionPlanSchema = z
   .refine((plan) => plan.maxSeats == null || plan.maxSeats >= plan.minSeats, {
     message: 'maxSeats must be at least minSeats',
   });
+
+// ---------------------------------------------------------------- research
+
+export const researchDraftSchema = z.object({
+  question: requiredText(4000),
+  additionalFacts: optionalText(MAX_TEXT),
+});
+
+export const researchBriefSchema = z.object({ brief: requiredText(MAX_TEXT) });

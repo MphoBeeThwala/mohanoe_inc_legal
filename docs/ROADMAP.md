@@ -149,12 +149,12 @@ Environment setup:
 - [x] Billing from time + disbursements, 15% VAT, branded PDFs, email, payments, statements, aging
 - [x] Calendar: court dates, deadlines, prescription reminders, email notifications
 - [x] Court roll sync (brought forward from P1): published rolls fetched twice a week and matched by court case number for staff to confirm; amended rolls flag removed matters; roll upload. Next: CaseLines / Court Online integration.
-- [ ] Intake → consent → de-identified triage → matter
+- [x] Intake → consent → de-identified triage → matter (`deidentify.ts`, no rules fallback)
 
 ### 5.6 SaaS operations
 - [x] Firm onboarding wizard (practice details, brand, invoicing, numbering, team); firm settings, uploaded logo and icon, colour contrast check, custom domains verified by DNS and HTTPS, emails in the firm's name
 - [x] ZAR subscriptions via PayFast (plans, seats, trial, dunning, read-only suspension): `subscription.service.ts`, `payfast.ts`, Account → Subscription, `ops plans` / `ops subscriptions`. Next: PayFast merchant account approval and a sandbox end-to-end test; platform tax invoices to firms.
-- [ ] AI usage metering
+- [x] AI usage metering (`ai_calls`, per-firm monthly cap, `GET /api/ai/usage`)
 - [x] IaC, staging/prod, CI/CD, tested restores, Sentry, uptime alerts (`infra/terraform`, GitHub Actions, `ops restore-check`, `docs/runbooks`). Next: choose and set up the hosted status page; run the first restore test.
 - [ ] Support desk, help centre (incident runbook done: `docs/runbooks/incident-response.md`)
 
@@ -213,7 +213,9 @@ Trust accounting and AI research ship behind feature flags to pilots first.
 8. **White-label and onboarding** — done on `feat/white-label-onboarding`: firm settings, theming, logo and icon, custom domains (DNS + HTTPS verification), emails in the firm's name, onboarding wizard.
 9. **Infrastructure** — done on `feat/infrastructure`: Terraform for staging/prod in South Africa North (private VNet, PostgreSQL HA + geo-backups, RA-GZRS storage, HSM Key Vault, Container Apps + scheduled jobs, Front Door Premium + WAF, ACS Email), DR to South Africa West, CI/CD with OIDC and approval, Sentry with PII scrubbing, alerts and budgets, restore check and runbooks.
 10. **Subscriptions** — done on `feat/subscriptions` with PayFast recurring billing (checkout, verified ITNs, seat changes and cancelling through the PayFast API, trial → past due → read-only).
-11. **AI research** — corpus ingestion, retrieval, citation verification, evaluation harness.
+11. **AI research** — in progress on `feat/ai-research`:
+    - 11a, done: one AI client (Foundry / Anthropic), de-identification, metering and caps, and attorney-confirmed research briefs.
+    - Next: corpus ingestion and retrieval (legislation and firm precedents first; SAFLII only with permission), cited answers with citation verification, attorney approval with a source snapshot, and the evaluation harness.
 12. **Trust accounting, court roll, client portal.**
 
 Open decisions: product name; Entra External ID vs Auth0/WorkOS; pilot firms and practice areas.

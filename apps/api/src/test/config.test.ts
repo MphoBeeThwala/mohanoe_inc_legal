@@ -54,6 +54,9 @@ test('retired sign-up settings and missing SMTP are warnings, not blockers', () 
       PAYFAST_MERCHANT_ID: '10000100',
       PAYFAST_MERCHANT_KEY: 'key',
       PAYFAST_PASSPHRASE: 'passphrase',
+      AI_PROVIDER: 'foundry',
+      AI_ENDPOINT: 'https://firm-ai.services.ai.azure.com/anthropic',
+      AI_MODEL: 'claude-sonnet',
     }),
     [],
   );
@@ -112,4 +115,26 @@ test('PayFast settings come as a set; sandbox and missing PayFast are warnings',
   assert.ok(
     configWarnings({ ...payfast, PAYFAST_SANDBOX: 'true' }).some((w) => /PayFast sandbox/.test(w)),
   );
+});
+
+test('AI settings must be complete for the chosen provider', () => {
+  const problems = (extra: Record<string, string>) =>
+    validateConfig({ ...goodProduction, ...extra });
+  assert.ok(problems({ AI_PROVIDER: 'foundry', AI_MODEL: 'm' }).some((p) => /AI_ENDPOINT/.test(p)));
+  assert.ok(
+    problems({
+      AI_PROVIDER: 'foundry',
+      AI_ENDPOINT: 'https://x.services.ai.azure.com/anthropic',
+    }).some((p) => /AI_MODEL/.test(p)),
+  );
+  assert.ok(problems({ AI_PROVIDER: 'openai' }).some((p) => /AI_PROVIDER must be/.test(p)));
+  assert.deepEqual(
+    problems({
+      AI_PROVIDER: 'foundry',
+      AI_ENDPOINT: 'https://x.services.ai.azure.com/anthropic',
+      AI_MODEL: 'claude-sonnet',
+    }),
+    [],
+  );
+  assert.ok(configWarnings(goodProduction).some((w) => /AI is not configured/.test(w)));
 });

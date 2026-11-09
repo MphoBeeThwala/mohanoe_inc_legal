@@ -683,6 +683,7 @@ function App() {
               onChanged={loadWorkspace}
               canEdit={currentUser.permissions.includes('matters.write')}
               canEditCalendar={currentUser.permissions.includes('calendar.write')}
+              canResearch={hasPermission(currentUser.role, 'research.use')}
             />
 
             <section

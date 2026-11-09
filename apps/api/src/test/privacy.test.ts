@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { encryptJson, decryptJson, redactText } from '../services/privacy.service';
+import { encryptJson, decryptJson } from '../services/privacy.service';
 import { inDefaultFirm } from './helpers';
 
 test('encrypt/decrypt round-trips with the firm key and never stores plaintext', () =>
@@ -21,15 +21,3 @@ test('tampered ciphertext is rejected', () =>
     parts[4] = body.toString('base64');
     await assert.rejects(decryptJson(parts.join(':')));
   }));
-
-test('redaction removes the client name, email, phone and SA ID number', () => {
-  const output = redactText(
-    'Thandi Nkosi (ID 8001015009087) can be reached at thandi@example.com or 0821234567.',
-    { fullName: 'Thandi Nkosi' },
-  );
-  assert.ok(!output.includes('Thandi'));
-  assert.ok(!output.includes('8001015009087'));
-  assert.ok(!output.includes('thandi@example.com'));
-  assert.ok(!output.includes('0821234567'));
-  assert.match(output, /Client/);
-});

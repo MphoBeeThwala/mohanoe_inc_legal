@@ -22,6 +22,8 @@ import {
   disbursements,
   calendarEvents,
   matterPrescriptions,
+  researchRequests,
+  aiCalls,
   type FirmRow,
 } from '../db/schema';
 import { activeKey, deleteKey } from './keys.service';
@@ -121,6 +123,21 @@ function stalePrescriptions(version: number): SQL {
   ) as SQL;
 }
 
+function staleResearch(version: number): SQL {
+  return or(
+    notOnVersion(researchRequests.questionEncrypted, version),
+    notOnVersion(researchRequests.briefEncrypted, version),
+    notOnVersion(researchRequests.mappingEncrypted, version),
+  ) as SQL;
+}
+
+function staleAiCalls(version: number): SQL {
+  return or(
+    and(isNotNull(aiCalls.promptEncrypted), notOnVersion(aiCalls.promptEncrypted, version)),
+    and(isNotNull(aiCalls.responseEncrypted), notOnVersion(aiCalls.responseEncrypted, version)),
+  ) as SQL;
+}
+
 function staleUsers(version: number): SQL {
   return and(
     isNotNull(users.mfaSecretEncrypted),
@@ -138,6 +155,7 @@ export interface ReencryptCounts {
   time: number;
   billing: number;
   calendar: number;
+  research: number;
 }
 
 export interface ReencryptStatus {
@@ -152,6 +170,7 @@ export interface ReencryptStatus {
     time: number;
     billing: number;
     calendar: number;
+    research: number;
   };
 }
 
@@ -172,6 +191,10 @@ export async function pendingReencryption(): Promise<ReencryptStatus> {
     db().select({ value: count() }).from(calendarEvents).where(staleEvents(version)),
     db().select({ value: count() }).from(matterPrescriptions).where(stalePrescriptions(version)),
   ]);
+  const [[rr], [ac]] = await Promise.all([
+    db().select({ value: count() }).from(researchRequests).where(staleResearch(version)),
+    db().select({ value: count() }).from(aiCalls).where(staleAiCalls(version)),
+  ]);
   const [[s], [d], [u], [p], [c]] = await Promise.all([
     db().select({ value: count() }).from(submissions).where(staleSubmissions(version)),
     db().select({ value: count() }).from(documents).where(staleDocuments(version)),
@@ -191,6 +214,7 @@ export async function pendingReencryption(): Promise<ReencryptStatus> {
       time: (te?.value ?? 0) + (tm?.value ?? 0),
       billing: (bi?.value ?? 0) + (bd?.value ?? 0),
       calendar: (ce?.value ?? 0) + (mp?.value ?? 0),
+      research: (rr?.value ?? 0) + (ac?.value ?? 0),
     },
   };
 }
@@ -356,6 +380,36 @@ async function reencryptBatch(): Promise<ReencryptCounts> {
       .where(eq(matterPrescriptions.id, row.id));
   }
 
+  const briefs = await db()
+    .select()
+    .from(researchRequests)
+    .where(staleResearch(version))
+    .limit(BATCH);
+  for (const row of briefs) {
+    await db()
+      .update(researchRequests)
+      .set({
+        questionEncrypted: await encryptJson(await decryptJson(row.questionEncrypted)),
+        briefEncrypted: await encryptJson(await decryptJson(row.briefEncrypted)),
+        mappingEncrypted: await encryptJson(await decryptJson(row.mappingEncrypted)),
+      })
+      .where(eq(researchRequests.id, row.id));
+  }
+  const calls = await db().select().from(aiCalls).where(staleAiCalls(version)).limit(BATCH);
+  for (const row of calls) {
+    await db()
+      .update(aiCalls)
+      .set({
+        promptEncrypted: row.promptEncrypted
+          ? await encryptJson(await decryptJson(row.promptEncrypted))
+          : null,
+        responseEncrypted: row.responseEncrypted
+          ? await encryptJson(await decryptJson(row.responseEncrypted))
+          : null,
+      })
+      .where(eq(aiCalls.id, row.id));
+  }
+
   return {
     submissions: subs.length,
     documents: docs.length,
@@ -366,6 +420,7 @@ async function reencryptBatch(): Promise<ReencryptCounts> {
     time: entries.length + running.length,
     billing: bills.length + costs.length,
     calendar: events.length + periods.length,
+    research: briefs.length + calls.length,
   };
 }
 
@@ -381,6 +436,7 @@ export async function reencryptFirm(firm: FirmRow) {
     time: 0,
     billing: 0,
     calendar: 0,
+    research: 0,
   };
   for (;;) {
     const done = await withTenant(firm, () => reencryptBatch(), { system: true });
@@ -393,6 +449,7 @@ export async function reencryptFirm(firm: FirmRow) {
     total.time += done.time;
     total.billing += done.billing;
     total.calendar += done.calendar;
+    total.research += done.research;
     if (Object.values(done).every((value) => value === 0)) {
       return total;
     }
@@ -488,7 +545,28 @@ export async function pruneRetiredKeys(): Promise<number[]> {
         .from(matterPrescriptions)
         .where(sql`${matterPrescriptions.notesEncrypted} like ${prefix}`),
     ]);
-    const inUse = [s, d, u, p, c, fp, fd, te, tm, bi, bd, ce, mp].some((row) => row?.value);
+    const [[rr], [ac]] = await Promise.all([
+      db()
+        .select({ value: count() })
+        .from(researchRequests)
+        .where(
+          or(
+            sql`${researchRequests.questionEncrypted} like ${prefix}`,
+            sql`${researchRequests.briefEncrypted} like ${prefix}`,
+            sql`${researchRequests.mappingEncrypted} like ${prefix}`,
+          ),
+        ),
+      db()
+        .select({ value: count() })
+        .from(aiCalls)
+        .where(
+          or(
+            sql`${aiCalls.promptEncrypted} like ${prefix}`,
+            sql`${aiCalls.responseEncrypted} like ${prefix}`,
+          ),
+        ),
+    ]);
+    const inUse = [s, d, u, p, c, fp, fd, te, tm, bi, bd, ce, mp, rr, ac].some((row) => row?.value);
     if (!inUse) {
       await deleteKey(key.id);
       pruned.push(key.version);

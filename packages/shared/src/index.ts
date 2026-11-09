@@ -117,7 +117,8 @@ export type Permission =
   | 'time.record'
   | 'time.manage'
   | 'rates.manage'
-  | 'subscription.manage';
+  | 'subscription.manage'
+  | 'research.use';
 
 const FEE_EARNER: readonly Permission[] = [
   'clients.read',
@@ -141,6 +142,8 @@ const FEE_EARNER: readonly Permission[] = [
   'reports.read',
   'notifications.read',
   'notifications.write',
+  // Prepares de-identified research briefs on matters they can see.
+  'research.use',
 ];
 
 /** What each role may do within its firm. Matter-level access narrows this further. */
@@ -1682,4 +1685,54 @@ export function subscriptionPriceCents(
 ): number {
   const perSeat = interval === 'annual' ? plan.annualSeatPriceCents : plan.monthlySeatPriceCents;
   return Math.round(perSeat * seats * (1 + vatRate));
+}
+
+// ------------------------------------------------------------ AI research
+
+/** One kind of identifier removed from a brief, and how often. */
+export interface BriefReplacement {
+  token: string;
+  kind: string;
+  count: number;
+}
+
+export type ResearchStatus = 'draft' | 'confirmed';
+
+/** A de-identified research brief on a matter (roadmap §7). */
+export interface ResearchRequest {
+  id: string;
+  caseNumber: string;
+  status: ResearchStatus;
+  question: string;
+  /** Exactly what the model will receive. */
+  brief: string;
+  replacements: BriefReplacement[];
+  /** Name-like words left in the brief, for the attorney to check. */
+  warnings: string[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+  confirmedAt: string | null;
+  confirmedBy: string | null;
+}
+
+export interface ResearchDraftInput {
+  question: string;
+  /** Facts to add to what the intake recorded. */
+  additionalFacts?: string;
+}
+
+export interface ResearchBriefUpdate {
+  /** The attorney's edited brief; it is checked again before it is saved. */
+  brief: string;
+}
+
+export interface AiUsage {
+  month: string;
+  tokensUsed: number;
+  tokenLimit: number;
+  calls: number;
+  failures: number;
+  byPurpose: Array<{ purpose: string; calls: number; tokens: number }>;
+  configured: boolean;
 }

@@ -71,6 +71,23 @@ function validateConfig(env: NodeJS.ProcessEnv = process.env): string[] {
   if (env.OBJECT_STORE && !['filesystem', 'azure-blob'].includes(env.OBJECT_STORE)) {
     problems.push('OBJECT_STORE must be filesystem or azure-blob');
   }
+  const ai = String(env.AI_PROVIDER || '')
+    .trim()
+    .toLowerCase();
+  if (ai && !['foundry', 'anthropic', 'none'].includes(ai)) {
+    problems.push('AI_PROVIDER must be foundry, anthropic or none');
+  }
+  if (ai === 'foundry' && !String(env.AI_ENDPOINT || '').trim()) {
+    problems.push(
+      'AI_PROVIDER=foundry needs AI_ENDPOINT (https://<resource>.services.ai.azure.com/anthropic)',
+    );
+  }
+  if (ai === 'anthropic' && !String(env.AI_API_KEY || env.ANTHROPIC_API_KEY || '').trim()) {
+    problems.push('AI_PROVIDER=anthropic needs AI_API_KEY');
+  }
+  if ((ai === 'foundry' || ai === 'anthropic') && !String(env.AI_MODEL || '').trim()) {
+    problems.push('AI_PROVIDER is set but AI_MODEL is not');
+  }
   const payfast = ['PAYFAST_MERCHANT_ID', 'PAYFAST_MERCHANT_KEY', 'PAYFAST_PASSPHRASE'].filter(
     (name) => String(env[name] || '').trim(),
   );
@@ -95,6 +112,17 @@ function configWarnings(env: NodeJS.ProcessEnv = process.env): string[] {
     warnings.push(
       'SMTP_URL is not set: invite and reset links are shown to administrators but not emailed',
     );
+  }
+  if (
+    !['foundry', 'anthropic'].includes(
+      String(env.AI_PROVIDER || '')
+        .trim()
+        .toLowerCase(),
+    )
+  ) {
+    warnings.push('AI is not configured (AI_PROVIDER): intakes open as "not assessed"');
+  } else if (String(env.AI_PROVIDER).trim().toLowerCase() === 'anthropic') {
+    warnings.push('AI_PROVIDER=anthropic: production should use Microsoft Foundry');
   }
   if (!String(env.PAYFAST_MERCHANT_ID || '').trim()) {
     warnings.push('PayFast is not configured: firms cannot subscribe online');
