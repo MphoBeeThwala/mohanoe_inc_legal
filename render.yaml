@@ -1,29 +1,29 @@
 services:
   - type: web
-    name: mohanoe-inc-legal  # legacy Render service ID; kept until the Azure migration (renaming creates a new service)
+    name: mohanoe-inc-legal # legacy Render service ID; kept until the Azure migration (renaming creates a new service)
     runtime: node
     plan: starter
     rootDir: .
-    buildCommand: npm ci --prefix backend && npm ci --prefix frontend && npm run build --prefix frontend && node scripts/prepare-static.js
-    startCommand: node backend/server.js
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
     healthCheckPath: /ready
     envVars:
       - key: NODE_ENV
         value: production
       - key: ALLOW_PUBLIC_REGISTRATION
-        value: "false"
+        value: 'false'
       - key: SEED_ADMIN_ON_STARTUP
-        value: "false"
+        value: 'false'
       - key: JWT_EXPIRES_IN
         value: 12h
       - key: CLIENT_DATA_RETENTION_DAYS
-        value: "3650"
+        value: '3650'
       - key: RATE_LIMIT_WINDOW_MS
-        value: "60000"
+        value: '60000'
       - key: RATE_LIMIT_MAX
-        value: "240"
+        value: '240'
       - key: LOG_HTTP
-        value: "true"
+        value: 'true'
       - key: DEFAULT_ADMIN_NAME
         value: Practice Admin
       - key: JWT_ISSUER
