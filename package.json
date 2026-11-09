@@ -1,0 +1,22 @@
+{
+  "name": "ahava88-legal-platform",
+  "private": true,
+  "description": "White-label legal practice management platform by Ahava on 88 (Pty) Ltd",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:api": "npm run dev --workspace apps/api",
+    "dev:web": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "check:brand": "node scripts/check-legacy-brand.js",
+    "start": "npm run start --workspace apps/api"
+  }
+}
