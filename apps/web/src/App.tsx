@@ -43,6 +43,8 @@ import DismissibleNotice from './components/DismissibleNotice';
 import { refreshBranding, useBranding } from './branding';
 import FirmSettingsPanel from './components/FirmSettingsPanel';
 import OnboardingWizard from './components/OnboardingWizard';
+import SubscriptionBanner from './components/SubscriptionBanner';
+import SubscriptionPanel from './components/SubscriptionPanel';
 import './App.css';
 
 const sampleMatter: Omit<IntakeSubmissionInput, 'consentToAi' | 'consentToStorage'> = {
@@ -511,6 +513,7 @@ function App() {
       />
 
       <main className="dashboard">
+        <SubscriptionBanner canManage={hasPermission(currentUser.role, 'subscription.manage')} />
         {currentUser.permissions.includes('users.manage') ? (
           <ErrorBoundary label="Firm setup">
             <OnboardingWizard currentUser={currentUser} onChanged={refreshBranding} />
@@ -723,6 +726,11 @@ function App() {
           }}
         >
           <AccountPanel currentUser={currentUser} />
+          {hasPermission(currentUser.role, 'subscription.manage') ? (
+            <ErrorBoundary label="Subscription">
+              <SubscriptionPanel />
+            </ErrorBoundary>
+          ) : null}
           {currentUser.permissions.includes('users.manage') ? (
             <>
               <ErrorBoundary label="Firm settings">

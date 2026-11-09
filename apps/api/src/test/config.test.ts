@@ -51,6 +51,9 @@ test('retired sign-up settings and missing SMTP are warnings, not blockers', () 
       AZURE_KEY_VAULT_KEY_ID: 'https://v.vault.azure.net/keys/k',
       OBJECT_STORE: 'azure-blob',
       AZURE_STORAGE_ACCOUNT_URL: 'https://acct.blob.core.windows.net',
+      PAYFAST_MERCHANT_ID: '10000100',
+      PAYFAST_MERCHANT_KEY: 'key',
+      PAYFAST_PASSPHRASE: 'passphrase',
     }),
     [],
   );
@@ -90,4 +93,23 @@ test('development fallback secrets are refused against a real database', () => {
     if (saved.url === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = saved.url;
   }
+});
+
+test('PayFast settings come as a set; sandbox and missing PayFast are warnings', () => {
+  assert.ok(
+    validateConfig({ ...goodProduction, PAYFAST_MERCHANT_ID: '10000100' }).some((problem) =>
+      /PAYFAST_MERCHANT_ID, PAYFAST_MERCHANT_KEY and PAYFAST_PASSPHRASE together/.test(problem),
+    ),
+  );
+  const payfast = {
+    ...goodProduction,
+    PAYFAST_MERCHANT_ID: '10000100',
+    PAYFAST_MERCHANT_KEY: 'key',
+    PAYFAST_PASSPHRASE: 'passphrase',
+  };
+  assert.deepEqual(validateConfig(payfast), []);
+  assert.ok(configWarnings(goodProduction).some((w) => /PayFast is not configured/.test(w)));
+  assert.ok(
+    configWarnings({ ...payfast, PAYFAST_SANDBOX: 'true' }).some((w) => /PayFast sandbox/.test(w)),
+  );
 });

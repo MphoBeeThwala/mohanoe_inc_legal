@@ -18,6 +18,8 @@ import { scheduleCourtRollSync } from './services/court-roll.service';
 import { domainCheckValue, readAsset } from './services/white-label.service';
 import * as supportService from './services/support.service';
 import { createRateLimiter, requestLogger, securityHeaders } from './middleware/security';
+import { subscriptionGuard } from './middleware/subscription';
+import { handleItn } from './services/subscription.service';
 import { frontDoorGuard } from './middleware/front-door';
 
 const app = express();
@@ -122,6 +124,22 @@ app.get('/.well-known/firm-domain-check', (req, res) => {
   res.type('text/plain').send(domainCheckValue(req.hostname));
 });
 
+// PayFast payment notifications (ITN) for firm subscriptions. Verified by
+// signature, source address and PayFast's own confirmation before anything
+// changes; the firm comes from the signed notification, not the host.
+app.post(
+  '/api/payfast/notify',
+  express.text({ type: 'application/x-www-form-urlencoded', limit: '64kb' }),
+  async (req, res) => {
+    try {
+      const result = await handleItn(typeof req.body === 'string' ? req.body : '', req.ip ?? '');
+      res.status(200).type('text/plain').send(result.outcome);
+    } catch (error) {
+      sendError(res, error);
+    }
+  },
+);
+
 // Every /api request belongs to one firm, resolved from the host name, and
 // runs inside that firm's row-level-security context.
 app.use('/api', tenantContext());
@@ -154,6 +172,9 @@ for (const kind of ['logo', 'icon'] as const) {
     }
   });
 }
+
+// Unpaid past the grace period: read-only (see middleware/subscription.ts).
+app.use('/api', subscriptionGuard());
 
 // Routes
 app.use('/api', routes);

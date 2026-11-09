@@ -34,6 +34,7 @@ import { sendMail } from './mail.service';
 import * as authService from './auth.service';
 import * as sessionService from './session.service';
 import * as auditService from './audit.service';
+import * as subscriptions from './subscription.service';
 
 // ---------------------------------------------------------------- invites
 
@@ -60,6 +61,22 @@ export async function createInvite(input: unknown, actor: Actor): Promise<LinkIs
   const invite = parse(inviteSchema, input);
   if (await authService.findUserByEmail(invite.email)) {
     throw httpError('A staff member with that email already exists', 409);
+  }
+  // A replacement invite for the same address doesn't need another seat.
+  const [samePending] = await db()
+    .select({ id: invites.id })
+    .from(invites)
+    .where(
+      and(
+        eq(invites.email, invite.email),
+        isNull(invites.acceptedAt),
+        isNull(invites.revokedAt),
+        gt(invites.expiresAt, new Date()),
+      ),
+    )
+    .limit(1);
+  if (!samePending) {
+    await subscriptions.assertSeatAvailable();
   }
   // A new invite replaces any pending one for the same address.
   await db()
@@ -305,6 +322,10 @@ export async function updateUser(id: string, input: unknown, actor: Actor): Prom
     ((changes.role && changes.role !== 'admin') || changes.isActive === false);
   if (losesAdmin && (await otherActiveAdmins(user.id)) === 0) {
     throw httpError('A firm must keep at least one active administrator', 400);
+  }
+
+  if (changes.isActive === true && !user.isActive) {
+    await subscriptions.assertSeatAvailable();
   }
 
   const [updated] = await db()

@@ -20,6 +20,8 @@ export interface MailMessage {
   subject: string;
   text: string;
   attachments?: MailAttachment[];
+  /** From the platform itself (e.g. the firm's own subscription), not in the firm's name. */
+  platform?: boolean;
   /** Set when sent (the test outbox records them). */
   from?: string;
   replyTo?: string;
@@ -57,7 +59,7 @@ export function senderFor(firm: FirmRow | undefined): { from: string; replyTo?: 
 /** Sends a message. Returns false when no transport is configured. */
 export async function sendMail(message: MailMessage): Promise<boolean> {
   if (process.env.NODE_ENV === 'test') {
-    outbox.push({ ...message, ...senderFor(currentTenant()?.firm) });
+    outbox.push({ ...message, ...senderFor(message.platform ? undefined : currentTenant()?.firm) });
     return true;
   }
   const transport = getTransporter();
@@ -65,7 +67,7 @@ export async function sendMail(message: MailMessage): Promise<boolean> {
     return false;
   }
   await transport.sendMail({
-    ...senderFor(currentTenant()?.firm),
+    ...senderFor(message.platform ? undefined : currentTenant()?.firm),
     to: message.to,
     subject: message.subject,
     text: message.text,

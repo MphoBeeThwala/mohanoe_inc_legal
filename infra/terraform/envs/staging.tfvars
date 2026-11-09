@@ -11,3 +11,5 @@ api_max_replicas           = 2
 alert_emails               = ["ops@example.co.za"] # replace
 monthly_budget_zar         = 6000
 mail_from                  = "no-reply@REPLACE.azurecomm.net" # the Azure-managed domain's sender
+
+payfast_sandbox = true

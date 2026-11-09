@@ -234,6 +234,92 @@ export const firmDomains = pgTable(
   ],
 );
 
+// ------------------------------------------------------------ subscriptions
+//
+// The firm's own subscription to the platform, paid through PayFast. These
+// rows describe the firm as a customer of Ahava on 88; no client personal
+// information belongs here (PayFast's payer names and emails are not kept).
+
+/** One row per firm. */
+export const firmSubscriptions = pgTable(
+  'firm_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    /** SubscriptionState as last recorded (see subscription.service effectiveStatus). */
+    state: text('state').notNull().default('trialing'),
+    planCode: text('plan_code'),
+    /** 'monthly' | 'annual' */
+    interval: text('interval'),
+    /** Seats paid for; null = not limited (trial uses SUBSCRIPTION_TRIAL_SEATS). */
+    seats: integer('seats'),
+    /** Each period's charge in cents, VAT included (what PayFast collects). */
+    recurringAmountCents: integer('recurring_amount_cents'),
+    trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
+    /** End of the paid (or complimentary) period. */
+    paidThrough: timestamp('paid_through', { withTimezone: true }),
+    /** PayFast subscription token (identifies the recurring agreement). */
+    payfastToken: text('payfast_token'),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    /** Notices already emailed, by kind, keyed to the paid-through date they were for. */
+    notices: jsonb('notices').$type<Record<string, string>>().notNull().default({}),
+    ...updatable,
+  },
+  (t) => [
+    uniqueIndex('firm_subscriptions_firm_idx').on(t.firmId),
+    tenantPolicy('firm_subscriptions'),
+  ],
+);
+
+/** A PayFast checkout started by an administrator (m_payment_id = id). */
+export const subscriptionCheckouts = pgTable(
+  'subscription_checkouts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    planCode: text('plan_code').notNull(),
+    interval: text('interval').notNull(),
+    seats: integer('seats').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    /** 'pending' | 'complete' | 'superseded' */
+    status: text('status').notNull().default('pending'),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    index('subscription_checkouts_firm_idx').on(t.firmId, t.createdAt),
+    tenantPolicy('subscription_checkouts'),
+  ],
+);
+
+/** Each payment PayFast confirmed (ITN), once per pf_payment_id. */
+export const subscriptionPayments = pgTable(
+  'subscription_payments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    checkoutId: uuid('checkout_id').references(() => subscriptionCheckouts.id, {
+      onDelete: 'set null',
+    }),
+    pfPaymentId: text('pf_payment_id').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    feeCents: integer('fee_cents'),
+    /** 'complete' | 'failed' | 'mismatch' (amount differed from what we expected) */
+    status: text('status').notNull(),
+    paidAt: timestamp('paid_at', { withTimezone: true }).notNull().defaultNow(),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('subscription_payments_pf_idx').on(t.firmId, t.pfPaymentId),
+    tenantPolicy('subscription_payments'),
+  ],
+);
+
+export type FirmSubscriptionRow = typeof firmSubscriptions.$inferSelect;
+export type SubscriptionCheckoutRow = typeof subscriptionCheckouts.$inferSelect;
+export type SubscriptionPaymentRow = typeof subscriptionPayments.$inferSelect;
+
 export type FirmAssetRow = typeof firmAssets.$inferSelect;
 export type FirmDomainRow = typeof firmDomains.$inferSelect;
 
@@ -258,6 +344,27 @@ export const platformOperators = pgTable('platform_operators', {
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * The plans firms can subscribe to. Platform-level: no firm_id; requests
+ * (app_tenant) may only read them. Managed with `npm run ops -- plans`.
+ */
+export const subscriptionPlans = pgTable('subscription_plans', {
+  code: text('code').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  /** Per seat per month, excluding VAT, in cents. */
+  monthlySeatPriceCents: integer('monthly_seat_price_cents').notNull(),
+  /** Per seat per year, excluding VAT, in cents. */
+  annualSeatPriceCents: integer('annual_seat_price_cents').notNull(),
+  minSeats: integer('min_seats').notNull().default(1),
+  maxSeats: integer('max_seats'),
+  isActive: boolean('is_active').notNull().default(true),
+  sortOrder: integer('sort_order').notNull().default(0),
+  ...updatable,
+});
+
+export type SubscriptionPlanRow = typeof subscriptionPlans.$inferSelect;
 
 /** A firm administrator's time-boxed permission for platform support to sign in (read-only). */
 export const supportGrants = pgTable(

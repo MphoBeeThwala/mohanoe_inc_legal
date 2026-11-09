@@ -159,3 +159,39 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+# Firm subscriptions (PayFast, the platform's merchant account).
+variable "payfast_merchant_id" {
+  description = "PayFast merchant ID. Leave empty until the account is approved: firms then see that online payment isn't available."
+  type        = string
+  default     = ""
+}
+
+variable "payfast_merchant_key" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "payfast_passphrase" {
+  description = "The passphrase set in the PayFast dashboard (required for recurring billing)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "payfast_sandbox" {
+  type    = bool
+  default = true
+}
+
+variable "subscription_trial_days" {
+  type    = number
+  default = 30
+}
+
+variable "platform_vat_rate" {
+  description = "VAT the platform charges firms (0.15, or 0 if not VAT-registered)."
+  type        = number
+  default     = 0.15
+}
