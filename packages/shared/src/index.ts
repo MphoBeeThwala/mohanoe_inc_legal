@@ -14,6 +14,8 @@ export interface FirmBrand {
   firmShortName: string;
   productName: string;
   logoUrl: string | null;
+  /** Browser tab icon (the logo when no icon is uploaded). */
+  iconUrl?: string | null;
   primaryColor: string;
   accentColor: string;
   casePrefix: string;
@@ -40,6 +42,27 @@ const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 export function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && HEX_COLOR.test(value);
 }
+
+function channel(value: number): number {
+  const c = value / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+/** WCAG relative luminance of a #rgb or #rrggbb colour. */
+export function luminance(hex: string): number {
+  const full = hex.length === 4 ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}` : hex;
+  const [r, g, b] = [1, 3, 5].map((at) => parseInt(full.slice(at, at + 2), 16));
+  return 0.2126 * channel(r!) + 0.7152 * channel(g!) + 0.0722 * channel(b!);
+}
+
+/** WCAG contrast ratio between two colours (1 to 21). */
+export function contrastRatio(a: string, b: string): number {
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (light! + 0.05) / (dark! + 0.05);
+}
+
+/** Brand colours carry white text, so they need at least this contrast with white. */
+export const MIN_BRAND_CONTRAST = 4.5;
 
 // ---------------------------------------------------------------- auth
 
@@ -308,6 +331,10 @@ export interface FirmSettings {
   ficaEnforced: boolean;
   /** What invoices and statements show. */
   billing: BillingSettings;
+  /** Practice details. */
+  profile: FirmProfileSettings;
+  /** Name, colours, logo and numbering. */
+  brand: FirmBrandSettings;
   /** Microsoft 365 staff sign-in. */
   microsoft: {
     /** The platform's Microsoft 365 app is configured, so firms can turn this on. */
@@ -330,12 +357,43 @@ export interface BillingSettings {
   address: string;
   bankDetails: string;
   invoiceFooter: string;
+  /** Letters before invoice numbers, e.g. INV. */
+  invoicePrefix: string;
 }
+
+export interface FirmProfileSettings {
+  registrationNumber: string;
+  lpcNumber: string;
+  fidelityFundCertificate: string;
+  email: string;
+  phone: string;
+  website: string;
+  replyToEmail: string;
+}
+
+export interface FirmBrandSettings {
+  legalName: string;
+  tradingName: string;
+  primaryColor: string;
+  accentColor: string;
+  casePrefix: string;
+  logoUrl: string | null;
+  iconUrl: string | null;
+}
+
+export type FirmBrandUpdate = Partial<
+  Pick<
+    FirmBrandSettings,
+    'legalName' | 'tradingName' | 'primaryColor' | 'accentColor' | 'casePrefix'
+  >
+>;
 
 export interface FirmSettingsUpdate {
   retentionDays?: number | null;
   ficaEnforced?: boolean;
   billing?: Partial<BillingSettings>;
+  profile?: Partial<FirmProfileSettings>;
+  brand?: FirmBrandUpdate;
   microsoft?: { tenantId: string | null; domains: string[]; enforced: boolean };
 }
 
@@ -1492,4 +1550,47 @@ export interface CourtRollUploadInput {
 export interface CourtRollUploadResult {
   hearings: number;
   matches: CourtRollMatch[];
+}
+
+// ---------------------------------------------------------------- white label and onboarding
+
+export type FirmAssetKind = 'logo' | 'icon';
+
+export interface FirmAssetUpload {
+  contentType: string;
+  contentBase64: string;
+}
+
+export type FirmDomainStatus = 'pending_dns' | 'pending_routing' | 'active';
+
+export interface FirmDomain {
+  id: string;
+  domain: string;
+  status: FirmDomainStatus;
+  /** The DNS TXT record that proves the firm owns the domain. */
+  txtRecordName: string;
+  txtRecordValue: string;
+  /** Where the domain's CNAME should point. */
+  cnameTarget: string | null;
+  lastCheckedAt: string | null;
+  lastError: string | null;
+  activatedAt: string | null;
+  createdAt: string;
+}
+
+export const ONBOARDING_STEPS = ['profile', 'brand', 'billing', 'practice', 'team'] as const;
+export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
+
+export const ONBOARDING_LABELS: Readonly<Record<OnboardingStep, string>> = {
+  profile: 'Practice details',
+  brand: 'Name, logo and colours',
+  billing: 'Invoicing and VAT',
+  practice: 'Numbering and compliance',
+  team: 'Invite your team',
+};
+
+export interface OnboardingStatus {
+  steps: Array<{ id: OnboardingStep; label: string; done: boolean }>;
+  complete: boolean;
+  completedAt: string | null;
 }

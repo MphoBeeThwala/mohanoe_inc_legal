@@ -40,7 +40,9 @@ import CaseWorkspace from './components/CaseWorkspace';
 import OperationsHub from './components/OperationsHub';
 import ErrorBoundary from './components/ErrorBoundary';
 import DismissibleNotice from './components/DismissibleNotice';
-import { useBranding } from './branding';
+import { refreshBranding, useBranding } from './branding';
+import FirmSettingsPanel from './components/FirmSettingsPanel';
+import OnboardingWizard from './components/OnboardingWizard';
 import './App.css';
 
 const sampleMatter: Omit<IntakeSubmissionInput, 'consentToAi' | 'consentToStorage'> = {
@@ -509,6 +511,11 @@ function App() {
       />
 
       <main className="dashboard">
+        {currentUser.permissions.includes('users.manage') ? (
+          <ErrorBoundary label="Firm setup">
+            <OnboardingWizard currentUser={currentUser} onChanged={refreshBranding} />
+          </ErrorBoundary>
+        ) : null}
         <section
           id="section-overview"
           className="dashboard-section"
@@ -718,6 +725,9 @@ function App() {
           <AccountPanel currentUser={currentUser} />
           {currentUser.permissions.includes('users.manage') ? (
             <>
+              <ErrorBoundary label="Firm settings">
+                <FirmSettingsPanel onChanged={refreshBranding} />
+              </ErrorBoundary>
               <ErrorBoundary label="Staff administration">
                 <StaffAdmin currentUser={currentUser} />
               </ErrorBoundary>

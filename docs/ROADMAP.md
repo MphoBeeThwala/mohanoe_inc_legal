@@ -152,7 +152,7 @@ Environment setup:
 - [ ] Intake → consent → de-identified triage → matter
 
 ### 5.6 SaaS operations
-- [ ] Firm onboarding wizard
+- [x] Firm onboarding wizard (practice details, brand, invoicing, numbering, team); firm settings, uploaded logo and icon, colour contrast check, custom domains verified by DNS and HTTPS, emails in the firm's name
 - [ ] ZAR subscriptions via Paystack or PayFast (plans, seats, trial, dunning, suspension)
 - [ ] AI usage metering
 - [ ] IaC, staging/prod, CI/CD, tested restores, Sentry, uptime alerts, status page
@@ -210,7 +210,7 @@ Trust accounting and AI research ship behind feature flags to pilots first.
 5. **Identity** — done on `feat/identity` (except super-admin): invite-only staff, mandatory TOTP MFA with recovery codes, Entra External ID (OIDC + PKCE), lockout, resets, revocable server-side cookie sessions, CSRF origin check, five roles with permissions, matter access and ethical walls in RLS, CSP/HSTS. Platform support access, per-firm Microsoft 365 (Entra ID) sign-in and permission-aware screens (read-only roles see no edit forms) followed in their own PRs.
 6. **Encryption and records** — done on `feat/encryption-records`: per-firm data and index keys wrapped by Azure Key Vault (or a local KEK), rotation, re-encryption and rewrap via `npm run ops`, documents in Blob Storage, daily audit anchors with immutable copies and anchor-aware verification, admin-only POPIA requests, per-firm retention, firm exit export.
 7. **Practice core** — clients/matters, conflicts, FICA, time, invoicing, calendar.
-8. **White-label and onboarding** — firm settings, theming, custom domains, wizard.
+8. **White-label and onboarding** — done on `feat/white-label-onboarding`: firm settings, theming, logo and icon, custom domains (DNS + HTTPS verification), emails in the firm's name, onboarding wizard.
 9. **Infrastructure** — Terraform for staging/prod in South Africa North, DR to South Africa West, pipeline, monitoring.
 10. **Subscriptions** — Paystack or PayFast.
 11. **AI research** — corpus ingestion, retrieval, citation verification, evaluation harness.

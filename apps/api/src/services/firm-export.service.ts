@@ -28,6 +28,7 @@ const PLAIN_TABLES: Record<string, PgTable> = {
   ledgerEntries: schema.ledgerEntries,
   staffRates: schema.staffRates,
   courtRollMatches: schema.courtRollMatches,
+  firmDomains: schema.firmDomains,
   matterRates: schema.matterRates,
   notifications: schema.notifications,
   auditEvents: schema.auditEvents,
@@ -115,6 +116,12 @@ export async function exportFirm(firm: FirmRow): Promise<FirmExport> {
           };
         }),
       );
+
+      const assets = await db().select().from(schema.firmAssets);
+      tables.firmAssets = assets.map(({ content, ...rest }) => ({
+        ...rest,
+        contentBase64: content.toString('base64'),
+      }));
 
       const events = await db().select().from(schema.calendarEvents);
       tables.calendarEvents = await Promise.all(

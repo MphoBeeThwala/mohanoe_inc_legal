@@ -145,6 +145,16 @@ When the firms table is empty, the server creates a `default` firm from these va
 - **Encryption:** subjects, notes and line descriptions can name people, so they are encrypted with the firm's key. Amounts, numbers and dates stay readable for reports.
 - **Not covered:** trust accounting under the Legal Practice Act (section 86) is not built yet. The trust/operating ledger is a simple record.
 
+## White label and onboarding
+- **Onboarding wizard:** a new firm's administrator is taken through five steps after first sign-in: practice details, name/logo/colours, invoicing and VAT, numbering and compliance, and inviting the team. Steps can be skipped, and everything can be changed later under **Account & team → Firm settings**.
+- **Practice details:** the firm's address, registration, Legal Practice Council and Fidelity Fund certificate numbers, and contact details are printed in the letterhead of invoices and statements.
+- **Brand:**
+  - The registered and trading names, main and accent colours, and the matter and invoice number prefixes are set in the app.
+  - Colours must contrast at least 4.5:1 with the white text placed on them (WCAG AA).
+  - The logo (PNG, JPEG or WebP, up to 1 MB) and an optional browser icon are stored with the firm and served before sign-in at `/api/tenant/logo` and `/api/tenant/icon`, with versioned links. SVG is refused because it can carry script. The logo also goes on PDFs.
+- **Email:** the platform sends from `MAIL_FROM`, in the firm's trading name, with replies going to the firm's reply-to address.
+- **Custom domains:** a firm adds its own address (e.g. `portal.firm.co.za`) and publishes two DNS records: a TXT record proving ownership, and a CNAME to `CUSTOM_DOMAIN_CNAME_TARGET` (the Front Door endpoint, which also issues the certificate). **Check now** (or the hourly `npm run ops -w apps/api -- domains` job) verifies the TXT record, then that `https://<domain>/.well-known/firm-domain-check` answers with a value only this platform can produce. Only then does the domain become the firm's main address, used in email links.
+
 ## Calendar and prescription
 - **Events:** court dates, deadlines, meetings and consultations are recorded on a matter, with an optional assignee, and appear in Operations → Calendar as a 90-day agenda. Times are South African time. Events can be marked done or cancelled. **Download for Outlook (.ics)** exports the agenda for Outlook or Google Calendar.
 - **Court details:** each matter records its court (High Court division, Labour Court, magistrate's court or other) and the court's case number. Numbers are normalised (`34660/16`, `034660/2016` and `2016-034660` are the same case) so court rolls can be matched.

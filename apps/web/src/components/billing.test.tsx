@@ -58,19 +58,6 @@ function mockGet() {
           ],
         },
       };
-    if (url === '/firm/settings')
-      return {
-        data: {
-          billing: {
-            vatRegistered: true,
-            vatNumber: null,
-            paymentTermsDays: 30,
-            address: '',
-            bankDetails: '',
-            invoiceFooter: '',
-          },
-        },
-      };
     throw new Error(`unexpected ${url}`);
   });
 }
@@ -94,7 +81,7 @@ test('drafts from unbilled work, issues drafts, takes payments on issued invoice
   );
   // A bookkeeper can't void, and doesn't manage firm settings.
   expect(screen.queryByRole('button', { name: /Void/ })).not.toBeInTheDocument();
-  expect(screen.queryByRole('form', { name: 'Billing settings' })).not.toBeInTheDocument();
+  expect(screen.queryByText(/Firm settings/)).not.toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText('Invoice subject'), { target: { value: 'October' } });
   await act(async () => {
@@ -119,11 +106,13 @@ test('drafts from unbilled work, issues drafts, takes payments on issued invoice
   });
 });
 
-test('an administrator can void unpaid invoices and edit invoice details', async () => {
+test('an administrator can void unpaid invoices and is pointed to invoice details', async () => {
   mockGet();
   render(<BillingPanel currentUser={user('admin')} cases={cases} />);
   expect(await screen.findByRole('button', { name: 'Void INV-000001' })).toBeInTheDocument();
-  expect(await screen.findByRole('form', { name: 'Billing settings' })).toBeInTheDocument();
+  expect(
+    screen.getByText(/Invoice details .* are in Account & team → Firm settings/),
+  ).toBeInTheDocument();
 });
 
 test('platform support only reads', async () => {

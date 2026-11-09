@@ -7,7 +7,13 @@
 // name and address, a serial number, the date, what was supplied, and the
 // value with the VAT charged.
 import PDFDocument from 'pdfkit';
-import type { BillingSettings, ClientStatement, FirmBrand, Invoice } from '@ahava88/shared';
+import type {
+  BillingSettings,
+  ClientStatement,
+  FirmBrand,
+  FirmProfileSettings,
+  Invoice,
+} from '@ahava88/shared';
 
 type Doc = InstanceType<typeof PDFDocument>;
 
@@ -56,14 +62,41 @@ function newDocument(title: string): Doc {
   });
 }
 
-function letterhead(doc: Doc, brand: FirmBrand, settings: BillingSettings) {
+/** Optional letterhead details: the uploaded logo (PNG or JPEG) and practice details. */
+export interface Letterhead {
+  logo?: Buffer | null;
+  profile?: Partial<FirmProfileSettings>;
+}
+
+function letterhead(doc: Doc, brand: FirmBrand, settings: BillingSettings, extra: Letterhead = {}) {
+  if (extra.logo) {
+    try {
+      doc.image(extra.logo, MARGIN, MARGIN, { fit: [180, 60] });
+      doc.y = MARGIN + 66;
+    } catch {
+      // An image pdfkit can't draw (e.g. WebP): the name alone is used.
+    }
+  }
   doc.fillColor(brand.primaryColor).font('Helvetica-Bold').fontSize(18).text(safe(brand.firmName));
   doc.font('Helvetica').fontSize(9).fillColor(MUTED);
   if (brand.firmShortName && brand.firmShortName !== brand.firmName) {
     doc.text(safe(`Trading as ${brand.firmShortName}`));
   }
   if (settings.address) doc.text(safe(settings.address));
-  if (settings.vatNumber) doc.text(`VAT number: ${settings.vatNumber}`);
+  const profile = extra.profile ?? {};
+  const contact = [profile.phone, profile.email, profile.website].filter(Boolean).join(' · ');
+  if (contact) doc.text(safe(contact));
+  const numbers = [
+    profile.registrationNumber ? `Reg. ${profile.registrationNumber}` : '',
+    settings.vatNumber ? `VAT ${settings.vatNumber}` : '',
+    profile.lpcNumber ? `LPC ${profile.lpcNumber}` : '',
+    profile.fidelityFundCertificate
+      ? `Fidelity Fund certificate ${profile.fidelityFundCertificate}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  if (numbers) doc.text(safe(numbers));
   doc.moveDown(0.5);
   const y = doc.y;
   doc
@@ -196,13 +229,14 @@ export async function invoicePdf(
   brand: FirmBrand,
   settings: BillingSettings,
   client: PdfParty,
+  extra: Letterhead = {},
 ): Promise<Buffer> {
   const heading = settings.vatRegistered && invoice.vat > 0 ? 'Tax invoice' : 'Invoice';
   const number = invoice.number ?? 'Draft';
   const doc = newDocument(`${heading} ${number}`);
   const done = collect(doc);
 
-  letterhead(doc, brand, settings);
+  letterhead(doc, brand, settings, extra);
   doc.font('Helvetica-Bold').fontSize(16).text(heading.toUpperCase());
   doc.moveDown(0.5);
   twoColumns(
@@ -287,11 +321,12 @@ export async function statementPdf(
   brand: FirmBrand,
   settings: BillingSettings,
   client: PdfParty,
+  extra: Letterhead = {},
 ): Promise<Buffer> {
   const doc = newDocument(`Statement ${statement.partyNumber} ${statement.to}`);
   const done = collect(doc);
 
-  letterhead(doc, brand, settings);
+  letterhead(doc, brand, settings, extra);
   doc.font('Helvetica-Bold').fontSize(16).text('STATEMENT OF ACCOUNT');
   doc.moveDown(0.5);
   twoColumns(

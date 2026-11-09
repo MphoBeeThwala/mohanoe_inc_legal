@@ -12,7 +12,9 @@ import { tenantContext } from './middleware/tenant';
 import { ensureDefaultFirm } from './services/firm.service';
 import { scheduleAnchoring } from './services/audit-anchor.service';
 import { scheduleReminders } from './services/calendar.service';
+import { sendError } from './lib/http';
 import { scheduleCourtRollSync } from './services/court-roll.service';
+import { domainCheckValue, readAsset } from './services/white-label.service';
 import * as supportService from './services/support.service';
 import { createRateLimiter, requestLogger, securityHeaders } from './middleware/security';
 
@@ -54,15 +56,17 @@ app.use(
   }),
 );
 // JSON bodies: 1 MB, except file uploads (base64 files up to 10 MB): FICA
-// documents and court rolls.
+// documents, court rolls, and the firm's logo and icon.
 const smallJson = express.json({ limit: '1mb' });
 const uploadJson = express.json({ limit: '14mb' });
 const UPLOAD_PATHS = [
   /^\/api\/clients\/[^/]+\/fica\/documents\/?$/,
   /^\/api\/court-rolls\/upload\/?$/,
+  /^\/api\/firm\/assets\/(logo|icon)\/?$/,
 ];
 app.use((req, res, next) =>
-  req.method === 'POST' && UPLOAD_PATHS.some((path) => path.test(req.path))
+  (req.method === 'POST' || req.method === 'PUT') &&
+  UPLOAD_PATHS.some((path) => path.test(req.path))
     ? uploadJson(req, res, next)
     : smallJson(req, res, next),
 );
@@ -102,6 +106,12 @@ app.post('/api/support/sign-in', supportSignInLimiter, (req, res) => {
   supportService.signInHandler(req, res);
 });
 
+// Custom-domain check: only this platform can answer for a host (see
+// white-label.service). No firm or database involved.
+app.get('/.well-known/firm-domain-check', (req, res) => {
+  res.type('text/plain').send(domainCheckValue(req.hostname));
+});
+
 // Every /api request belongs to one firm, resolved from the host name, and
 // runs inside that firm's row-level-security context.
 app.use('/api', tenantContext());
@@ -110,6 +120,30 @@ app.use('/api', tenantContext());
 app.get('/api/tenant/branding', (req, res) => {
   res.json(getPublicBranding(req.firm!));
 });
+for (const kind of ['logo', 'icon'] as const) {
+  app.get(`/api/tenant/${kind}`, async (req, res) => {
+    try {
+      const asset = await readAsset(kind);
+      if (!asset) {
+        res.status(404).end();
+        return;
+      }
+      res.setHeader('Content-Type', asset.contentType);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+      // Versioned URLs (?v=hash) can be cached for long.
+      res.setHeader(
+        'Cache-Control',
+        req.query.v === asset.contentHash.slice(0, 16)
+          ? 'public, max-age=31536000, immutable'
+          : 'public, max-age=300',
+      );
+      res.status(200).send(asset.content);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+}
 
 // Routes
 app.use('/api', routes);

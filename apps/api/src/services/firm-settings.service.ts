@@ -1,10 +1,19 @@
-// Settings a firm's administrators manage themselves: retention, and
-// Microsoft 365 staff sign-in. RLS lets a request update only its own firm's
+// Settings a firm's administrators manage themselves: practice details,
+// name, colours and numbering, invoicing, retention, FICA and Microsoft 365
+// staff sign-in. RLS lets a request update only its own firm's
 // row, and the migration grants UPDATE on these columns only.
 import { eq } from 'drizzle-orm';
-import type { BillingSettings, FirmSettings } from '@ahava88/shared';
+import {
+  contrastRatio,
+  MIN_BRAND_CONTRAST,
+  type BillingSettings,
+  type FirmBrandSettings,
+  type FirmProfileSettings,
+  type FirmSettings,
+} from '@ahava88/shared';
 import { z } from 'zod';
 import { workforceAvailable } from '../config/auth';
+import { getFirmBrand } from '../config/brand';
 import { db } from '../db/client';
 import { currentFirm } from '../db/tenant-context';
 import { firms, type FirmRow } from '../db/schema';
@@ -38,6 +47,55 @@ const settingsSchema = z.object({
       address: z.string().trim().max(500).optional(),
       bankDetails: z.string().trim().max(500).optional(),
       invoiceFooter: z.string().trim().max(500).optional(),
+      invoicePrefix: z
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(/^[A-Z]{2,6}$/, 'must be 2 to 6 letters')
+        .optional(),
+    })
+    .optional(),
+  profile: z
+    .object({
+      registrationNumber: z.string().trim().max(40).optional(),
+      lpcNumber: z.string().trim().max(40).optional(),
+      fidelityFundCertificate: z.string().trim().max(60).optional(),
+      email: z.union([z.literal(''), z.string().trim().toLowerCase().email()]).optional(),
+      phone: z
+        .string()
+        .trim()
+        .max(30)
+        .regex(/^[+0-9 ()-]*$/, 'must be a phone number')
+        .optional(),
+      website: z
+        .union([
+          z.literal(''),
+          z.string().trim().url().startsWith('https://', 'must start with https://'),
+        ])
+        .optional(),
+      replyToEmail: z.union([z.literal(''), z.string().trim().toLowerCase().email()]).optional(),
+    })
+    .optional(),
+  brand: z
+    .object({
+      legalName: z.string().trim().min(2).max(200).optional(),
+      tradingName: z.string().trim().min(2).max(120).optional(),
+      primaryColor: z
+        .string()
+        .trim()
+        .regex(/^#[0-9a-f]{6}$/i, 'must be a colour such as #1f4e79')
+        .optional(),
+      accentColor: z
+        .string()
+        .trim()
+        .regex(/^#[0-9a-f]{6}$/i, 'must be a colour such as #c8a24a')
+        .optional(),
+      casePrefix: z
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(/^[A-Z0-9]{2,8}$/, 'must be 2 to 8 letters or digits')
+        .optional(),
     })
     .optional(),
   microsoft: z
@@ -79,6 +137,33 @@ export function billingSettings(firm: FirmRow): BillingSettings {
     address: settings.address ?? '',
     bankDetails: settings.bankDetails ?? '',
     invoiceFooter: settings.invoiceFooter ?? '',
+    invoicePrefix: settings.invoicePrefix ?? 'INV',
+  };
+}
+
+export function profileSettings(firm: FirmRow): FirmProfileSettings {
+  const profile = firm.profile ?? {};
+  return {
+    registrationNumber: profile.registrationNumber ?? '',
+    lpcNumber: profile.lpcNumber ?? '',
+    fidelityFundCertificate: profile.fidelityFundCertificate ?? '',
+    email: profile.email ?? '',
+    phone: profile.phone ?? '',
+    website: profile.website ?? '',
+    replyToEmail: profile.replyToEmail ?? '',
+  };
+}
+
+export function brandSettings(firm: FirmRow): FirmBrandSettings {
+  const brand = getFirmBrand(firm);
+  return {
+    legalName: firm.legalName,
+    tradingName: firm.tradingName,
+    primaryColor: brand.primaryColor,
+    accentColor: brand.accentColor,
+    casePrefix: brand.casePrefix,
+    logoUrl: brand.logoUrl,
+    iconUrl: firm.branding?.iconHash ? (brand.iconUrl ?? null) : null,
   };
 }
 
@@ -89,6 +174,8 @@ export function getSettings(): FirmSettings {
     retentionIsDefault: firm.retentionDays === null,
     ficaEnforced: firm.ficaEnforced,
     billing: billingSettings(firm),
+    profile: profileSettings(firm),
+    brand: brandSettings(firm),
     microsoft: {
       available: workforceAvailable(),
       tenantId: firm.ssoTenantId,
@@ -122,6 +209,35 @@ export async function updateSettings(input: unknown, actor: Actor): Promise<Firm
     // Only which settings changed: addresses and bank details stay out of the audit trail.
     details.billing = Object.keys(changes.billing);
   }
+  if (changes.profile) {
+    set.profile = { ...(firm.profile ?? {}), ...changes.profile };
+    details.profile = Object.keys(changes.profile);
+  }
+  if (changes.brand) {
+    const { legalName, tradingName, primaryColor, accentColor, casePrefix } = changes.brand;
+    for (const [label, colour] of [
+      ['main colour', primaryColor],
+      ['accent colour', accentColor],
+    ] as const) {
+      if (colour && contrastRatio(colour, '#ffffff') < MIN_BRAND_CONTRAST) {
+        throw httpError(
+          `The ${label} is too light for white text on it; choose a darker colour (contrast at least ${MIN_BRAND_CONTRAST}:1)`,
+          400,
+        );
+      }
+    }
+    if (legalName) set.legalName = legalName;
+    if (tradingName) set.tradingName = tradingName;
+    if (casePrefix) set.casePrefix = casePrefix;
+    if (primaryColor || accentColor) {
+      set.branding = {
+        ...(firm.branding ?? {}),
+        ...(primaryColor ? { primaryColor } : {}),
+        ...(accentColor ? { accentColor } : {}),
+      };
+    }
+    details.brand = changes.brand;
+  }
   if (changes.microsoft) {
     const { tenantId, domains, enforced } = changes.microsoft;
     if (enforced && (!tenantId || !domains.length || !workforceAvailable())) {
@@ -148,11 +264,15 @@ export async function updateSettings(input: unknown, actor: Actor): Promise<Firm
       action: 'firm_settings_updated',
       summary: changes.microsoft
         ? 'Sign-in settings changed'
-        : changes.billing
-          ? 'Billing settings changed'
-          : changes.ficaEnforced !== undefined
-            ? 'FICA requirement changed'
-            : 'Retention period changed',
+        : changes.brand
+          ? 'Firm name, colours or numbering changed'
+          : changes.profile
+            ? 'Practice details changed'
+            : changes.billing
+              ? 'Billing settings changed'
+              : changes.ficaEnforced !== undefined
+                ? 'FICA requirement changed'
+                : 'Retention period changed',
       details,
     },
     actor,
