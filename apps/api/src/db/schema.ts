@@ -799,6 +799,123 @@ export const ledgerEntries = pgTable(
   ],
 );
 
+// ---------------------------------------------------------------- time recording
+
+/** A fee earner's standard hourly rate. */
+export const staffRates = pgTable(
+  'staff_rates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    hourlyRateCents: bigint('hourly_rate_cents', { mode: 'number' }).notNull(),
+    updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+    ...updatable,
+  },
+  (t) => [uniqueIndex('staff_rates_user_idx').on(t.userId), tenantPolicy('staff_rates')],
+);
+
+/** An agreed rate on one matter: for one fee earner, or (user_id null) for everyone on it. */
+export const matterRates = pgTable(
+  'matter_rates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    hourlyRateCents: bigint('hourly_rate_cents', { mode: 'number' }).notNull(),
+    updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+    ...updatable,
+  },
+  (t) => [
+    uniqueIndex('matter_rates_case_user_idx')
+      .on(t.caseId, t.userId)
+      .where(sql`${t.userId} is not null`),
+    uniqueIndex('matter_rates_case_all_idx')
+      .on(t.caseId)
+      .where(sql`${t.userId} is null`),
+    tenantPolicy('matter_rates'),
+    matterPolicy('matter_rates'),
+  ],
+);
+
+/**
+ * Recorded time, in 6-minute units (0.1 hour). The rate is fixed when the
+ * time is recorded. Unbilled billable time is the matter's work in progress.
+ */
+export const timeEntries = pgTable(
+  'time_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id, { onDelete: 'cascade' }),
+    /** The fee earner whose time this is. */
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    workDate: date('work_date').notNull(),
+    units: integer('units').notNull(),
+    billable: boolean('billable').notNull().default(true),
+    rateCents: bigint('rate_cents', { mode: 'number' }).notNull().default(0),
+    amountCents: bigint('amount_cents', { mode: 'number' }).notNull().default(0),
+    activity: text('activity').notNull().default('other'),
+    /** Narrative of the work (may name people), encrypted with privacy.service. */
+    descriptionEncrypted: text('description_encrypted').notNull(),
+    /** 'manual' | 'timer' */
+    source: text('source').notNull().default('manual'),
+    /** 'unbilled' | 'billed' | 'written_off' */
+    status: text('status').notNull().default('unbilled'),
+    invoiceId: uuid('invoice_id').references(() => invoices.id, { onDelete: 'set null' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    ...updatable,
+  },
+  (t) => [
+    index('time_entries_case_idx').on(t.caseId),
+    index('time_entries_user_date_idx').on(t.userId, t.workDate),
+    tenantPolicy('time_entries'),
+    matterPolicy('time_entries'),
+  ],
+);
+
+/** A fee earner's running (or paused) timer; one per person. */
+export const timers = pgTable(
+  'timers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id, { onDelete: 'cascade' }),
+    activity: text('activity').notNull().default('other'),
+    billable: boolean('billable').notNull().default(true),
+    descriptionEncrypted: text('description_encrypted'),
+    /** When the current run started; null while paused. */
+    runningSince: timestamp('running_since', { withTimezone: true }),
+    /** Seconds from earlier runs (before the last pause). */
+    elapsedSeconds: integer('elapsed_seconds').notNull().default(0),
+    ...updatable,
+  },
+  (t) => [
+    uniqueIndex('timers_user_idx').on(t.userId),
+    tenantPolicy('timers'),
+    matterPolicy('timers'),
+  ],
+);
+
+export type StaffRateRow = typeof staffRates.$inferSelect;
+export type MatterRateRow = typeof matterRates.$inferSelect;
+export type TimeEntryRow = typeof timeEntries.$inferSelect;
+export type TimerRow = typeof timers.$inferSelect;
+
 // ---------------------------------------------------------------- calendar & notifications
 
 export const calendarEvents = pgTable(

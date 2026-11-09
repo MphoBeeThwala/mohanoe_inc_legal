@@ -6,6 +6,7 @@
 
 import { z } from 'zod';
 import { httpError } from '../lib/http';
+import { MAX_UNITS_PER_DAY, MINUTES_PER_UNIT, TIME_ACTIVITIES } from '@ahava88/shared';
 
 const MAX_TEXT = 20_000;
 
@@ -405,3 +406,97 @@ export const matterPartySchema = z
   .refine((value) => Boolean(value.partyId) !== Boolean(value.party), {
     message: 'Give either partyId or party details',
   });
+
+// ---------------------------------------------------------------- time recording
+
+const timeActivity = z.enum(TIME_ACTIVITIES);
+
+/** A calendar date, YYYY-MM-DD, that exists. */
+const calendarDate = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date (YYYY-MM-DD)')
+  .refine((value) => {
+    const parsed = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value);
+  }, 'must be a real date');
+
+const optionalCount = (max: number) =>
+  z.preprocess(
+    (value) =>
+      value === '' || value === null
+        ? undefined
+        : typeof value === 'string'
+          ? Number(value)
+          : value,
+    z.number().int().min(1).max(max).optional(),
+  );
+
+const timeAmount = {
+  minutes: optionalCount(MAX_UNITS_PER_DAY * MINUTES_PER_UNIT),
+  units: optionalCount(MAX_UNITS_PER_DAY),
+};
+
+const onlyOneAmount = (value: { minutes?: number; units?: number }) =>
+  value.minutes === undefined || value.units === undefined;
+
+export const timeEntrySchema = z
+  .object({
+    caseRef: requiredText(120),
+    userId: z.string().uuid().optional(),
+    workDate: calendarDate.optional(),
+    ...timeAmount,
+    billable: z.boolean().default(true),
+    activity: timeActivity.default('other'),
+    description: requiredText(2_000),
+  })
+  .refine(onlyOneAmount, { message: 'give minutes or units, not both' })
+  .refine((value) => value.minutes !== undefined || value.units !== undefined, {
+    message: 'give the time spent (minutes or units)',
+  });
+
+export const timeEntryUpdateSchema = z
+  .object({
+    workDate: calendarDate.optional(),
+    ...timeAmount,
+    billable: z.boolean().optional(),
+    activity: timeActivity.optional(),
+    description: requiredText(2_000).optional(),
+  })
+  .refine(onlyOneAmount, { message: 'give minutes or units, not both' });
+
+export const timerStartSchema = z.object({
+  caseRef: requiredText(120),
+  activity: timeActivity.default('other'),
+  billable: z.boolean().default(true),
+  description: optionalText(2_000),
+});
+
+export const timerStopSchema = z.object({
+  activity: timeActivity.optional(),
+  billable: z.boolean().optional(),
+  description: optionalText(2_000),
+  workDate: calendarDate.optional(),
+});
+
+const hourlyRate = z.union([
+  z.null(),
+  z.preprocess(
+    (value) => (typeof value === 'string' ? Number(value.replace(/[\s,]/g, '')) : value),
+    z
+      .number()
+      .finite()
+      .positive('must be more than zero')
+      .max(1_000_000)
+      .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6, {
+        message: 'must have at most two decimal places',
+      }),
+  ),
+]);
+
+export const staffRateSchema = z.object({ hourlyRate: hourlyRate });
+
+export const matterRateSchema = z.object({
+  userId: z.string().uuid().nullable().default(null),
+  hourlyRate: hourlyRate,
+});

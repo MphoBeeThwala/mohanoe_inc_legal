@@ -123,6 +123,14 @@ When the firms table is empty, the server creates a `default` firm from these va
 - **Verification** (fee earners; secretaries collect documents but can't verify) needs every required document. It sets the next review: 12, 24 or 36 months for high, medium or low risk. Raising the risk, or removing a required document, reopens verification.
 - **Firm switch:** administrators can require verified FICA before any new matter (Account & team → Records). Overdue reviews then block new matters too.
 
+## Time recording
+- **Units:** time is recorded in 6-minute units (0.1 h), rounded up. A fee earner can't record more than 24 hours on one day, across all matters, or time for a future date. Closed matters take no new time.
+- **Recording:** use **Time** to record time manually (minutes, activity, billable or not, narrative), or start a timer on a matter, pause and resume it, and stop it to record the time. Each person has one timer, which survives sign-out.
+- **Rates:** administrators set each fee earner's standard hourly rate, plus agreed rates on a matter for one fee earner or for everyone on it (`PUT /api/time/matters/:caseId/rates`). The order of precedence is the fee earner's matter rate, then the matter rate, then the standard rate. An entry keeps the rate it was recorded at. Billable time needs a rate.
+- **Work in progress:** unbilled billable time, by matter and by fee earner (fee earners, bookkeepers and administrators).
+- **Changes:** people change or delete their own unbilled time. Administrators can also change other people's time and write it off. Billed and written-off time doesn't change.
+- **Encryption and audit:** narratives can name people, so they are encrypted with the firm's key. Audit rows record only hours and amounts.
+
 ## Encryption and records
 - **Per-firm envelope encryption.** Each firm has its own random data key (and a separate blind-index key), stored only wrapped by a key-encryption key: Azure Key Vault in production (`KEY_PROVIDER=azure-keyvault`, `AZURE_KEY_VAULT_KEY_ID`, managed identity), or `INTAKE_ENCRYPTION_KEY` locally. Ciphertext (`v2:`) is bound to its firm, so it can't be decrypted in another firm's rows. Data written before this (`v1:`) still reads; move it with `keys reencrypt`.
 - **Key operations** (`npm run ops -w apps/api -- …`, same environment as the server):

@@ -88,7 +88,11 @@ export type Permission =
   | 'conflicts.waive'
   | 'fica.read'
   | 'fica.write'
-  | 'fica.verify';
+  | 'fica.verify'
+  | 'time.read'
+  | 'time.record'
+  | 'time.manage'
+  | 'rates.manage';
 
 const FEE_EARNER: readonly Permission[] = [
   'clients.read',
@@ -97,6 +101,8 @@ const FEE_EARNER: readonly Permission[] = [
   'fica.read',
   'fica.write',
   'fica.verify',
+  'time.read',
+  'time.record',
   'intake.read',
   'intake.write',
   'matters.read',
@@ -124,6 +130,9 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'audit.read',
     'users.manage',
     'conflicts.waive',
+    // Corrects or writes off other people's time, and sets hourly rates.
+    'time.manage',
+    'rates.manage',
   ],
   attorney: FEE_EARNER,
   paralegal: FEE_EARNER,
@@ -147,6 +156,8 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'clients.read',
     'fica.read',
     'matters.read',
+    // Sees recorded time and work in progress, to bill it.
+    'time.read',
     'billing.read',
     'billing.write',
     'reports.read',
@@ -157,6 +168,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
   support: [
     'intake.read',
     'matters.read',
+    'time.read',
     'documents.read',
     'calendar.read',
     'billing.read',
@@ -947,4 +959,148 @@ export interface ComplianceSummary {
   fulfilledRequests: number;
   eligibleForRetention: number;
   latestRequest: ComplianceRequest | null;
+}
+
+// ---------------------------------------------------------------- time recording
+
+/** Minutes in one billing unit: time is recorded in tenths of an hour. */
+export const MINUTES_PER_UNIT = 6;
+
+/** Most time one entry (or one person's day) can hold: 24 hours. */
+export const MAX_UNITS_PER_DAY = 240;
+
+export const TIME_ACTIVITIES = [
+  'consultation',
+  'drafting',
+  'correspondence',
+  'calls',
+  'research',
+  'court',
+  'travel',
+  'admin',
+  'other',
+] as const;
+export type TimeActivity = (typeof TIME_ACTIVITIES)[number];
+
+export const TIME_ACTIVITY_LABELS: Readonly<Record<TimeActivity, string>> = {
+  consultation: 'Consultation',
+  drafting: 'Drafting',
+  correspondence: 'Correspondence',
+  calls: 'Telephone calls',
+  research: 'Research',
+  court: 'Court attendance',
+  travel: 'Travel',
+  admin: 'Administration',
+  other: 'Other',
+};
+
+export type TimeEntryStatus = 'unbilled' | 'billed' | 'written_off';
+
+export interface TimeEntry {
+  id: string;
+  caseId: string;
+  caseNumber: string;
+  userId: string;
+  feeEarnerName: string;
+  /** YYYY-MM-DD */
+  workDate: string;
+  /** 6-minute units. */
+  units: number;
+  minutes: number;
+  billable: boolean;
+  /** Hourly rate in rands, fixed when the time was recorded. */
+  rate: number;
+  /** Value in rands (0 for non-billable time). */
+  amount: number;
+  activity: TimeActivity;
+  description: string;
+  source: 'manual' | 'timer';
+  status: TimeEntryStatus;
+  invoiceId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TimeEntryInput {
+  /** Matter id or number. */
+  caseRef: string;
+  /** Defaults to the signed-in fee earner (another person needs time.manage). */
+  userId?: string;
+  /** YYYY-MM-DD, defaults to today; not in the future. */
+  workDate?: string;
+  /** Give minutes (rounded up to whole 6-minute units) or units. */
+  minutes?: number;
+  units?: number;
+  billable?: boolean;
+  activity?: TimeActivity;
+  description: string;
+}
+
+export type TimeEntryUpdate = Partial<Omit<TimeEntryInput, 'caseRef' | 'userId'>>;
+
+export interface TimerState {
+  caseId: string;
+  caseNumber: string;
+  activity: TimeActivity;
+  billable: boolean;
+  description: string;
+  running: boolean;
+  /** Seconds recorded so far, as of the response. */
+  elapsedSeconds: number;
+  /** Units the time would be recorded as if stopped now. */
+  units: number;
+}
+
+export interface TimerStartInput {
+  caseRef: string;
+  activity?: TimeActivity;
+  billable?: boolean;
+  description?: string;
+}
+
+export interface TimerStopInput {
+  activity?: TimeActivity;
+  billable?: boolean;
+  description?: string;
+  workDate?: string;
+}
+
+export interface StaffRate {
+  userId: string;
+  fullName: string;
+  role: UserRole;
+  /** Rands per hour; null when not set. */
+  hourlyRate: number | null;
+}
+
+export interface MatterRate {
+  /** Null: the rate for everyone on the matter. */
+  userId: string | null;
+  fullName: string | null;
+  hourlyRate: number;
+}
+
+export interface WipMatter {
+  caseId: string;
+  caseNumber: string;
+  title: string | null;
+  units: number;
+  value: number;
+  entries: number;
+  oldestWorkDate: string;
+}
+
+export interface WipFeeEarner {
+  userId: string;
+  fullName: string;
+  units: number;
+  value: number;
+}
+
+/** Unbilled billable time on the matters the caller can see. */
+export interface WipSummary {
+  units: number;
+  value: number;
+  matters: WipMatter[];
+  feeEarners: WipFeeEarner[];
 }

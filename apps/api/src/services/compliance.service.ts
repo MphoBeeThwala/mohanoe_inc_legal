@@ -46,7 +46,7 @@ import type { PartyRecord } from '@ahava88/shared';
 import { currentFirm } from '../db/tenant-context';
 
 /** Statuses that mean a matter is finished and its retention clock runs. */
-const CLOSED_STATUSES = ['closed', 'resolved', 'completed'];
+export const CLOSED_STATUSES = ['closed', 'resolved', 'completed'];
 
 function toDays(value: unknown, fallback: number): number {
   const parsed = Number(value);

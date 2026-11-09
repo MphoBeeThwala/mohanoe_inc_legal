@@ -1164,3 +1164,53 @@
   padding: 10px 14px;
   margin: 8px 0;
 }
+
+/* Time recording */
+.time-timer p {
+  margin: 0 0 0.5rem;
+}
+
+.time-clock {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.25rem;
+}
+
+.time-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.75rem 0 0.25rem;
+}
+
+.time-form input:not([type='checkbox']),
+.time-form select {
+  min-width: 0;
+  flex: 1 1 9rem;
+}
+
+.time-entries-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.time-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.time-table th,
+.time-table td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--line, #e3e7e5);
+  text-align: left;
+  vertical-align: top;
+}
+
+.time-table td:nth-child(5),
+.time-table td:nth-child(6) {
+  font-variant-numeric: tabular-nums;
+}

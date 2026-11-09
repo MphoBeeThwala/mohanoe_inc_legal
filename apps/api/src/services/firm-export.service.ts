@@ -26,6 +26,8 @@ const PLAIN_TABLES: Record<string, PgTable> = {
   caseTimeline: schema.caseTimeline,
   invoices: schema.invoices,
   ledgerEntries: schema.ledgerEntries,
+  staffRates: schema.staffRates,
+  matterRates: schema.matterRates,
   calendarEvents: schema.calendarEvents,
   notifications: schema.notifications,
   auditEvents: schema.auditEvents,
@@ -112,6 +114,21 @@ export async function exportFirm(firm: FirmRow): Promise<FirmExport> {
             dataBase64: await decryptJson(await readSealedFica(row)),
           };
         }),
+      );
+
+      const entries = await db().select().from(schema.timeEntries);
+      tables.timeEntries = await Promise.all(
+        entries.map(async ({ descriptionEncrypted, ...rest }) => ({
+          ...rest,
+          description: await decryptJson(descriptionEncrypted),
+        })),
+      );
+      const running = await db().select().from(schema.timers);
+      tables.timers = await Promise.all(
+        running.map(async ({ descriptionEncrypted, ...rest }) => ({
+          ...rest,
+          description: descriptionEncrypted ? await decryptJson(descriptionEncrypted) : null,
+        })),
       );
 
       const checkRows = await db().select().from(schema.conflictChecks);

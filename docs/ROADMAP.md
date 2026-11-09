@@ -145,7 +145,7 @@ Environment setup:
 ### 5.5 Core practice features
 - [x] Clients (individuals and entities) and matters, with conflict-of-interest checks (encrypted party register, blind-index search, conflict register with decisions and waivers)
 - [x] FICA onboarding (KYC documents, risk rating, verification status, review dates, optional enforcement before new matters)
-- [ ] Time recording: timer, manual entries, 6-minute units, fee-earner and matter rates, billable/non-billable, WIP
+- [x] Time recording: timer, manual entries, 6-minute units, fee-earner and matter rates, billable/non-billable, WIP
 - [ ] Billing from time + disbursements, 15% VAT, branded PDFs, email, payments, statements, aging
 - [ ] Calendar: court dates, deadlines, prescription reminders, email notifications
 - [ ] Intake → consent → de-identified triage → matter

@@ -167,6 +167,7 @@ describe('per-firm envelope encryption', () => {
       parties: 0,
       conflictChecks: 0,
       fica: 0,
+      time: 0,
     });
   });
 

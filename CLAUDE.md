@@ -15,6 +15,7 @@ Owner: Ahava on 88 (Pty) Ltd. The product is licensed to individual law firms. T
 - **Object storage:** document bodies and audit anchors go through `object-store.ts`. Delete objects only in `afterCommit()` (tenant-context), never before the database change commits.
 - **AI** only receives de-identified briefs; output must cite retrieved sources (roadmap §7); AI failures surface as errors.
 - **Money** is integer cents (ZAR); VAT 15% configurable; invoice numbers sequential and gap-free per firm.
+- **Time** is whole 6-minute units with the rate fixed when recorded (`time.service.ts`); narratives are encrypted; billed or written-off time never changes.
 - **Production fails fast:** `apps/api/src/config/env.ts` refuses to boot without real secrets. Don't add silent fallbacks that run in production.
 - Schema changes: edit `apps/api/src/db/schema.ts`, then `npm run db:generate -w apps/api`; commit the migration. Never edit an applied migration; no manual SQL in production.
 - Audit: use `auditService.logEvent` (or `logEventSafely` for best-effort events). Never put personal information in audit summaries/details: audit rows are not encrypted.
