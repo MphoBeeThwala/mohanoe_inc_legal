@@ -42,6 +42,34 @@ export interface OidcSettings {
   allowInsecure: boolean;
 }
 
+/**
+ * A firm's own Microsoft 365 directory (Entra ID workforce), through the
+ * platform's multi-tenant app registration (ENTRA_WORKFORCE_CLIENT_ID/SECRET),
+ * when the firm has set its tenant id.
+ */
+export function workforceSettings(firm: { ssoTenantId: string | null }): OidcSettings | null {
+  const clientId = (process.env.ENTRA_WORKFORCE_CLIENT_ID || '').trim();
+  if (!clientId || !firm.ssoTenantId) {
+    return null;
+  }
+  const authority = (process.env.ENTRA_WORKFORCE_AUTHORITY || 'https://login.microsoftonline.com')
+    .trim()
+    .replace(/\/+$/, '');
+  return {
+    issuer: `${authority}/${firm.ssoTenantId}/v2.0`,
+    clientId,
+    clientSecret: (process.env.ENTRA_WORKFORCE_CLIENT_SECRET || '').trim(),
+    label: 'Sign in with Microsoft 365',
+    requireMfaClaim: flag('ENTRA_WORKFORCE_REQUIRE_MFA_CLAIM', false),
+    allowInsecure: !isProduction() && flag('OIDC_ALLOW_INSECURE', false),
+  };
+}
+
+/** Whether the platform's multi-tenant Microsoft 365 app is configured. */
+export function workforceAvailable(): boolean {
+  return Boolean((process.env.ENTRA_WORKFORCE_CLIENT_ID || '').trim());
+}
+
 /** Entra External ID (or any OIDC provider), when OIDC_ISSUER is set. */
 export function oidcSettings(): OidcSettings | null {
   const issuer = (process.env.OIDC_ISSUER || '').trim();

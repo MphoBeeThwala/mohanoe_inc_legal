@@ -50,10 +50,19 @@ Requires Node 22+.
 - **Invite only.** There is no public registration. Administrators invite staff under **Account & team**; the firm's first administrator is invited with the CLI (`npm run firm -w apps/api -- create … --admin-email …` or `… invite --slug … --email …`). Invite and reset links are emailed when `SMTP_URL` is set, and are always shown once to whoever created them.
 - **Two-factor sign-in is mandatory** for password accounts: after the password, an authenticator-app code (TOTP) or a one-time recovery code. New accounts set up the authenticator before their first session. Codes can't be replayed.
 - **Microsoft Entra External ID** sign-in is enabled with `OIDC_ISSUER`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET`. Enforce MFA in Entra (user flow / Conditional Access); `OIDC_REQUIRE_MFA_CLAIM=true` also checks the token. An Entra identity is linked to an account only by accepting an invite with it — emails are never used to match accounts. Register `https://<firm address>/api/auth/oidc/callback` as a redirect URI for every firm.
+- **Microsoft 365 sign-in per firm** (Entra ID). The platform registers one multi-tenant app (`ENTRA_WORKFORCE_CLIENT_ID`, `ENTRA_WORKFORCE_CLIENT_SECRET`). A firm's administrators enter their directory (tenant) ID and work email domains under **Account & team → Microsoft 365**, and their Microsoft 365 admin approves the app with the link shown there.
+  - Tokens must come from that directory, and guests are refused.
+  - Existing staff are linked on their first Microsoft sign-in by their work address (UPN) on a listed domain. New people still need an invite: no account is ever created by signing in.
+  - Firms can **require** Microsoft sign-in. Then only administrators can still use password + authenticator, as a break-glass route.
 - **Lockout:** 5 failed attempts lock an account for 15 minutes (`LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCKOUT_MINUTES`). A password reset lifts the lock.
 - **Sessions** are server-side, in httpOnly `SameSite=Lax` cookies (`__Host-` and `Secure` in production). They end after `SESSION_IDLE_MINUTES` idle or `SESSION_MAX_HOURS`, and are revoked by sign-out, password change or reset, MFA reset and deactivation. Cookie-authenticated writes must come from the workspace's own origin (CSRF protection). API clients can send the session token as a bearer token.
 - **Roles** (per firm): Administrator, Attorney, Paralegal, Secretary, Bookkeeper. Each grants permissions (`ROLE_PERMISSIONS` in `packages/shared`); routes check them with `requirePermission(...)`. Role changes apply on the next request.
 - **Matter access:** a matter is visible firm-wide by default. Its lead (whoever opened it) or an administrator can restrict it to named members, and add **ethical walls** that hide it from specific people, administrators included. PostgreSQL row-level security enforces this, and hides the matter's tasks, documents, invoices, ledger, calendar and intake record with it. POPIA exports, erasure and retention sweeps (information officer only) still cover every matter.
+
+## Platform support access
+- Ahava on 88 support staff (*platform operators*) have no standing access to any firm. Create them with `npm run ops -w apps/api -- operator create --email … --name …`; it prints a one-time password and an authenticator key, and MFA is mandatory. List or disable them with `operator list`, `operator disable --email …`.
+- A firm administrator opens access under **Account & team → Support access**, for 1 hour to 3 days and with a reason. While a grant is active, the operator signs in at that firm's address under `/support` (email, password, authenticator code).
+- Support sessions are **read-only** (role `support`). Restricted matters and ethical walls still apply, and the session ends when the grant expires or is revoked. **Every request** is written to the firm's audit trail, with the method and path.
 
 ## Firms (multi-tenancy)
 One deployment serves many firms. Every tenant table has a `firm_id`, and PostgreSQL row-level security keeps each firm's rows invisible to the others.
@@ -87,13 +96,26 @@ When the firms table is empty, the server creates a `default` firm from these va
 
 ## Production
 - Required, or the server will not start: `JWT_SECRET` (32+ chars), `INTAKE_ENCRYPTION_KEY` (32-byte base64 or 64-char hex), `AUDIT_CHAIN_SECRET` (32+ chars), `DATABASE_URL`.
-- **Keep `INTAKE_ENCRYPTION_KEY` and `AUDIT_CHAIN_SECRET` safe and unchanged.** Losing the first makes stored client data unreadable; changing the second makes the audit chain fail verification.
+- **Keep `INTAKE_ENCRYPTION_KEY` and `AUDIT_CHAIN_SECRET` safe.** With `KEY_PROVIDER=local` the first wraps every firm's keys: losing it makes stored client data unreadable. Changing the second makes the audit chain fail verification. See *Encryption and records* for rotating keys.
 - The server applies pending migrations on start (`DB_MIGRATE_ON_START=false` to run `npm run db:migrate -w apps/api` as a separate release step instead).
 - `/ready` returns 503 until the database answers.
 - `ANTHROPIC_API_KEY` enables live AI triage; without it the backend uses rules-based triage.
 - Interim hosting is Render (`render.yaml`: `npm ci --include=dev && npm run build`, then `npm start`). The target is Microsoft Azure, South Africa North — see the roadmap.
 - After a deploy: `node scripts/smoke-test.js https://<your-host>`.
 - Backup, restore and smoke tests: [`PROD_OPERATIONS.md`](PROD_OPERATIONS.md).
+
+## Encryption and records
+- **Per-firm envelope encryption.** Each firm has its own random data key (and a separate blind-index key), stored only wrapped by a key-encryption key: Azure Key Vault in production (`KEY_PROVIDER=azure-keyvault`, `AZURE_KEY_VAULT_KEY_ID`, managed identity), or `INTAKE_ENCRYPTION_KEY` locally. Ciphertext (`v2:`) is bound to its firm, so it can't be decrypted in another firm's rows. Data written before this (`v1:`) still reads; move it with `keys reencrypt`.
+- **Key operations** (`npm run ops -w apps/api -- …`, same environment as the server):
+  - `keys status` — keys per firm and how much data is not yet on the active key
+  - `keys rotate --slug <firm>` then `keys reencrypt --slug <firm>` then `keys prune` — rotate a firm's data key
+  - `keys rewrap` — after rotating the Key Vault key or `INTAKE_ENCRYPTION_KEY` (set `INTAKE_ENCRYPTION_KEY_PREVIOUS`), or moving from local to Key Vault
+  - `anchor` — anchor every firm's audit chain (run daily)
+- **Documents** go to `OBJECT_STORE` (`azure-blob` in production, one container per firm, encrypted before upload). Unset, they stay encrypted in PostgreSQL. Deleting a matter removes its blobs only after the database change commits.
+- **Audit anchors**: the head of each firm's chain is recorded daily, with a write-once copy in an immutable container. Administrators use **Verify audit trail** (Account & team), which checks the chain and every anchor, so rewriting history is detected even by someone holding `AUDIT_CHAIN_SECRET`.
+- **POPIA requests** (data-subject access, export, erasure) are for administrators (the information officer).
+- **Retention**: administrators set their firm's retention period (at least a year); `CLIENT_DATA_RETENTION_DAYS` is the default.
+- **Firm exit**: `npm run firm -w apps/api -- export --slug <firm> --out <file>` writes all of a firm's data, decrypted, without credentials or keys.
 
 ## Install as a PWA
 1. Build (`npm run build`) and serve it over HTTPS.

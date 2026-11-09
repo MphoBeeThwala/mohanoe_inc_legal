@@ -43,7 +43,17 @@ test('retired sign-up settings and missing SMTP are warnings, not blockers', () 
     warnings.some((warning) => /ALLOW_PUBLIC_REGISTRATION is no longer used/.test(warning)),
   );
   assert.ok(warnings.some((warning) => /SMTP_URL is not set/.test(warning)));
-  assert.deepEqual(configWarnings({ ...goodProduction, SMTP_URL: 'smtp://mail' }), []);
+  assert.deepEqual(
+    configWarnings({
+      ...goodProduction,
+      SMTP_URL: 'smtp://mail',
+      KEY_PROVIDER: 'azure-keyvault',
+      AZURE_KEY_VAULT_KEY_ID: 'https://v.vault.azure.net/keys/k',
+      OBJECT_STORE: 'azure-blob',
+      AZURE_STORAGE_ACCOUNT_URL: 'https://acct.blob.core.windows.net',
+    }),
+    [],
+  );
 });
 
 test('production refuses insecure identity settings', () => {
@@ -55,6 +65,15 @@ test('production refuses insecure identity settings', () => {
   assert.ok(problems.includes('OIDC_CLIENT_ID must be set when OIDC_ISSUER is set'));
   assert.ok(problems.includes('OIDC_ISSUER must be an https:// URL'));
   assert.ok(problems.includes('SESSION_COOKIE_SECURE cannot be false in production'));
+  const storage = validateConfig({
+    ...goodProduction,
+    KEY_PROVIDER: 'azure-keyvault',
+    OBJECT_STORE: 'azure-blob',
+  });
+  assert.ok(
+    storage.includes('AZURE_KEY_VAULT_KEY_ID must be set when KEY_PROVIDER=azure-keyvault'),
+  );
+  assert.ok(storage.some((problem) => problem.startsWith('OBJECT_STORE=azure-blob needs')));
 });
 
 test('development fallback secrets are refused against a real database', () => {

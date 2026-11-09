@@ -20,6 +20,8 @@ services:
         value: 'true'
       - key: JWT_ISSUER
         value: ahava88-legal-pms
+      - key: AUDIT_ANCHOR_INTERVAL_HOURS
+        value: '24'
       - key: DEFAULT_FIRM_SLUG
         value: default
       - key: PLATFORM_BASE_DOMAIN

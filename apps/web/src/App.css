@@ -1095,3 +1095,19 @@
   padding: 7px 11px;
   font-size: 0.86rem;
 }
+
+.panel > .stack-form {
+  display: grid;
+  gap: 10px;
+}
+
+.panel > .stack-form input {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(27, 122, 88, 0.2);
+  font: inherit;
+}
+
+.support-banner {
+  margin: 12px 0;
+}

@@ -17,10 +17,14 @@
     "db:migrate": "node dist/db/migrate.js",
     "db:studio": "drizzle-kit studio",
     "test:postgres": "vitest run --no-file-parallelism",
-    "firm": "node dist/scripts/firm.js"
+    "firm": "node dist/scripts/firm.js",
+    "ops": "node dist/scripts/ops.js"
   },
   "dependencies": {
     "@ahava88/shared": "*",
+    "@azure/identity": "^4.14.1",
+    "@azure/keyvault-keys": "^4.10.2",
+    "@azure/storage-blob": "^12.34.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.1",
     "drizzle-orm": "^0.45.4",
@@ -47,7 +51,7 @@
     "supertest": "^7.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.9.0",
-    "vitest": "^3.2.0"
+    "vitest": "^5.1.0"
   },
   "files": [
     "dist",

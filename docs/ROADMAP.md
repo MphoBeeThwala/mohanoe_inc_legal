@@ -132,15 +132,15 @@ Environment setup:
 - [x] httpOnly secure SameSite cookies
 - [x] Invite-only users per firm; remove public registration and `/auth/seed-admin`
 - [x] Per-firm roles, matter-level access, ethical walls (enforced by RLS)
-- [ ] Platform super-admin with audited, firm-approved support access
+- [x] Platform super-admin with audited, firm-approved support access (support grants; read-only; every request audited)
 - [x] CSP, HSTS, helmet-style headers
 
 ### 5.4 Encryption and records
-- [ ] Key Vault envelope encryption per firm + re-encryption migration + rotation
-- [ ] Per-firm audit chain anchored daily to immutable storage; "verify audit trail" for admins
-- [ ] Documents in Blob Storage
-- [ ] Data-subject requests restricted to firm admins / information officer
-- [ ] Per-firm retention and full firm data export on exit
+- [x] Key Vault envelope encryption per firm + re-encryption migration + rotation
+- [x] Per-firm audit chain anchored daily to immutable storage; "verify audit trail" for admins
+- [x] Documents in Blob Storage (encrypted per firm before upload; uploads of files arrive with the practice core)
+- [x] Data-subject requests restricted to firm admins / information officer
+- [x] Per-firm retention and full firm data export on exit
 
 ### 5.5 Core practice features
 - [ ] Clients (individuals and entities) and matters, with conflict-of-interest checks
@@ -206,8 +206,8 @@ Trust accounting and AI research ship behind feature flags to pilots first.
 2. **TypeScript monorepo** — done on `chore/typescript-monorepo-vite`.
 3. **Data layer** — done on `feat/data-layer-drizzle`: Drizzle + PostgreSQL, one migration history, PGlite for dev/tests, zod validation, linked audit chain, race-free numbering, money in cents, email blind index.
 4. **Multi-tenancy** — done on `feat/multi-tenancy`: `firms` table, `firm_id` and forced RLS on every table, `app_tenant` role, host-name resolver, per-firm numbering and audit chains, firm CLI, isolation tests; branding from `firms`.
-5. **Identity** — done on `feat/identity` (except super-admin): invite-only staff, mandatory TOTP MFA with recovery codes, Entra External ID (OIDC + PKCE), lockout, resets, revocable server-side cookie sessions, CSRF origin check, five roles with permissions, matter access and ethical walls in RLS, CSP/HSTS. Still open: platform super-admin with firm-approved support access; Entra ID (workforce) sign-in per firm.
-6. **Encryption** — Key Vault envelope encryption, re-encryption migration, per-firm audit chain.
+5. **Identity** — done on `feat/identity` (except super-admin): invite-only staff, mandatory TOTP MFA with recovery codes, Entra External ID (OIDC + PKCE), lockout, resets, revocable server-side cookie sessions, CSRF origin check, five roles with permissions, matter access and ethical walls in RLS, CSP/HSTS. Platform support access and per-firm Microsoft 365 (Entra ID) sign-in followed in their own PRs.
+6. **Encryption and records** — done on `feat/encryption-records`: per-firm data and index keys wrapped by Azure Key Vault (or a local KEK), rotation, re-encryption and rewrap via `npm run ops`, documents in Blob Storage, daily audit anchors with immutable copies and anchor-aware verification, admin-only POPIA requests, per-firm retention, firm exit export.
 7. **Practice core** — clients/matters, conflicts, FICA, time, invoicing, calendar.
 8. **White-label and onboarding** — firm settings, theming, custom domains, wizard.
 9. **Infrastructure** — Terraform for staging/prod in South Africa North, DR to South Africa West, pipeline, monitoring.

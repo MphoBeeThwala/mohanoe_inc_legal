@@ -1,6 +1,9 @@
-// Matter documents. Bodies are encrypted at rest; lists return only a short
-// preview, and the decrypted content only for a single document.
-// (Real file storage in Azure Blob Storage arrives in roadmap epic 6.)
+// Matter documents. Bodies are encrypted with the firm's data key; lists
+// return only a short preview, and the decrypted content only for a single
+// document. With OBJECT_STORE set, the encrypted body lives in the object
+// store (Azure Blob Storage in production, one container per firm) and the
+// row keeps only its key.
+import { randomUUID } from 'crypto';
 
 import { desc, eq } from 'drizzle-orm';
 import type { DocumentContent, DocumentRecord } from '@ahava88/shared';
@@ -10,20 +13,44 @@ import { httpError } from '../lib/http';
 import { actorName, type Actor } from '../lib/actor';
 import { iso, isoOrNull } from '../lib/time';
 import { documentSchema, parse } from '../validation/schemas';
-import { decryptJson, encryptJson } from './privacy.service';
+import { currentFirm } from '../db/tenant-context';
+import { decryptJson, encryptJson, payloadKeyVersion } from './privacy.service';
+import { firmContainer, objectStore } from './object-store';
 import * as intakeService from './intake.service';
 import * as auditService from './audit.service';
 
 const PREVIEW_LENGTH = 180;
 
-function toPublicDocument(row: DocumentRow, includeContent: boolean): DocumentRecord {
+/** The encrypted body of a document, wherever it is stored. */
+export async function readSealedContent(row: DocumentRow): Promise<string | null> {
+  if (row.storageKey) {
+    const store = objectStore();
+    if (!store) {
+      throw new Error('This document is in the object store, but OBJECT_STORE is not configured');
+    }
+    return (await store.get(firmContainer(row.firmId), row.storageKey)).toString('utf8');
+  }
+  return row.encryptedContent;
+}
+
+/** Stores an encrypted body: in the object store when configured, else in the row. */
+export async function writeSealedContent(documentId: string, sealed: string) {
+  const store = objectStore();
+  if (!store) {
+    return { encryptedContent: sealed, storageKey: null, contentKeyVersion: null };
+  }
+  const storageKey = `documents/${documentId}`;
+  await store.put(firmContainer(currentFirm().id), storageKey, Buffer.from(sealed, 'utf8'));
+  return { encryptedContent: null, storageKey, contentKeyVersion: payloadKeyVersion(sealed) };
+}
+
+async function toPublicDocument(
+  row: DocumentRow,
+  includeContent: boolean,
+): Promise<DocumentRecord> {
   let content: DocumentContent | null = null;
   if (includeContent) {
-    try {
-      content = decryptJson<DocumentContent>(row.encryptedContent);
-    } catch {
-      content = null;
-    }
+    content = await decryptJson<DocumentContent>(await readSealedContent(row));
   }
 
   return {
@@ -46,7 +73,7 @@ function toPublicDocument(row: DocumentRow, includeContent: boolean): DocumentRe
 
 export async function listDocuments(limit = 200): Promise<DocumentRecord[]> {
   const rows = await db().select().from(documents).orderBy(desc(documents.createdAt)).limit(limit);
-  return rows.map((row) => toPublicDocument(row, false));
+  return Promise.all(rows.map((row) => toPublicDocument(row, false)));
 }
 
 export async function getDocument(documentId: string): Promise<DocumentRecord | null> {
@@ -61,9 +88,17 @@ export async function createDocument(input: unknown, actor: Actor = {}): Promise
     throw httpError('Case not found', 404);
   }
 
+  const id = randomUUID();
+  const sealed = await encryptJson({
+    title: document.title,
+    body: document.body,
+    metadata: document.metadata,
+  } satisfies DocumentContent);
+  // Insert first: if the upload then fails, the request (and the row) roll back.
   const [saved] = await db()
     .insert(documents)
     .values({
+      id,
       caseId: caseRecord.id,
       caseNumber: caseRecord.caseNumber,
       clientLabel: caseRecord.clientLabel,
@@ -71,17 +106,22 @@ export async function createDocument(input: unknown, actor: Actor = {}): Promise
       documentType: document.documentType,
       tags: document.tags,
       status: document.status,
-      encryptedContent: encryptJson({
-        title: document.title,
-        body: document.body,
-        metadata: document.metadata,
-      } satisfies DocumentContent),
+      encryptedContent: objectStore() ? null : sealed,
       contentPreview: document.body.slice(0, PREVIEW_LENGTH),
       createdBy: actorName(actor),
     })
     .returning();
   if (!saved) {
     throw new Error('Document was not stored');
+  }
+  const location = await writeSealedContent(id, sealed);
+  if (location.storageKey) {
+    await db()
+      .update(documents)
+      .set({ storageKey: location.storageKey, contentKeyVersion: location.contentKeyVersion })
+      .where(eq(documents.id, id));
+    saved.storageKey = location.storageKey;
+    saved.contentKeyVersion = location.contentKeyVersion;
   }
 
   await auditService.logEvent(

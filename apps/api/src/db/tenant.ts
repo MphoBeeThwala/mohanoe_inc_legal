@@ -33,13 +33,26 @@ export async function withTenant<T>(
   fn: () => Promise<T>,
   options: TenantOptions = {},
 ): Promise<T> {
-  return rootDb().transaction(async (tx) => {
+  const hooks: Array<() => Promise<void>> = [];
+  const result = await rootDb().transaction(async (tx) => {
     await enterTenant(tx, firm);
     if (options.system) {
       await tx.execute(sql`select set_config('app.principal', 'system', true)`);
     }
-    return tenantStorage.run({ firm, tx }, fn);
+    return tenantStorage.run({ firm, tx, afterCommit: hooks }, fn);
   });
+  for (const hook of hooks) {
+    await hook().catch((error: unknown) =>
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          message: 'after_commit_failed',
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      ),
+    );
+  }
+  return result;
 }
 
 /** Records the signed-in user for matter-level RLS, for the rest of the transaction. */
