@@ -89,6 +89,8 @@ export function toMatterCase(row: CaseRow): MatterCase {
     status: row.status,
     nextAction: row.nextAction,
     access: row.access as MatterCase['access'],
+    courtDivision: row.courtDivision,
+    courtCaseNumber: row.courtCaseNumber,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
   };

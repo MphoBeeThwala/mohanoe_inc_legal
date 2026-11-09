@@ -7,6 +7,9 @@
 import { z } from 'zod';
 import { httpError } from '../lib/http';
 import {
+  CALENDAR_EVENT_TYPES,
+  COURT_DIVISIONS,
+  PRESCRIPTION_RULES,
   MAX_UNITS_PER_DAY,
   MINUTES_PER_UNIT,
   PAYMENT_METHODS,
@@ -280,16 +283,96 @@ export type LedgerEntryInput = z.infer<typeof ledgerEntrySchema>;
 
 // ---------------------------------------------------------------- calendar
 
-export const calendarEventSchema = z.object({
-  caseId: requiredText(100),
-  title: requiredText(300),
-  eventType: optionalText(60).transform((value) => value ?? 'deadline'),
-  startsAt: z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'must be a valid date'),
-  endsAt: optionalDateTime,
-  location: optionalText(300).transform((value) => value ?? ''),
-  notes: optionalText(2_000).transform((value) => value ?? ''),
-});
+const dateTime = z
+  .string()
+  .trim()
+  .refine((value) => !Number.isNaN(Date.parse(value)), 'must be a valid date');
+
+/** Event types, accepting the names older clients used. */
+const eventType = z.preprocess(
+  (value) =>
+    typeof value === 'string'
+      ? ({ hearing: 'court_date', trial: 'court_date', court: 'court_date', filing: 'deadline' }[
+          value.trim().toLowerCase()
+        ] ?? value.trim().toLowerCase())
+      : value,
+  z.enum(CALENDAR_EVENT_TYPES),
+);
+
+const reminderOffsets = z
+  .array(
+    z
+      .number()
+      .int()
+      .min(0)
+      .max(366 * 1440),
+  )
+  .max(8)
+  .transform((values) => [...new Set(values)].sort((a, b) => b - a));
+
+export const calendarEventSchema = z
+  .object({
+    caseId: requiredText(100),
+    title: requiredText(300),
+    eventType: eventType.default('deadline'),
+    startsAt: dateTime,
+    endsAt: dateTime.nullish(),
+    allDay: z.boolean().default(false),
+    location: optionalText(300).transform((value) => value ?? ''),
+    notes: optionalText(2_000).transform((value) => value ?? ''),
+    assigneeUserId: z.string().uuid().nullish(),
+    reminderOffsets: reminderOffsets.optional(),
+  })
+  .refine((event) => !event.endsAt || Date.parse(event.endsAt) >= Date.parse(event.startsAt), {
+    message: 'the end must be after the start',
+  });
 export type CalendarEventInput = z.infer<typeof calendarEventSchema>;
+
+export const calendarEventUpdateSchema = z.object({
+  title: requiredText(300).optional(),
+  eventType: eventType.optional(),
+  startsAt: dateTime.optional(),
+  endsAt: dateTime.nullish(),
+  allDay: z.boolean().optional(),
+  location: optionalText(300),
+  notes: optionalText(2_000),
+  assigneeUserId: z.string().uuid().nullish(),
+  reminderOffsets: reminderOffsets.optional(),
+  status: z.enum(['scheduled', 'done', 'cancelled']).optional(),
+});
+
+export const prescriptionSchema = z
+  .object({
+    caseRef: requiredText(120),
+    rule: z.enum(PRESCRIPTION_RULES.map((rule) => rule.code) as [string, ...string[]]),
+    startsOn: calendarDate,
+    lastDay: calendarDate.optional(),
+    notes: optionalText(2_000),
+    assigneeUserId: z.string().uuid().nullish(),
+  })
+  .refine((value) => value.rule !== 'custom' || value.lastDay, {
+    message: 'give the last day for an other period',
+  });
+
+export const prescriptionUpdateSchema = z.object({
+  status: z.enum(['running', 'interrupted', 'closed']).optional(),
+  startsOn: calendarDate.optional(),
+  lastDay: calendarDate.optional(),
+  notes: optionalText(2_000),
+});
+
+export const matterCourtSchema = z.object({
+  courtDivision: z
+    .enum(COURT_DIVISIONS.map((court) => court.code) as [string, ...string[]])
+    .nullable(),
+  courtCaseNumber: z
+    .string()
+    .trim()
+    .max(40)
+    .regex(/^[A-Za-z0-9 ./-]*$/, 'use the number as the court gives it, e.g. 12345/2025')
+    .nullable()
+    .transform((value) => value || null),
+});
 
 // ---------------------------------------------------------------- notifications
 
@@ -533,4 +616,24 @@ export const staffRateSchema = z.object({ hourlyRate: hourlyRate });
 export const matterRateSchema = z.object({
   userId: z.string().uuid().nullable().default(null),
   hourlyRate: hourlyRate,
+});
+
+// ---------------------------------------------------------------- court rolls
+
+export const courtRollAcceptSchema = z.object({
+  startsAt: z
+    .string()
+    .trim()
+    .refine((value) => !Number.isNaN(Date.parse(value)), 'must be a valid date')
+    .optional(),
+  assigneeUserId: z.string().uuid().nullish(),
+});
+
+export const courtRollUploadSchema = z.object({
+  division: z.enum(COURT_DIVISIONS.map((court) => court.code) as [string, ...string[]]),
+  title: optionalText(200),
+  fileName: requiredText(200),
+  contentType: requiredText(120),
+  // 10 MB of file as base64.
+  contentBase64: z.string().min(1).max(14_000_000),
 });
