@@ -11,6 +11,7 @@ import * as schema from '../db/schema';
 import type { FirmRow } from '../db/schema';
 import { decryptJson } from './privacy.service';
 import { readSealedContent } from './documents.service';
+import { readSealedFica } from './fica.service';
 import * as auditService from './audit.service';
 
 /** Tables exported as they are (all rows of the firm). */
@@ -23,8 +24,10 @@ const PLAIN_TABLES: Record<string, PgTable> = {
   caseParties: schema.caseParties,
   caseTasks: schema.caseTasks,
   caseTimeline: schema.caseTimeline,
-  invoices: schema.invoices,
+  invoicePayments: schema.invoicePayments,
   ledgerEntries: schema.ledgerEntries,
+  staffRates: schema.staffRates,
+  matterRates: schema.matterRates,
   calendarEvents: schema.calendarEvents,
   notifications: schema.notifications,
   auditEvents: schema.auditEvents,
@@ -85,6 +88,61 @@ export async function exportFirm(firm: FirmRow): Promise<FirmExport> {
         partyRows.map(async ({ detailsEncrypted, ...rest }) => ({
           ...rest,
           details: await decryptJson(detailsEncrypted),
+        })),
+      );
+
+      const profiles = await db().select().from(schema.ficaProfiles);
+      tables.ficaProfiles = await Promise.all(
+        profiles.map(async ({ notesEncrypted, ...rest }) => ({
+          ...rest,
+          notes: notesEncrypted ? await decryptJson(notesEncrypted) : null,
+        })),
+      );
+      const kyc = await db().select().from(schema.ficaDocuments);
+      tables.ficaDocuments = await Promise.all(
+        kyc.map(async (row) => {
+          const {
+            fileNameEncrypted,
+            encryptedContent: _sealed,
+            storageKey: _key,
+            contentKeyVersion: _v,
+            ...rest
+          } = row;
+          return {
+            ...rest,
+            fileName: await decryptJson(fileNameEncrypted),
+            dataBase64: await decryptJson(await readSealedFica(row)),
+          };
+        }),
+      );
+
+      const bills = await db().select().from(schema.invoices);
+      tables.invoices = await Promise.all(
+        bills.map(async ({ contentEncrypted, ...rest }) => ({
+          ...rest,
+          content: contentEncrypted ? await decryptJson(contentEncrypted) : null,
+        })),
+      );
+      const costs = await db().select().from(schema.disbursements);
+      tables.disbursements = await Promise.all(
+        costs.map(async ({ descriptionEncrypted, ...rest }) => ({
+          ...rest,
+          description: await decryptJson(descriptionEncrypted),
+        })),
+      );
+
+      const entries = await db().select().from(schema.timeEntries);
+      tables.timeEntries = await Promise.all(
+        entries.map(async ({ descriptionEncrypted, ...rest }) => ({
+          ...rest,
+          description: await decryptJson(descriptionEncrypted),
+        })),
+      );
+      const running = await db().select().from(schema.timers);
+      tables.timers = await Promise.all(
+        running.map(async ({ descriptionEncrypted, ...rest }) => ({
+          ...rest,
+          description: descriptionEncrypted ? await decryptJson(descriptionEncrypted) : null,
         })),
       );
 

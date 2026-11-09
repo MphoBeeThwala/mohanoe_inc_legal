@@ -1137,3 +1137,80 @@
   border: 1px solid rgba(27, 122, 88, 0.2);
   font: inherit;
 }
+
+.fica-badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  background: rgba(27, 122, 88, 0.08);
+}
+
+.fica-verified {
+  background: #e3f2ea;
+  color: #155c3f;
+}
+
+.fica-review_due,
+.fica-not_started {
+  background: #fdecec;
+  color: #9b1c1c;
+}
+
+.fica-factors {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(27, 122, 88, 0.15);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin: 8px 0;
+}
+
+/* Time recording */
+.time-timer p {
+  margin: 0 0 0.5rem;
+}
+
+.time-clock {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.25rem;
+}
+
+.time-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.75rem 0 0.25rem;
+}
+
+.time-form input:not([type='checkbox']),
+.time-form select {
+  min-width: 0;
+  flex: 1 1 9rem;
+}
+
+.time-entries-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.time-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.time-table th,
+.time-table td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--line, #e3e7e5);
+  text-align: left;
+  vertical-align: top;
+}
+
+.time-table td:nth-child(5),
+.time-table td:nth-child(6) {
+  font-variant-numeric: tabular-nums;
+}

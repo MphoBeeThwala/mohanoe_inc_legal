@@ -111,6 +111,13 @@ describe('numbering', () => {
 });
 
 describe('billing', () => {
+  const billingReady = () =>
+    request(app)
+      .patch('/api/firm/settings')
+      .set(auth())
+      .send({ billing: { vatNumber: '4123456789', address: '1 Main Road, Durban' } })
+      .expect(200);
+
   test('amounts are stored in cents and VAT is 15%', async () => {
     const matter = await createMatter('Thabo Molefe', 'thabo@example.com');
     const res = await request(app)
@@ -122,6 +129,8 @@ describe('billing', () => {
         lineItems: [{ description: 'Consultation', quantity: 1, rate: '1 500.50' }],
       });
     expect(res.status).toBe(201);
+    expect(res.body.status).toBe('draft');
+    expect(res.body.number).toBeNull();
     expect(res.body.subtotal).toBe(1500.5);
     expect(res.body.vat).toBe(225.08);
     expect(res.body.total).toBe(1725.58);
@@ -130,25 +139,46 @@ describe('billing', () => {
       db().select().from(invoices).where(eq(invoices.id, res.body.id)),
     );
     expect(row!.totalCents).toBe(172558);
+    expect(row!.subject).toBe('');
+    expect(row!.contentEncrypted).toMatch(/^v2:/);
 
+    // Drafts are not owed.
+    expect((await request(app).get('/api/billing/summary').set(auth())).body.outstanding).toBe(0);
+    await billingReady();
+    await request(app).post(`/api/billing/invoices/${res.body.id}/issue`).set(auth()).expect(200);
     const summary = await request(app).get('/api/billing/summary').set(auth());
     expect(summary.body.outstanding).toBe(1725.58);
   });
 
-  test('duplicate invoice numbers are rejected with 409', async () => {
+  test('invoice numbers are sequential with no gaps, even when issuing fails', async () => {
     const matter = await createMatter('Naledi Khumalo', 'naledi@example.com');
-    const body = {
-      caseId: matter.matterCase.id,
-      subject: 'Fees',
-      invoiceNumber: 'INV-TEST-1',
-      lineItems: [{ rate: 100 }],
-    };
-    expect((await request(app).post('/api/billing/invoices').set(auth()).send(body)).status).toBe(
-      201,
-    );
-    expect((await request(app).post('/api/billing/invoices').set(auth()).send(body)).status).toBe(
-      409,
-    );
+    const draft = async () =>
+      (
+        await request(app)
+          .post('/api/billing/invoices')
+          .set(auth())
+          .send({ caseId: matter.matterCase.id, subject: 'Fees', lineItems: [{ rate: 100 }] })
+      ).body.id as string;
+    const issue = (id: string) =>
+      request(app).post(`/api/billing/invoices/${id}/issue`).set(auth());
+
+    await billingReady();
+    const first = await issue(await draft());
+    // Without an address the firm can't issue; the failed attempt uses no number.
+    await request(app)
+      .patch('/api/firm/settings')
+      .set(auth())
+      .send({ billing: { address: '' } })
+      .expect(200);
+    const blocked = await draft();
+    expect((await issue(blocked)).status).toBe(409);
+    await billingReady();
+    const second = await issue(blocked);
+    const n = (value: string) => Number(value.replace('INV-', ''));
+    expect(first.body.number).toMatch(/^INV-\d{6}$/);
+    expect(n(second.body.number)).toBe(n(first.body.number) + 1);
+    // A number is never given twice.
+    expect((await issue(blocked)).status).toBe(409);
   });
 
   test('ledger rejects amounts with fractions of a cent', async () => {

@@ -21,6 +21,7 @@ import { parse, partyInputSchema, partyUpdateSchema, uuidSchema } from '../valid
 import { decryptJson, encryptJson } from './privacy.service';
 import { indexEntries, nameTokens } from './party-index';
 import * as auditService from './audit.service';
+import { statusesFor as ficaStatuses } from './fica.service';
 
 export async function partyDetails(row: PartyRow): Promise<PartyDetails> {
   return (await decryptJson<PartyDetails>(row.detailsEncrypted)) ?? { name: '' };
@@ -124,8 +125,10 @@ async function visibleMatters(partyId: string): Promise<PartyRecord['matters']> 
 export async function getParty(id: string): Promise<PartyRecord> {
   const row = await requireParty(id);
   const details = await partyDetails(row);
+  const statuses = row.isClient ? await ficaStatuses([row.id]) : new Map();
   return {
     ...(await toSummary(row, details)),
+    ...(row.isClient ? { ficaStatus: statuses.get(row.id) } : {}),
     details,
     conflictCheckId: row.conflictCheckId,
     matters: await visibleMatters(row.id),
@@ -211,7 +214,13 @@ export async function searchParties(
       .map((id) => found.find((row) => row.id === id))
       .filter((row): row is PartyRow => Boolean(row));
   }
-  return Promise.all(rows.map((row) => toSummary(row)));
+  const statuses = await ficaStatuses(rows.filter((row) => row.isClient).map((row) => row.id));
+  return Promise.all(
+    rows.map(async (row) => ({
+      ...(await toSummary(row)),
+      ...(row.isClient ? { ficaStatus: statuses.get(row.id) } : {}),
+    })),
+  );
 }
 
 /** Makes an existing party a client (after a cleared conflict check). */

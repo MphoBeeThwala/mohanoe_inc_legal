@@ -16,6 +16,8 @@ import {
 } from '../validation/schemas';
 import { requireClearedCheck, isWaiver } from './conflict.service';
 import * as partyService from './party.service';
+import * as ficaService from './fica.service';
+import { currentFirm } from '../db/tenant-context';
 import * as intakeService from './intake.service';
 import * as auditService from './audit.service';
 
@@ -50,6 +52,9 @@ export async function openMatter(input: unknown, actor: Actor): Promise<MatterCa
   const client = await partyService.requireParty(matter.clientId);
   if (!client.isClient) {
     throw httpError('Open the client first (after a conflict check)', 409);
+  }
+  if (currentFirm().ficaEnforced) {
+    await ficaService.requireVerified(client.id);
   }
   const [saved] = await db()
     .insert(cases)

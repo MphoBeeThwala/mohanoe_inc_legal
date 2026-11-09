@@ -8,7 +8,6 @@ import type {
   ComplianceRequest,
   ComplianceSummary,
   DocumentRecord,
-  Invoice,
   LedgerEntry,
   MatterCase,
   NotificationRecord,
@@ -19,6 +18,7 @@ import type {
 import { ROLE_LABELS, STAFF_ROLES, hasPermission, type Permission } from '@ahava88/shared';
 import type { Notice } from './DismissibleNotice';
 import DismissibleNotice from './DismissibleNotice';
+import BillingPanel, { rand } from './BillingPanel';
 
 const ALL_TABS: Array<[OpsTab, string, Permission]> = [
   ['documents', 'Documents', 'documents.read'],
@@ -49,14 +49,6 @@ const initialDocumentForm = {
   documentType: 'correspondence',
   body: '',
   tags: '',
-};
-
-const initialInvoiceForm = {
-  subject: '',
-  invoiceNumber: '',
-  lineDescription: '',
-  lineAmount: '',
-  currency: 'ZAR',
 };
 
 const initialLedgerForm = {
@@ -132,7 +124,6 @@ function OperationsHub({
   );
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
-  const [billingInvoices, setBillingInvoices] = useState<Invoice[]>([]);
   const [billingLedger, setBillingLedger] = useState<LedgerEntry[]>([]);
   const [calendar, setCalendar] = useState<UpcomingItem[]>([]);
   const [audit, setAudit] = useState<AuditEventRecord[]>([]);
@@ -145,7 +136,6 @@ function OperationsHub({
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [documentForm, setDocumentForm] = useState(initialDocumentForm);
-  const [invoiceForm, setInvoiceForm] = useState(initialInvoiceForm);
   const [ledgerForm, setLedgerForm] = useState(initialLedgerForm);
   const [eventForm, setEventForm] = useState(initialEventForm);
   const [notificationForm, setNotificationForm] = useState(initialNotificationForm);
@@ -173,7 +163,6 @@ function OperationsHub({
     const batchOne = await loadBatch([
       '/documents',
       '/billing/summary',
-      '/billing/invoices',
       '/billing/ledger',
       '/calendar/upcoming',
     ]);
@@ -193,8 +182,6 @@ function OperationsHub({
     if (byPath['/documents']?.ok) setDocuments(byPath['/documents'].data as DocumentRecord[]);
     if (byPath['/billing/summary']?.ok)
       setBillingSummary(byPath['/billing/summary'].data as BillingSummary);
-    if (byPath['/billing/invoices']?.ok)
-      setBillingInvoices(byPath['/billing/invoices'].data as Invoice[]);
     if (byPath['/billing/ledger']?.ok)
       setBillingLedger(byPath['/billing/ledger'].data as LedgerEntry[]);
     if (byPath['/calendar/upcoming']?.ok)
@@ -259,41 +246,6 @@ function OperationsHub({
       setNotice({
         tone: 'error',
         message: apiErrorMessage(error, 'Could not save document.'),
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const submitInvoice = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!activeCaseId || !invoiceForm.subject || !invoiceForm.lineAmount) {
-      return;
-    }
-
-    setBusy(true);
-    try {
-      await api.post('/billing/invoices', {
-        caseId: activeCaseId,
-        subject: invoiceForm.subject,
-        invoiceNumber: invoiceForm.invoiceNumber,
-        lineItems: [
-          {
-            description: invoiceForm.lineDescription || invoiceForm.subject,
-            amount: invoiceForm.lineAmount,
-            quantity: 1,
-            rate: invoiceForm.lineAmount,
-          },
-        ],
-        currency: invoiceForm.currency,
-      });
-      setInvoiceForm(initialInvoiceForm);
-      await Promise.all([loadData(), onChanged?.()]);
-      setNotice({ tone: 'success', message: 'Invoice issued.' });
-    } catch (error) {
-      setNotice({
-        tone: 'error',
-        message: apiErrorMessage(error, 'Could not issue invoice.'),
       });
     } finally {
       setBusy(false);
@@ -612,74 +564,18 @@ function OperationsHub({
 
       {!loading && tab === 'billing' ? (
         <section className="ops-section">
+          <BillingPanel
+            currentUser={currentUser}
+            cases={cases}
+            selectedCaseId={activeCaseId || null}
+            onChanged={onChanged}
+          />
+
+          <h3>Trust and operating ledger</h3>
           <div className="mini-grid">
-            <Stat label="Invoices" value={billingSummary?.invoices ?? 0} />
-            <Stat label="Outstanding" value={billingSummary?.outstanding ?? 0} />
-            <Stat label="Trust" value={billingSummary?.trustBalance ?? 0} />
-            <Stat label="Operating" value={billingSummary?.operatingBalance ?? 0} />
+            <Stat label="Trust" value={rand(billingSummary?.trustBalance ?? 0)} />
+            <Stat label="Operating" value={rand(billingSummary?.operatingBalance ?? 0)} />
           </div>
-
-          {can('billing.write') ? (
-            <form className="stack-form" onSubmit={submitInvoice}>
-              <input
-                value={invoiceForm.subject}
-                onChange={(event) =>
-                  setInvoiceForm((current) => ({
-                    ...current,
-                    subject: event.target.value,
-                  }))
-                }
-                placeholder="Consultation and drafting"
-              />
-              <input
-                value={invoiceForm.invoiceNumber}
-                onChange={(event) =>
-                  setInvoiceForm((current) => ({
-                    ...current,
-                    invoiceNumber: event.target.value,
-                  }))
-                }
-                placeholder="INV-2026-001"
-              />
-              <input
-                value={invoiceForm.lineDescription}
-                onChange={(event) =>
-                  setInvoiceForm((current) => ({
-                    ...current,
-                    lineDescription: event.target.value,
-                  }))
-                }
-                placeholder="Line item description"
-              />
-              <input
-                type="number"
-                value={invoiceForm.lineAmount}
-                onChange={(event) =>
-                  setInvoiceForm((current) => ({
-                    ...current,
-                    lineAmount: event.target.value,
-                  }))
-                }
-                placeholder="Amount"
-              />
-              <button className="secondary-button" disabled={busy}>
-                Issue invoice
-              </button>
-            </form>
-          ) : null}
-
-          <div className="mini-list">
-            {billingInvoices.slice(0, 4).map((item) => (
-              <div key={item.id} className="mini-item">
-                <div>
-                  <strong>{item.number}</strong>
-                  <div className="muted">{item.subject}</div>
-                </div>
-                <div>{item.total}</div>
-              </div>
-            ))}
-          </div>
-
           <div className="mini-list">
             {billingLedger.slice(0, 4).map((item) => (
               <div key={item.id} className="mini-item">

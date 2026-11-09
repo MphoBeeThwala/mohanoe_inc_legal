@@ -2,12 +2,12 @@
 // Microsoft 365 staff sign-in. RLS lets a request update only its own firm's
 // row, and the migration grants UPDATE on these columns only.
 import { eq } from 'drizzle-orm';
-import type { FirmSettings } from '@ahava88/shared';
+import type { BillingSettings, FirmSettings } from '@ahava88/shared';
 import { z } from 'zod';
 import { workforceAvailable } from '../config/auth';
 import { db } from '../db/client';
 import { currentFirm } from '../db/tenant-context';
-import { firms } from '../db/schema';
+import { firms, type FirmRow } from '../db/schema';
 import { httpError } from '../lib/http';
 import type { Actor } from '../lib/actor';
 import { parse } from '../validation/schemas';
@@ -24,6 +24,22 @@ const domain = z
 const settingsSchema = z.object({
   // At least a year: closed matters are removed for good by the retention sweep.
   retentionDays: z.number().int().min(365).max(36_500).nullable().optional(),
+  ficaEnforced: z.boolean().optional(),
+  billing: z
+    .object({
+      vatRegistered: z.boolean().optional(),
+      vatNumber: z
+        .string()
+        .trim()
+        .regex(/^4\d{9}$/, 'must be a 10-digit SARS VAT number starting with 4')
+        .nullable()
+        .optional(),
+      paymentTermsDays: z.number().int().min(0).max(365).optional(),
+      address: z.string().trim().max(500).optional(),
+      bankDetails: z.string().trim().max(500).optional(),
+      invoiceFooter: z.string().trim().max(500).optional(),
+    })
+    .optional(),
   microsoft: z
     .object({
       tenantId: z
@@ -54,11 +70,25 @@ function consentUrl(tenantId: string | null): string | null {
   return `${authority}/${tenantId || 'organizations'}/adminconsent?${params.toString()}`;
 }
 
+export function billingSettings(firm: FirmRow): BillingSettings {
+  const settings = firm.billingSettings ?? {};
+  return {
+    vatRegistered: settings.vatRegistered ?? true,
+    vatNumber: firm.vatNumber,
+    paymentTermsDays: settings.paymentTermsDays ?? 30,
+    address: settings.address ?? '',
+    bankDetails: settings.bankDetails ?? '',
+    invoiceFooter: settings.invoiceFooter ?? '',
+  };
+}
+
 export function getSettings(): FirmSettings {
   const firm = currentFirm();
   return {
     retentionDays: firm.retentionDays ?? defaultRetentionDays(),
     retentionIsDefault: firm.retentionDays === null,
+    ficaEnforced: firm.ficaEnforced,
+    billing: billingSettings(firm),
     microsoft: {
       available: workforceAvailable(),
       tenantId: firm.ssoTenantId,
@@ -78,6 +108,19 @@ export async function updateSettings(input: unknown, actor: Actor): Promise<Firm
   if (changes.retentionDays !== undefined) {
     set.retentionDays = changes.retentionDays;
     details.retentionDays = changes.retentionDays;
+  }
+  if (changes.ficaEnforced !== undefined) {
+    set.ficaEnforced = changes.ficaEnforced;
+    details.ficaEnforced = changes.ficaEnforced;
+  }
+  if (changes.billing) {
+    const { vatNumber, ...rest } = changes.billing;
+    if (vatNumber !== undefined) {
+      set.vatNumber = vatNumber;
+    }
+    set.billingSettings = { ...(firm.billingSettings ?? {}), ...rest };
+    // Only which settings changed: addresses and bank details stay out of the audit trail.
+    details.billing = Object.keys(changes.billing);
   }
   if (changes.microsoft) {
     const { tenantId, domains, enforced } = changes.microsoft;
@@ -103,7 +146,13 @@ export async function updateSettings(input: unknown, actor: Actor): Promise<Firm
       entityType: 'firm',
       entityId: firm.id,
       action: 'firm_settings_updated',
-      summary: changes.microsoft ? 'Sign-in settings changed' : 'Retention period changed',
+      summary: changes.microsoft
+        ? 'Sign-in settings changed'
+        : changes.billing
+          ? 'Billing settings changed'
+          : changes.ficaEnforced !== undefined
+            ? 'FICA requirement changed'
+            : 'Retention period changed',
       details,
     },
     actor,

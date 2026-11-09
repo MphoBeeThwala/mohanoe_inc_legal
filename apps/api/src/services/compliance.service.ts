@@ -28,6 +28,7 @@ import {
 import { httpError } from '../lib/http';
 import { actorName, type Actor } from '../lib/actor';
 import { fromCents } from '../lib/money';
+import { CLOSED_STATUSES } from '../lib/matter-status';
 import { iso, isoOrNull, toDateOrNull } from '../lib/time';
 import {
   complianceFulfilSchema,
@@ -40,12 +41,13 @@ import * as intakeService from './intake.service';
 import * as notificationsService from './notifications.service';
 import * as auditService from './audit.service';
 import * as partyService from './party.service';
+import * as ficaService from './fica.service';
+import * as billingService from './billing.service';
 import { indexEntries } from './party-index';
 import type { PartyRecord } from '@ahava88/shared';
 import { currentFirm } from '../db/tenant-context';
 
 /** Statuses that mean a matter is finished and its retention clock runs. */
-const CLOSED_STATUSES = ['closed', 'resolved', 'completed'];
 
 function toDays(value: unknown, fallback: number): number {
   const parsed = Number(value);
@@ -284,7 +286,7 @@ export async function buildDataExport(query: unknown): Promise<ComplianceExport>
       : [];
     for (const { partyId } of matches) {
       const party = await partyService.getParty(partyId);
-      subjectParties.push(party);
+      subjectParties.push({ ...party, fica: await ficaService.getProfile(partyId) } as PartyRecord);
       const rows = party.matters.length
         ? await db()
             .select()
@@ -348,28 +350,7 @@ export async function buildDataExport(query: unknown): Promise<ComplianceExport>
     signedAt: isoOrNull(row.signedAt),
     content: null,
   }));
-  const exportInvoices: Invoice[] = invoiceRows.map((row) => ({
-    id: row.id,
-    caseId: row.caseId,
-    caseNumber: row.caseNumber,
-    clientLabel: row.clientLabel,
-    number: row.invoiceNumber,
-    subject: row.subject,
-    currency: row.currency,
-    status: row.status,
-    lineItems: row.lineItems.map((item) => ({
-      description: item.description,
-      quantity: item.quantity,
-      rate: fromCents(item.rateCents),
-    })),
-    subtotal: fromCents(row.subtotalCents),
-    vat: fromCents(row.vatCents),
-    total: fromCents(row.totalCents),
-    issuedAt: isoOrNull(row.issuedAt),
-    dueAt: isoOrNull(row.dueAt),
-    paidAt: isoOrNull(row.paidAt),
-    createdAt: iso(row.createdAt),
-  }));
+  const exportInvoices: Invoice[] = await billingService.presentInvoices(invoiceRows);
   const exportLedger: LedgerEntry[] = ledgerRows.map((row) => ({
     id: row.id,
     caseId: row.caseId,
