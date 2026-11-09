@@ -100,7 +100,9 @@ When the firms table is empty, the server creates a `default` firm from these va
 - The server applies pending migrations on start (`DB_MIGRATE_ON_START=false` to run `npm run db:migrate -w apps/api` as a separate release step instead).
 - `/ready` returns 503 until the database answers.
 - `ANTHROPIC_API_KEY` enables live AI triage; without it the backend uses rules-based triage.
-- Interim hosting is Render (`render.yaml`: `npm ci --include=dev && npm run build`, then `npm start`). The target is Microsoft Azure, South Africa North — see the roadmap.
+- Interim hosting is Render (`render.yaml`: `npm ci --include=dev && npm run build`, then `npm start`).
+- **Azure** (South Africa North, DR South Africa West): Terraform in `infra/terraform`, the container image from `Dockerfile`, GitHub Actions for CI (`ci.yml`, including an image smoke test and `terraform validate`), infrastructure (`infra.yml`) and releases (`deploy.yml`). See [`docs/runbooks/deployment.md`](docs/runbooks/deployment.md).
+- Monitoring: `SENTRY_DSN` (optional) sends 5xx errors to Sentry with personal information removed; `APP_RELEASE` and `DEPLOY_ENVIRONMENT` tag them. Behind Azure Front Door set `FRONT_DOOR_ID` (requests without its `X-Azure-FDID` header get 403) and `TRUST_PROXY_HOPS` (2 behind Front Door and Container Apps; default 1).
 - After a deploy: `node scripts/smoke-test.js https://<your-host>`.
 - Backup, restore and smoke tests: [`PROD_OPERATIONS.md`](PROD_OPERATIONS.md).
 
@@ -144,6 +146,16 @@ When the firms table is empty, the server creates a `default` firm from these va
 - **Statements and aging:** a client statement has a running balance and aging (current, 30, 60, 90 and 120+ days past due). The aging report covers all outstanding invoices, by client.
 - **Encryption:** subjects, notes and line descriptions can name people, so they are encrypted with the firm's key. Amounts, numbers and dates stay readable for reports.
 - **Not covered:** trust accounting under the Legal Practice Act (section 86) is not built yet. The trust/operating ledger is a simple record.
+
+## White label and onboarding
+- **Onboarding wizard:** a new firm's administrator is taken through five steps after first sign-in: practice details, name/logo/colours, invoicing and VAT, numbering and compliance, and inviting the team. Steps can be skipped, and everything can be changed later under **Account & team → Firm settings**.
+- **Practice details:** the firm's address, registration, Legal Practice Council and Fidelity Fund certificate numbers, and contact details are printed in the letterhead of invoices and statements.
+- **Brand:**
+  - The registered and trading names, main and accent colours, and the matter and invoice number prefixes are set in the app.
+  - Colours must contrast at least 4.5:1 with the white text placed on them (WCAG AA).
+  - The logo (PNG, JPEG or WebP, up to 1 MB) and an optional browser icon are stored with the firm and served before sign-in at `/api/tenant/logo` and `/api/tenant/icon`, with versioned links. SVG is refused because it can carry script. The logo also goes on PDFs.
+- **Email:** the platform sends from `MAIL_FROM`, in the firm's trading name, with replies going to the firm's reply-to address.
+- **Custom domains:** a firm adds its own address (e.g. `portal.firm.co.za`) and publishes two DNS records: a TXT record proving ownership, and a CNAME to `CUSTOM_DOMAIN_CNAME_TARGET` (the Front Door endpoint, which also issues the certificate). **Check now** (or the hourly `npm run ops -w apps/api -- domains` job) verifies the TXT record, then that `https://<domain>/.well-known/firm-domain-check` answers with a value only this platform can produce. Only then does the domain become the firm's main address, used in email links.
 
 ## Calendar and prescription
 - **Events:** court dates, deadlines, meetings and consultations are recorded on a matter, with an optional assignee, and appear in Operations → Calendar as a 90-day agenda. Times are South African time. Events can be marked done or cancelled. **Download for Outlook (.ics)** exports the agenda for Outlook or Google Calendar.

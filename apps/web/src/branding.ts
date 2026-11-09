@@ -26,14 +26,33 @@ export function applyBranding(branding: PublicBranding, doc: Document = document
 
   doc.title = `${branding.firmName} · ${branding.productName}`;
 
+  const icon = doc.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (icon && branding.iconUrl) {
+    icon.href = branding.iconUrl;
+  }
+
   const themeColor = doc.querySelector('meta[name="theme-color"]');
   if (themeColor && isHexColor(branding.primaryColor)) {
     themeColor.setAttribute('content', branding.primaryColor);
   }
 }
 
+/** Ask every useBranding() to fetch the branding again (after settings change). */
+export function refreshBranding(): void {
+  window.dispatchEvent(new Event(BRANDING_CHANGED));
+}
+
+const BRANDING_CHANGED = 'firm-branding-changed';
+
 export function useBranding(): PublicBranding {
   const [branding, setBranding] = useState<PublicBranding>(DEFAULT_BRANDING);
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    const bump = () => setVersion((value) => value + 1);
+    window.addEventListener(BRANDING_CHANGED, bump);
+    return () => window.removeEventListener(BRANDING_CHANGED, bump);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +75,7 @@ export function useBranding(): PublicBranding {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [version]);
 
   return branding;
 }

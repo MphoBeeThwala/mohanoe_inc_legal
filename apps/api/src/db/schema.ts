@@ -19,6 +19,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  customType,
   date,
   index,
   integer,
@@ -33,6 +34,12 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
+/** Binary content (node-postgres gives a Buffer, PGlite a Uint8Array). */
+const bytea = customType<{ data: Buffer; driverData: Uint8Array | Buffer }>({
+  dataType: () => 'bytea',
+  fromDriver: (value) => (Buffer.isBuffer(value) ? value : Buffer.from(value)),
+});
+
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 };
@@ -45,9 +52,13 @@ const updatable = {
 // ---------------------------------------------------------------- tenancy
 
 export interface FirmBranding {
+  /** An external logo link (older firms); an uploaded logo takes precedence. */
   logoUrl?: string | null;
   primaryColor?: string;
   accentColor?: string;
+  /** Version (content hash prefix) of the uploaded logo and icon in firm_assets. */
+  logoHash?: string | null;
+  iconHash?: string | null;
 }
 
 /** What a firm prints on its invoices and statements. */
@@ -62,6 +73,29 @@ export interface FirmBillingSettings {
   bankDetails?: string;
   /** Short note at the foot of every invoice. */
   invoiceFooter?: string;
+  /** Letters before invoice numbers (default INV): INV-000001. */
+  invoicePrefix?: string;
+}
+
+/** The firm's practice details (all public business information). */
+export interface FirmProfile {
+  /** CIPC registration number, e.g. 2015/123456/21. */
+  registrationNumber?: string;
+  /** Legal Practice Council firm or practitioner number. */
+  lpcNumber?: string;
+  /** Fidelity Fund certificate number and year. */
+  fidelityFundCertificate?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  /** Replies to emails the platform sends for the firm go here. */
+  replyToEmail?: string;
+}
+
+/** Progress through the onboarding wizard. */
+export interface FirmOnboarding {
+  done?: string[];
+  completedAt?: string;
 }
 
 /** A law firm licensed to use the platform (a tenant). Platform-level table. */
@@ -98,6 +132,8 @@ export const firms = pgTable(
     /** New matters only for FICA-verified clients (FIC Act customer due diligence). */
     ficaEnforced: boolean('fica_enforced').notNull().default(false),
     billingSettings: jsonb('billing_settings').$type<FirmBillingSettings>().notNull().default({}),
+    profile: jsonb('profile').$type<FirmProfile>().notNull().default({}),
+    onboarding: jsonb('onboarding').$type<FirmOnboarding>().notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -153,6 +189,53 @@ const matterPolicy = (table: string) =>
     using: sql.raw(`exists (select 1 from cases c where c.id = ${table}.case_id)`),
     withCheck: sql.raw(`exists (select 1 from cases c where c.id = ${table}.case_id)`),
   });
+
+/** A firm's logo and icon, served before sign-in (not personal information). */
+export const firmAssets = pgTable(
+  'firm_assets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    /** 'logo' | 'icon' */
+    kind: text('kind').notNull(),
+    contentType: text('content_type').notNull(),
+    content: bytea('content').notNull(),
+    /** sha-256 (hex) of the content: a cache-busting version. */
+    contentHash: text('content_hash').notNull(),
+    ...updatable,
+  },
+  (t) => [uniqueIndex('firm_assets_kind_idx').on(t.firmId, t.kind), tenantPolicy('firm_assets')],
+);
+
+/**
+ * A custom domain a firm is adding. It becomes active (added to firms.domains
+ * and used in email links) only when its DNS TXT record proves ownership and
+ * an HTTPS request to it reaches the platform.
+ */
+export const firmDomains = pgTable(
+  'firm_domains',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    domain: text('domain').notNull(),
+    /** Value of the TXT record the firm publishes. */
+    token: text('token').notNull(),
+    /** 'pending_dns' | 'pending_routing' | 'active' */
+    status: text('status').notNull().default('pending_dns'),
+    lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    activatedAt: timestamp('activated_at', { withTimezone: true }),
+    ...updatable,
+  },
+  (t) => [
+    uniqueIndex('firm_domains_domain_idx').on(t.firmId, t.domain),
+    index('firm_domains_token_idx').on(t.token),
+    tenantPolicy('firm_domains'),
+  ],
+);
+
+export type FirmAssetRow = typeof firmAssets.$inferSelect;
+export type FirmDomainRow = typeof firmDomains.$inferSelect;
 
 // ---------------------------------------------------------------- platform
 

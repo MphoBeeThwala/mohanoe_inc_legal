@@ -45,20 +45,12 @@
 - Hand it over securely, then delete the file. The export is recorded in the firm's audit trail.
 
 ## Backups
-- Use the provider's managed backups with point-in-time recovery as the primary recovery path.
-- Before client go-live, verify:
-  - backup retention window
-  - point-in-time recovery / restore support on the chosen plan
-  - a documented owner for restore approval
+- PostgreSQL Flexible Server: point-in-time restore for 35 days, geo-redundant backups to South Africa West in production. Documents and audit anchors: versioned, soft-deleted and geo-replicated Blob Storage.
+- Disaster recovery: [`docs/runbooks/disaster-recovery.md`](docs/runbooks/disaster-recovery.md).
 
 ## Restore Test
-- Perform one non-production restore test before accepting client data.
-- Verify after restore:
-  - staff login works
-  - intake records still decrypt
-  - case, billing, calendar, and audit records still load
-  - compliance export still returns a complete subject bundle
-  - `GET /api/audit/verify` (admin) returns `valid: true` for each firm (each firm has its own chain)
+- Quarterly, and before the first firm goes live: [`docs/runbooks/restore-test.md`](docs/runbooks/restore-test.md).
+- `npm run ops -w apps/api -- restore-check` on the restored copy checks migrations, every firm's audit chain, decryption samples and counts (exit code 1 on failure).
 
 ## Staff access
 - There is no public registration and no admin seeding. The first administrator of a firm is invited with the CLI (`npm run firm -w apps/api -- invite --slug <slug> --email <email> --name "<name>"`); they invite everyone else from **Account & team**.
@@ -69,20 +61,16 @@
 - Entra External ID: create an app registration in the External ID tenant, enable MFA in the user flow, add `https://<firm address>/api/auth/oidc/callback` for each firm, then set `OIDC_ISSUER`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET`. Production refuses an `http://` issuer.
 - Existing password accounts from before this release set up an authenticator at their next sign-in.
 
-## Deploy Smoke Test
-- After Render deploys, run:
+## Deploy
+- Azure (target): [`docs/runbooks/deployment.md`](docs/runbooks/deployment.md). The Deploy workflow migrates, updates the scheduled jobs and the API, and checks `/ready` through Front Door.
+- Render (interim): after a deploy run `node scripts/smoke-test.js https://<host>` (checks `/health`, `/ready` and the React shell).
 
-```bash
-node scripts/smoke-test.js https://your-render-url.onrender.com
-```
-
-Expected checks:
-- `/health`
-- `/ready`
-- `/` returns the React shell
+## Monitoring and incidents
+- Alerts (email to `alert_emails`): availability test on `/ready`, Front Door 5xx, API restarts, PostgreSQL CPU and storage, failed scheduled jobs, monthly budget.
+- Errors: 5xx responses log one JSON line with a request ID; set `SENTRY_DSN` to send them to Sentry (no request bodies, headers, cookies, users or query strings; emails and ID numbers are scrubbed). Production answers 5xx with a generic message and the request ID.
+- Incidents and POPIA breach notification: [`docs/runbooks/incident-response.md`](docs/runbooks/incident-response.md).
 
 ## Remaining Production Checks
-- Confirm Render env vars are set.
-- Confirm Supabase env vars are set.
-- Confirm audit chain verification returns valid.
+- Confirm audit chain verification returns valid for every firm.
 - Confirm a live end-to-end intake submission works on the deployed URL.
+- Pass a restore test before accepting client data.

@@ -59,7 +59,15 @@ export function getFirmBrand(firm: FirmRow): FirmBrand {
     firmName: firm.legalName,
     firmShortName: firm.tradingName || firm.legalName,
     productName: firm.productName || DEFAULT_FIRM_BRAND.productName,
-    logoUrl: branding.logoUrl || null,
+    // Uploaded assets are served by the API (versioned so caches refresh).
+    logoUrl: branding.logoHash
+      ? `/api/tenant/logo?v=${branding.logoHash}`
+      : branding.logoUrl || null,
+    iconUrl: branding.iconHash
+      ? `/api/tenant/icon?v=${branding.iconHash}`
+      : branding.logoHash
+        ? `/api/tenant/logo?v=${branding.logoHash}`
+        : null,
     primaryColor: isHexColor(branding.primaryColor)
       ? branding.primaryColor
       : DEFAULT_FIRM_BRAND.primaryColor,

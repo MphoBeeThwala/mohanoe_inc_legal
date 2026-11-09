@@ -25,6 +25,7 @@
     "@azure/identity": "^4.14.1",
     "@azure/keyvault-keys": "^4.10.2",
     "@azure/storage-blob": "^12.34.0",
+    "@sentry/node": "^11.11.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.1",
     "drizzle-orm": "^0.45.4",

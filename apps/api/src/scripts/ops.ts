@@ -28,7 +28,9 @@ import {
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { sendRemindersForAllFirms } from '../services/calendar.service';
+import { restoreCheck } from '../services/restore-check.service';
 import { importRollFile, syncCourtRolls } from '../services/court-roll.service';
+import { checkPendingDomains } from '../services/white-label.service';
 import { anchorAllFirms } from '../services/audit-anchor.service';
 import { createOperator, listOperators, setOperatorActive } from '../services/support.service';
 import * as auditService from '../services/audit.service';
@@ -178,13 +180,25 @@ async function main(): Promise<void> {
     console.log(
       `Matched ${report.matched} listing(s), flagged ${report.removed} removed, sent ${report.emails} email(s).`,
     );
+  } else if (command === 'domains') {
+    for (const result of await checkPendingDomains()) {
+      console.log(
+        `${result.firm} ${result.domain}: ${result.status}${result.error ? ` (${result.error})` : ''}`,
+      );
+    }
+  } else if (command === 'restore-check') {
+    const report = await restoreCheck();
+    console.log(JSON.stringify(report, null, 2));
+    if (!report.ok) {
+      process.exitCode = 1;
+    }
   } else if (command === 'reminders') {
     for (const result of await sendRemindersForAllFirms()) {
       console.log(`${result.firm}: ${result.events} event(s), ${result.emails} email(s)`);
     }
   } else {
     throw new Error(
-      'Usage: ops keys status|rotate|reencrypt|rewrap|prune [--slug <slug>] | ops anchor | ops reminders | ops court-rolls [--file <roll> --division <code> --title <title>] | ops operator create|list|disable|enable',
+      'Usage: ops keys status|rotate|reencrypt|rewrap|prune [--slug <slug>] | ops anchor | ops reminders | ops domains | ops restore-check | ops court-rolls [--file <roll> --division <code> --title <title>] | ops operator create|list|disable|enable',
     );
   }
 }

@@ -1,3 +1,4 @@
+import { reportError } from './monitoring';
 import type { Response } from 'express';
 
 /** An error that carries the HTTP status the API should answer with. */
@@ -45,7 +46,28 @@ export function describeError(error: unknown): string {
   return cause ? `${errorMessage(cause)} (${message.split('\n')[0]})` : message;
 }
 
-/** Standard JSON error response used by every controller. */
+/**
+ * Standard JSON error response used by every controller. Unexpected errors
+ * (5xx) are logged and reported, and in production the client gets a
+ * generic message with the request ID instead of the internal detail.
+ */
 export function sendError(res: Response, error: unknown): void {
-  res.status(errorStatus(error)).json({ message: errorMessage(error) });
+  const status = errorStatus(error);
+  if (status < 500) {
+    res.status(status).json({ message: errorMessage(error) });
+    return;
+  }
+  const requestId = res.req?.requestId;
+  const path = res.req?.originalUrl;
+  console.error(
+    JSON.stringify({ requestId, path: path?.split('?')[0], error: describeError(error) }),
+  );
+  reportError(error, { requestId, path });
+  res.status(status).json({
+    message:
+      process.env.NODE_ENV === 'production'
+        ? 'Something went wrong. Please try again.'
+        : errorMessage(error),
+    requestId,
+  });
 }

@@ -3,10 +3,8 @@ import {
   hasPermission,
   PAYMENT_METHODS,
   type AgingReport,
-  type BillingSettings,
   type BillingSummary,
   type Disbursement,
-  type FirmSettings,
   type Invoice,
   type MatterCase,
   type Permission,
@@ -54,7 +52,6 @@ function BillingPanel({ currentUser, cases, selectedCaseId, onChanged }: Props) 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [costs, setCosts] = useState<Disbursement[]>([]);
   const [aging, setAging] = useState<AgingReport | null>(null);
-  const [settings, setSettings] = useState<BillingSettings | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -87,11 +84,6 @@ function BillingPanel({ currentUser, cases, selectedCaseId, onChanged }: Props) 
         .then(({ data }) => setCosts(data)),
       api.get<AgingReport>('/billing/aging').then(({ data }) => setAging(data)),
     ];
-    if (hasPermission(currentUser.role, 'users.manage')) {
-      tasks.push(
-        api.get<FirmSettings>('/firm/settings').then(({ data }) => setSettings(data.billing)),
-      );
-    }
     await Promise.all(tasks);
   }, [currentUser.role]);
 
@@ -136,16 +128,6 @@ function BillingPanel({ currentUser, cases, selectedCaseId, onChanged }: Props) 
       setPaying(null);
       setPayment({ amount: '', method: 'eft', reference: '' });
     });
-  };
-
-  const saveSettings = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!settings) return;
-    run(() =>
-      api.patch('/firm/settings', {
-        billing: { ...settings, vatNumber: settings.vatNumber || null },
-      }),
-    );
   };
 
   return (
@@ -441,57 +423,11 @@ function BillingPanel({ currentUser, cases, selectedCaseId, onChanged }: Props) 
         </>
       ) : null}
 
-      {settings ? (
-        <form className="stack-form" aria-label="Billing settings" onSubmit={saveSettings}>
-          <h3>Invoice details</h3>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={settings.vatRegistered}
-              onChange={(event) =>
-                setSettings({ ...settings, vatRegistered: event.target.checked })
-              }
-            />
-            VAT vendor (issue tax invoices)
-          </label>
-          <input
-            aria-label="VAT number"
-            placeholder="VAT number (10 digits, starts with 4)"
-            value={settings.vatNumber ?? ''}
-            onChange={(event) => setSettings({ ...settings, vatNumber: event.target.value })}
-          />
-          <textarea
-            aria-label="Firm address"
-            placeholder="Firm address (printed on invoices)"
-            value={settings.address}
-            onChange={(event) => setSettings({ ...settings, address: event.target.value })}
-          />
-          <textarea
-            aria-label="Bank details"
-            placeholder="Business account for payments"
-            value={settings.bankDetails}
-            onChange={(event) => setSettings({ ...settings, bankDetails: event.target.value })}
-          />
-          <input
-            aria-label="Payment terms (days)"
-            type="number"
-            min={0}
-            max={365}
-            value={settings.paymentTermsDays}
-            onChange={(event) =>
-              setSettings({ ...settings, paymentTermsDays: Number(event.target.value) })
-            }
-          />
-          <input
-            aria-label="Invoice footer"
-            placeholder="Footer note"
-            value={settings.invoiceFooter}
-            onChange={(event) => setSettings({ ...settings, invoiceFooter: event.target.value })}
-          />
-          <button className="secondary-button" disabled={busy}>
-            Save invoice details
-          </button>
-        </form>
+      {can('users.manage') ? (
+        <p className="field-hint">
+          Invoice details (VAT number, address, bank account, terms and numbering) are in Account &
+          team → Firm settings.
+        </p>
       ) : null}
     </div>
   );

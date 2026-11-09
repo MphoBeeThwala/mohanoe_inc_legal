@@ -40,6 +40,7 @@ import {
   timeEntries,
   users,
   type CaseRow,
+  type FirmRow,
   type DisbursementRow,
   type InvoiceContent,
   type InvoiceLineRecord,
@@ -63,10 +64,11 @@ import {
 } from '../validation/schemas';
 import { decryptJson, encryptJson } from './privacy.service';
 import { getFirmBrand } from '../config/brand';
-import { invoicePdf, statementPdf, type PdfParty } from './pdf.service';
+import { invoicePdf, statementPdf, type Letterhead, type PdfParty } from './pdf.service';
+import { readAsset } from './white-label.service';
 import { sendMail } from './mail.service';
 import { partyDetails } from './party.service';
-import { billingSettings } from './firm-settings.service';
+import { billingSettings, profileSettings } from './firm-settings.service';
 import { isClosed } from '../lib/matter-status';
 import * as intakeService from './intake.service';
 import * as auditService from './audit.service';
@@ -535,8 +537,8 @@ async function deleteDraftSteps(id: string, actor: Actor = {}): Promise<{ delete
   return { deleted: true };
 }
 
-export function formatInvoiceNumber(value: number): string {
-  return `INV-${String(value).padStart(6, '0')}`;
+export function formatInvoiceNumber(value: number, prefix = 'INV'): string {
+  return `${prefix}-${String(value).padStart(6, '0')}`;
 }
 
 /** Issues a draft: the next invoice number, due date, and its time billed. */
@@ -559,7 +561,10 @@ async function issueInvoiceSteps(id: string, actor: Actor = {}): Promise<Invoice
   const vatRateBp = firmVatBp();
   const issuedAt = new Date();
   // Same transaction as the update below: if anything fails, the number is not used.
-  const invoiceNumber = formatInvoiceNumber(await nextValue('invoice_number'));
+  const invoiceNumber = formatInvoiceNumber(
+    await nextValue('invoice_number'),
+    settings.invoicePrefix,
+  );
   const [taken] = await db()
     .select({ id: invoices.id })
     .from(invoices)
@@ -739,6 +744,14 @@ async function clientFor(
   };
 }
 
+async function letterheadFor(firm: FirmRow): Promise<Letterhead> {
+  const logo = firm.branding?.logoHash ? await readAsset('logo') : null;
+  return {
+    logo: logo && logo.contentType !== 'image/webp' ? logo.content : null,
+    profile: profileSettings(firm),
+  };
+}
+
 export interface RenderedPdf {
   fileName: string;
   content: Buffer;
@@ -750,7 +763,13 @@ export async function invoiceDocument(id: string, actor: Actor = {}): Promise<Re
   const invoice = await present(row);
   const firm = currentFirm();
   const client = await clientFor(row.clientPartyId, row.clientLabel);
-  const content = await invoicePdf(invoice, getFirmBrand(firm), billingSettings(firm), client);
+  const content = await invoicePdf(
+    invoice,
+    getFirmBrand(firm),
+    billingSettings(firm),
+    client,
+    await letterheadFor(firm),
+  );
   await auditService.logEventSafely(
     {
       entityType: 'invoice',
@@ -780,7 +799,7 @@ export async function sendInvoice(id: string, input: unknown, actor: Actor = {})
     throw httpError('The client has no email address; add one or give an address', 400);
   }
   const invoice = await present(row);
-  const content = await invoicePdf(invoice, brand, settings, client);
+  const content = await invoicePdf(invoice, brand, settings, client, await letterheadFor(firm));
   const due = invoice.dueAt ? ` by ${invoice.dueAt.slice(0, 10)}` : '';
   const sent = await sendMail({
     to: recipient,
@@ -822,7 +841,13 @@ export async function statementDocument(
   const statement = await clientStatement(partyId, range);
   const firm = currentFirm();
   const client = await clientFor(partyId, statement.partyNumber);
-  const content = await statementPdf(statement, getFirmBrand(firm), billingSettings(firm), client);
+  const content = await statementPdf(
+    statement,
+    getFirmBrand(firm),
+    billingSettings(firm),
+    client,
+    await letterheadFor(firm),
+  );
   return { fileName: `statement-${statement.partyNumber}-${statement.to}.pdf`, content };
 }
 

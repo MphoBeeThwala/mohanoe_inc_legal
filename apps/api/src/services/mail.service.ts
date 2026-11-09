@@ -5,6 +5,8 @@
 // the link to the administrator who created it. In tests, sent messages are
 // kept in an in-memory outbox. Message bodies are never logged: they carry
 // personal information.
+import { currentTenant } from '../db/tenant-context';
+import type { FirmRow } from '../db/schema';
 import nodemailer, { type Transporter } from 'nodemailer';
 
 export interface MailAttachment {
@@ -18,6 +20,9 @@ export interface MailMessage {
   subject: string;
   text: string;
   attachments?: MailAttachment[];
+  /** Set when sent (the test outbox records them). */
+  from?: string;
+  replyTo?: string;
 }
 
 const outbox: MailMessage[] = [];
@@ -35,10 +40,24 @@ export function mailEnabled(): boolean {
   return process.env.NODE_ENV === 'test' ? true : getTransporter() !== null;
 }
 
+/**
+ * Mail goes out from the platform's address (MAIL_FROM), in the firm's name,
+ * with replies to the firm's own address when it has set one.
+ */
+export function senderFor(firm: FirmRow | undefined): { from: string; replyTo?: string } {
+  const address = (process.env.MAIL_FROM || 'no-reply@localhost').replace(/^.*<([^>]+)>.*$/, '$1');
+  if (!firm) {
+    return { from: process.env.MAIL_FROM || address };
+  }
+  const name = (firm.tradingName || firm.legalName).replace(/["\\\r\n<>]/g, '').slice(0, 80);
+  const replyTo = firm.profile?.replyToEmail || undefined;
+  return { from: `"${name}" <${address}>`, ...(replyTo ? { replyTo } : {}) };
+}
+
 /** Sends a message. Returns false when no transport is configured. */
 export async function sendMail(message: MailMessage): Promise<boolean> {
   if (process.env.NODE_ENV === 'test') {
-    outbox.push(message);
+    outbox.push({ ...message, ...senderFor(currentTenant()?.firm) });
     return true;
   }
   const transport = getTransporter();
@@ -46,7 +65,7 @@ export async function sendMail(message: MailMessage): Promise<boolean> {
     return false;
   }
   await transport.sendMail({
-    from: process.env.MAIL_FROM || 'no-reply@localhost',
+    ...senderFor(currentTenant()?.firm),
     to: message.to,
     subject: message.subject,
     text: message.text,

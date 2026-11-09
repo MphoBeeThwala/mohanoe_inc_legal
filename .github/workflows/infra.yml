@@ -1,0 +1,89 @@
+name: Infrastructure
+
+# Terraform plan on pull requests that change infra/, apply on main:
+# staging first, then prod after approval (GitHub environment "production"
+# with required reviewers). Azure access is OIDC (no stored credentials).
+
+on:
+  pull_request:
+    paths: ['infra/**']
+  push:
+    branches: [main]
+    paths: ['infra/**']
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    environment: staging
+    defaults:
+      run:
+        working-directory: infra/terraform
+    env:
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: 'true'
+      TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - name: Backend config
+        run: printf '%s\n' "${{ vars.TF_BACKEND_CONFIG }}" > envs/ci.backend.hcl
+      - run: terraform init -input=false -backend-config=envs/ci.backend.hcl
+      - run: terraform plan -input=false -lock-timeout=5m -var-file=envs/staging.tfvars -no-color
+
+  apply:
+    if: github.event_name != 'pull_request'
+    strategy:
+      max-parallel: 1
+      matrix:
+        target:
+          - { environment: staging, tfvars: staging }
+          - { environment: production, tfvars: prod }
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.target.environment }}
+    defaults:
+      run:
+        working-directory: infra/terraform
+    env:
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: 'true'
+      TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Runner address (temporarily allowed through the Key Vault firewall)
+        run: echo "TF_VAR_deployer_ip=$(curl -fsS https://api.ipify.org)" >> "$GITHUB_ENV"
+      - name: Backend config
+        run: printf '%s\n' "${{ vars.TF_BACKEND_CONFIG }}" > envs/ci.backend.hcl
+      - run: terraform init -input=false -backend-config=envs/ci.backend.hcl
+      - name: Apply
+        env:
+          TF_VAR_smtp_url: ${{ secrets.SMTP_URL }}
+          TF_VAR_sentry_dsn: ${{ secrets.SENTRY_DSN }}
+        run: terraform apply -input=false -auto-approve -lock-timeout=5m -var-file=envs/${{ matrix.target.tfvars }}.tfvars
+      - name: Remove the runner address from the Key Vault firewall
+        if: always()
+        run: |
+          vault=$(terraform output -raw key_vault 2>/dev/null || true)
+          if [ -n "$vault" ]; then
+            az keyvault network-rule remove --name "$vault" --ip-address "${TF_VAR_deployer_ip}/32" >/dev/null || true
+          fi

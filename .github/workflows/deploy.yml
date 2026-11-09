@@ -1,0 +1,83 @@
+name: Deploy
+
+# Build the image once, deploy it to staging (migrate, update jobs and the
+# API, smoke test), then promote the same image to production after approval
+# (GitHub environment "production" with required reviewers).
+#
+# Each environment's variables: AZURE_CLIENT_ID, AZURE_TENANT_ID,
+# AZURE_SUBSCRIPTION_ID, RESOURCE_GROUP, ACR_NAME, API_APP, JOB_PREFIX and
+# PUBLIC_URL (the /ready check through Front Door), from `terraform output`.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: staging
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Build and push
+        id: image
+        run: |
+          release=$(git rev-parse HEAD)
+          image="${{ vars.ACR_NAME }}.azurecr.io/legal-platform:${release}"
+          az acr login --name "${{ vars.ACR_NAME }}"
+          docker build --build-arg APP_RELEASE="$release" -t "$image" .
+          docker push "$image"
+          echo "image=legal-platform:${release}" >> "$GITHUB_OUTPUT"
+      - name: Deploy
+        run: ./scripts/deploy-azure.sh "${{ vars.ACR_NAME }}.azurecr.io/${{ steps.image.outputs.image }}"
+        env:
+          RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+          API_APP: ${{ vars.API_APP }}
+          JOB_PREFIX: ${{ vars.JOB_PREFIX }}
+          PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+
+  production:
+    needs: staging
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Promote the tested image
+        run: |
+          az acr import --name "${{ vars.ACR_NAME }}" \
+            --source "${{ vars.STAGING_ACR_RESOURCE_ID }}/${{ needs.staging.outputs.image }}" \
+            --image "${{ needs.staging.outputs.image }}" --force
+      - name: Deploy
+        run: ./scripts/deploy-azure.sh "${{ vars.ACR_NAME }}.azurecr.io/${{ needs.staging.outputs.image }}"
+        env:
+          RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+          API_APP: ${{ vars.API_APP }}
+          JOB_PREFIX: ${{ vars.JOB_PREFIX }}
+          PUBLIC_URL: ${{ vars.PUBLIC_URL }}

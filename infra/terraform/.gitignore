@@ -1,0 +1,7 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+envs/*.backend.hcl
+!envs/backend.hcl.example
