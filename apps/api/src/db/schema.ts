@@ -81,6 +81,8 @@ export const firms = pgTable(
       .default(sql`'{}'::text[]`),
     /** Staff (except admins, as break-glass) must use Microsoft sign-in. */
     ssoEnforced: boolean('sso_enforced').notNull().default(false),
+    /** New matters only for FICA-verified clients (FIC Act customer due diligence). */
+    ficaEnforced: boolean('fica_enforced').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -527,6 +529,63 @@ export const conflictChecks = pgTable(
   (t) => [index('conflict_checks_created_idx').on(t.createdAt), tenantPolicy('conflict_checks')],
 );
 
+// ---------------------------------------------------------------- FICA
+
+/**
+ * Customer due diligence for a client (FIC Act): risk rating and factors,
+ * verification status and the date the next review is due.
+ */
+export const ficaProfiles = pgTable(
+  'fica_profiles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    partyId: uuid('party_id')
+      .notNull()
+      .references(() => parties.id, { onDelete: 'cascade' }),
+    /** 'in_progress' | 'verified' */
+    status: text('status').notNull().default('in_progress'),
+    /** 'low' | 'medium' | 'high' */
+    riskRating: text('risk_rating').notNull().default('low'),
+    riskFactors: jsonb('risk_factors').$type<Record<string, boolean>>().notNull().default({}),
+    /** Encrypted notes on the assessment (may name people). */
+    notesEncrypted: text('notes_encrypted'),
+    verifiedBy: uuid('verified_by').references(() => users.id, { onDelete: 'set null' }),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    reviewDue: date('review_due', { mode: 'string' }),
+    ...updatable,
+  },
+  (t) => [uniqueIndex('fica_profiles_party_idx').on(t.partyId), tenantPolicy('fica_profiles')],
+);
+
+/**
+ * KYC documents (ID, proof of address, company registration …). The file and
+ * its name are encrypted with the firm's key and kept in the object store
+ * (or in the row when none is configured).
+ */
+export const ficaDocuments = pgTable(
+  'fica_documents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    partyId: uuid('party_id')
+      .notNull()
+      .references(() => parties.id, { onDelete: 'cascade' }),
+    docType: text('doc_type').notNull(),
+    /** Encrypted original file name (often contains the person's name). */
+    fileNameEncrypted: text('file_name_encrypted').notNull(),
+    contentType: text('content_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    /** Encrypted { fileName, data } when no object store is configured. */
+    encryptedContent: text('encrypted_content'),
+    storageKey: text('storage_key'),
+    contentKeyVersion: integer('content_key_version'),
+    uploadedBy: uuid('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [index('fica_documents_party_idx').on(t.partyId), tenantPolicy('fica_documents')],
+);
+
 /** Who is on a matter, and in what role. Matter-scoped. */
 export const caseParties = pgTable(
   'case_parties',
@@ -887,6 +946,8 @@ export type PlatformOperatorRow = typeof platformOperators.$inferSelect;
 export type SupportGrantRow = typeof supportGrants.$inferSelect;
 export type PartyRow = typeof parties.$inferSelect;
 export type ConflictCheckRow = typeof conflictChecks.$inferSelect;
+export type FicaProfileRow = typeof ficaProfiles.$inferSelect;
+export type FicaDocumentRow = typeof ficaDocuments.$inferSelect;
 export type FirmRow = typeof firms.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type SubmissionRow = typeof submissions.$inferSelect;

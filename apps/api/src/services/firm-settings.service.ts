@@ -24,6 +24,7 @@ const domain = z
 const settingsSchema = z.object({
   // At least a year: closed matters are removed for good by the retention sweep.
   retentionDays: z.number().int().min(365).max(36_500).nullable().optional(),
+  ficaEnforced: z.boolean().optional(),
   microsoft: z
     .object({
       tenantId: z
@@ -59,6 +60,7 @@ export function getSettings(): FirmSettings {
   return {
     retentionDays: firm.retentionDays ?? defaultRetentionDays(),
     retentionIsDefault: firm.retentionDays === null,
+    ficaEnforced: firm.ficaEnforced,
     microsoft: {
       available: workforceAvailable(),
       tenantId: firm.ssoTenantId,
@@ -78,6 +80,10 @@ export async function updateSettings(input: unknown, actor: Actor): Promise<Firm
   if (changes.retentionDays !== undefined) {
     set.retentionDays = changes.retentionDays;
     details.retentionDays = changes.retentionDays;
+  }
+  if (changes.ficaEnforced !== undefined) {
+    set.ficaEnforced = changes.ficaEnforced;
+    details.ficaEnforced = changes.ficaEnforced;
   }
   if (changes.microsoft) {
     const { tenantId, domains, enforced } = changes.microsoft;
@@ -103,7 +109,11 @@ export async function updateSettings(input: unknown, actor: Actor): Promise<Firm
       entityType: 'firm',
       entityId: firm.id,
       action: 'firm_settings_updated',
-      summary: changes.microsoft ? 'Sign-in settings changed' : 'Retention period changed',
+      summary: changes.microsoft
+        ? 'Sign-in settings changed'
+        : changes.ficaEnforced !== undefined
+          ? 'FICA requirement changed'
+          : 'Retention period changed',
       details,
     },
     actor,

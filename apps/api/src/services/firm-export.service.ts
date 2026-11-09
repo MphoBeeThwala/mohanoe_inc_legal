@@ -11,6 +11,7 @@ import * as schema from '../db/schema';
 import type { FirmRow } from '../db/schema';
 import { decryptJson } from './privacy.service';
 import { readSealedContent } from './documents.service';
+import { readSealedFica } from './fica.service';
 import * as auditService from './audit.service';
 
 /** Tables exported as they are (all rows of the firm). */
@@ -86,6 +87,31 @@ export async function exportFirm(firm: FirmRow): Promise<FirmExport> {
           ...rest,
           details: await decryptJson(detailsEncrypted),
         })),
+      );
+
+      const profiles = await db().select().from(schema.ficaProfiles);
+      tables.ficaProfiles = await Promise.all(
+        profiles.map(async ({ notesEncrypted, ...rest }) => ({
+          ...rest,
+          notes: notesEncrypted ? await decryptJson(notesEncrypted) : null,
+        })),
+      );
+      const kyc = await db().select().from(schema.ficaDocuments);
+      tables.ficaDocuments = await Promise.all(
+        kyc.map(async (row) => {
+          const {
+            fileNameEncrypted,
+            encryptedContent: _sealed,
+            storageKey: _key,
+            contentKeyVersion: _v,
+            ...rest
+          } = row;
+          return {
+            ...rest,
+            fileName: await decryptJson(fileNameEncrypted),
+            dataBase64: await decryptJson(await readSealedFica(row)),
+          };
+        }),
       );
 
       const checkRows = await db().select().from(schema.conflictChecks);

@@ -51,7 +51,14 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json({ limit: '1mb' }));
+// JSON bodies: 1 MB, except FICA document uploads (base64 files up to 10 MB).
+const smallJson = express.json({ limit: '1mb' });
+const uploadJson = express.json({ limit: '14mb' });
+app.use((req, res, next) =>
+  /^\/api\/clients\/[^/]+\/fica\/documents\/?$/.test(req.path) && req.method === 'POST'
+    ? uploadJson(req, res, next)
+    : smallJson(req, res, next),
+);
 
 app.get('/health', (req, res) => {
   res.json({

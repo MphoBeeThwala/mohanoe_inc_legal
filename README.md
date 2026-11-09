@@ -113,6 +113,16 @@ When the firms table is empty, the server creates a `default` firm from these va
 - **Opening clients and matters:** a client, and every matter (`POST /api/cases`), needs a check that was cleared or waived within the last 90 days. Adding an existing client as an opposing party is refused without a recorded waiver.
 - **Matter references:** matters opened for a client have a title and carry the client's party number (never a name) in `clientLabel`. Intake-based matters still work as before.
 
+## FICA (customer due diligence)
+- **Profile:** each client has a FICA profile (Clients → select a client). Risk factors (politically exposed, high-risk jurisdiction, not met face to face, cash-intensive, complex ownership) give the rating. Staff may raise it but never lower it below what the factors give.
+- **Documents:** KYC documents (PDF, JPEG or PNG, up to 10 MB, checked against their content) are encrypted with the firm's key, file names included, and stored in the firm's container when `OBJECT_STORE` is set. Opening one is audited.
+- **Required documents:**
+  - individuals: ID document and proof of address
+  - organisations: CIPC registration, directors' IDs, beneficial ownership and proof of address
+  - high risk adds source of funds
+- **Verification** (fee earners; secretaries collect documents but can't verify) needs every required document. It sets the next review: 12, 24 or 36 months for high, medium or low risk. Raising the risk, or removing a required document, reopens verification.
+- **Firm switch:** administrators can require verified FICA before any new matter (Account & team → Records). Overdue reviews then block new matters too.
+
 ## Encryption and records
 - **Per-firm envelope encryption.** Each firm has its own random data key (and a separate blind-index key), stored only wrapped by a key-encryption key: Azure Key Vault in production (`KEY_PROVIDER=azure-keyvault`, `AZURE_KEY_VAULT_KEY_ID`, managed identity), or `INTAKE_ENCRYPTION_KEY` locally. Ciphertext (`v2:`) is bound to its firm, so it can't be decrypted in another firm's rows. Data written before this (`v1:`) still reads; move it with `keys reencrypt`.
 - **Key operations** (`npm run ops -w apps/api -- …`, same environment as the server):

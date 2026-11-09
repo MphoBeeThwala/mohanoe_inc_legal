@@ -5,6 +5,7 @@ import { authenticateRequest, requirePermission } from '../services/auth.service
 import * as partyService from '../services/party.service';
 import * as clientsService from '../services/clients.service';
 import * as conflictService from '../services/conflict.service';
+import * as ficaService from '../services/fica.service';
 
 type Handler = (req: Request) => Promise<unknown>;
 
@@ -53,6 +54,63 @@ clients.post(
       req.auth ?? {},
     ),
   ),
+);
+
+// FICA customer due diligence for a client.
+clients.get(
+  '/:partyId/fica',
+  requirePermission('fica.read'),
+  handle((req) => ficaService.getProfile(String(req.params.partyId))),
+);
+clients.put(
+  '/:partyId/fica/risk',
+  requirePermission('fica.write'),
+  handle((req) => ficaService.assessRisk(String(req.params.partyId), req.body, req.auth ?? {})),
+);
+clients.post(
+  '/:partyId/fica/documents',
+  requirePermission('fica.write'),
+  handle(
+    (req) => ficaService.uploadDocument(String(req.params.partyId), req.body, req.auth ?? {}),
+    201,
+  ),
+);
+clients.get(
+  '/:partyId/fica/documents/:documentId',
+  requirePermission('fica.read'),
+  async (req: Request, res: Response) => {
+    try {
+      const file = await ficaService.downloadDocument(
+        String(req.params.partyId),
+        String(req.params.documentId),
+        req.auth ?? {},
+      );
+      res.setHeader('Content-Type', file.contentType);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
+      );
+      res.status(200).end(file.bytes);
+    } catch (error) {
+      sendError(res, error);
+    }
+  },
+);
+clients.delete(
+  '/:partyId/fica/documents/:documentId',
+  requirePermission('fica.write'),
+  handle((req) =>
+    ficaService.deleteDocument(
+      String(req.params.partyId),
+      String(req.params.documentId),
+      req.auth ?? {},
+    ),
+  ),
+);
+clients.post(
+  '/:partyId/fica/verify',
+  requirePermission('fica.verify'),
+  handle((req) => ficaService.verify(String(req.params.partyId), req.auth ?? {})),
 );
 
 // ---------------------------------------------------------------- all parties

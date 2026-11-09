@@ -85,12 +85,18 @@ export type Permission =
   | 'clients.read'
   | 'clients.write'
   | 'conflicts.check'
-  | 'conflicts.waive';
+  | 'conflicts.waive'
+  | 'fica.read'
+  | 'fica.write'
+  | 'fica.verify';
 
 const FEE_EARNER: readonly Permission[] = [
   'clients.read',
   'clients.write',
   'conflicts.check',
+  'fica.read',
+  'fica.write',
+  'fica.verify',
   'intake.read',
   'intake.write',
   'matters.read',
@@ -125,6 +131,9 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'clients.read',
     'clients.write',
     'conflicts.check',
+    // Front desk collects FICA documents; a fee earner verifies.
+    'fica.read',
+    'fica.write',
     'intake.read',
     'intake.write',
     'matters.read',
@@ -136,6 +145,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
   ],
   bookkeeper: [
     'clients.read',
+    'fica.read',
     'matters.read',
     'billing.read',
     'billing.write',
@@ -279,6 +289,8 @@ export interface FirmSettings {
   retentionDays: number;
   /** Whether retentionDays is the platform default (not set for this firm). */
   retentionIsDefault: boolean;
+  /** New matters only for FICA-verified clients. */
+  ficaEnforced: boolean;
   /** Microsoft 365 staff sign-in. */
   microsoft: {
     /** The platform's Microsoft 365 app is configured, so firms can turn this on. */
@@ -296,6 +308,7 @@ export interface FirmSettings {
 
 export interface FirmSettingsUpdate {
   retentionDays?: number | null;
+  ficaEnforced?: boolean;
   microsoft?: { tenantId: string | null; domains: string[]; enforced: boolean };
 }
 
@@ -343,6 +356,8 @@ export interface PartySummary {
   name: string;
   isClient: boolean;
   clientSince: string | null;
+  /** FICA status (clients). */
+  ficaStatus?: FicaStatus;
 }
 
 export interface PartyRecord extends PartySummary {
@@ -442,6 +457,88 @@ export interface MatterPartyInput {
 export interface MatterParty {
   role: MatterPartyRole;
   party: PartySummary;
+}
+
+// ---------------------------------------------------------------- FICA
+
+export type FicaRiskRating = 'low' | 'medium' | 'high';
+
+/** Risk factors considered in the firm's risk-based approach (FIC Act, RMCP). */
+export interface FicaRiskFactors {
+  /** Domestic or foreign prominent influential person, or their family / close associate. */
+  politicallyExposed?: boolean;
+  /** Linked to a high-risk or sanctioned jurisdiction. */
+  highRiskJurisdiction?: boolean;
+  /** Not met face to face. */
+  nonFaceToFace?: boolean;
+  /** Cash-intensive business, or large cash in the matter. */
+  cashIntensive?: boolean;
+  /** Complex ownership (trusts, layered companies) or unclear beneficial ownership. */
+  complexStructure?: boolean;
+}
+
+export const FICA_DOCUMENT_TYPES = [
+  'id_document',
+  'proof_of_address',
+  'company_registration',
+  'directors_ids',
+  'beneficial_ownership',
+  'source_of_funds',
+  'other',
+] as const;
+
+export type FicaDocumentType = (typeof FICA_DOCUMENT_TYPES)[number];
+
+export const FICA_DOCUMENT_LABELS: Readonly<Record<FicaDocumentType, string>> = {
+  id_document: 'ID document or passport',
+  proof_of_address: 'Proof of address (≤ 3 months)',
+  company_registration: 'Company registration (CIPC)',
+  directors_ids: "Directors' / members' IDs",
+  beneficial_ownership: 'Beneficial ownership declaration',
+  source_of_funds: 'Source of funds / wealth',
+  other: 'Other',
+};
+
+/** Effective status: 'review_due' once the review date has passed. */
+export type FicaStatus = 'not_started' | 'in_progress' | 'verified' | 'review_due';
+
+export interface FicaDocument {
+  id: string;
+  docType: FicaDocumentType;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedBy: string | null;
+  createdAt: string;
+}
+
+export interface FicaProfile {
+  partyId: string;
+  status: FicaStatus;
+  riskRating: FicaRiskRating;
+  riskFactors: FicaRiskFactors;
+  notes: string | null;
+  documents: FicaDocument[];
+  /** Document types still needed for verification. */
+  missing: FicaDocumentType[];
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  reviewDue: string | null;
+}
+
+export interface FicaRiskInput {
+  riskFactors: FicaRiskFactors;
+  /** Raise the rating above what the factors give (never lower it). */
+  riskRating?: FicaRiskRating;
+  notes?: string;
+}
+
+export interface FicaDocumentUpload {
+  docType: FicaDocumentType;
+  fileName: string;
+  contentType: string;
+  /** File contents, base64 (max 10 MB). */
+  dataBase64: string;
 }
 
 // ---------------------------------------------------------------- platform support

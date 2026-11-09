@@ -10,6 +10,7 @@ import {
 } from '@ahava88/shared';
 import { api, apiErrorMessage } from '../api';
 import DismissibleNotice, { type Notice } from './DismissibleNotice';
+import FicaPanel from './FicaPanel';
 
 interface ClientsPanelProps {
   currentUser: PublicUser;
@@ -243,6 +244,7 @@ function ClientsPanel({ currentUser, onMatterOpened }: ClientsPanelProps) {
                 </span>
                 <span className="muted">
                   {item.kind === 'entity' ? 'Organisation' : 'Individual'}
+                  {item.ficaStatus ? ` · FICA ${item.ficaStatus.replace('_', ' ')}` : ''}
                 </span>
               </button>
             ))}
@@ -272,6 +274,9 @@ function ClientsPanel({ currentUser, onMatterOpened }: ClientsPanelProps) {
                 ))}
                 {!selected.matters.length ? <li>None you can see.</li> : null}
               </ul>
+              {can('fica.read') ? (
+                <FicaPanel key={selected.id} clientId={selected.id} currentUser={currentUser} />
+              ) : null}
               {can('conflicts.check') && can('matters.write') ? (
                 <button
                   type="button"

@@ -40,6 +40,7 @@ import * as intakeService from './intake.service';
 import * as notificationsService from './notifications.service';
 import * as auditService from './audit.service';
 import * as partyService from './party.service';
+import * as ficaService from './fica.service';
 import { indexEntries } from './party-index';
 import type { PartyRecord } from '@ahava88/shared';
 import { currentFirm } from '../db/tenant-context';
@@ -284,7 +285,7 @@ export async function buildDataExport(query: unknown): Promise<ComplianceExport>
       : [];
     for (const { partyId } of matches) {
       const party = await partyService.getParty(partyId);
-      subjectParties.push(party);
+      subjectParties.push({ ...party, fica: await ficaService.getProfile(partyId) } as PartyRecord);
       const rows = party.matters.length
         ? await db()
             .select()
