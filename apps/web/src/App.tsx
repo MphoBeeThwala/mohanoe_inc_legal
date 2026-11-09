@@ -222,6 +222,7 @@ function App() {
       const { data } = await api.get<MeResponse>('/auth/me');
       setCurrentUser(data.user);
       setSessionInfo(data.session);
+      setAuthNotice({ tone: 'info', message: '' });
       await loadWorkspace(data.user);
     } catch (error) {
       if (apiStatus(error) !== 401) {
@@ -568,12 +569,16 @@ function App() {
                   </button>
                 </div>
 
-                <IntakeForm
-                  onSubmit={handleSubmit}
-                  busy={busy}
-                  sampleMatter={sampleMatter}
-                  onGoToCases={() => scrollToSection('cases')}
-                />
+                {currentUser.permissions.includes('intake.write') ? (
+                  <IntakeForm
+                    onSubmit={handleSubmit}
+                    busy={busy}
+                    sampleMatter={sampleMatter}
+                    onGoToCases={() => scrollToSection('cases')}
+                  />
+                ) : (
+                  <p className="field-hint">Your role can view matters but not take new intakes.</p>
+                )}
               </div>
             </section>
 
@@ -615,6 +620,7 @@ function App() {
               selectedCaseId={selectedCaseId}
               onSelectCase={handleSelectCase}
               onChanged={loadWorkspace}
+              canEdit={currentUser.permissions.includes('matters.write')}
             />
 
             <section
