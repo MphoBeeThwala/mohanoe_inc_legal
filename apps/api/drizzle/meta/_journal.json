@@ -43,6 +43,13 @@
       "when": 1794231651591,
       "tag": "0005_firm_sso",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794237246965,
+      "tag": "0006_clients_and_conflicts",
+      "breakpoints": true
     }
   ]
 }

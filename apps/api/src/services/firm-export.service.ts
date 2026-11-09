@@ -20,6 +20,7 @@ const PLAIN_TABLES: Record<string, PgTable> = {
   cases: schema.cases,
   caseMembers: schema.caseMembers,
   caseExclusions: schema.caseExclusions,
+  caseParties: schema.caseParties,
   caseTasks: schema.caseTasks,
   caseTimeline: schema.caseTimeline,
   invoices: schema.invoices,
@@ -76,6 +77,23 @@ export async function exportFirm(firm: FirmRow): Promise<FirmExport> {
         submissions.map(async ({ rawPayloadEncrypted, emailLookup: _lookup, ...rest }) => ({
           ...rest,
           intake: await decryptJson(rawPayloadEncrypted),
+        })),
+      );
+
+      const partyRows = await db().select().from(schema.parties);
+      tables.parties = await Promise.all(
+        partyRows.map(async ({ detailsEncrypted, ...rest }) => ({
+          ...rest,
+          details: await decryptJson(detailsEncrypted),
+        })),
+      );
+
+      const checkRows = await db().select().from(schema.conflictChecks);
+      tables.conflictChecks = await Promise.all(
+        checkRows.map(async ({ queryEncrypted, decisionNotesEncrypted, ...rest }) => ({
+          ...rest,
+          query: await decryptJson(queryEncrypted),
+          decisionNotes: decisionNotesEncrypted ? await decryptJson(decisionNotesEncrypted) : null,
         })),
       );
 

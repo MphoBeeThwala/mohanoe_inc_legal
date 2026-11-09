@@ -1111,3 +1111,29 @@
 .support-banner {
   margin: 12px 0;
 }
+
+.list-button {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  align-items: center;
+}
+
+.conflict-list {
+  display: grid;
+  gap: 8px;
+  padding-left: 18px;
+}
+
+.conflict-strong {
+  color: #9b1c1c;
+}
+
+.panel > .stack-form textarea,
+.panel > .stack-form select {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(27, 122, 88, 0.2);
+  font: inherit;
+}

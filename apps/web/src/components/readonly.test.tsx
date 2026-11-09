@@ -75,7 +75,7 @@ test('the case workspace hides its edit forms without matters.write', async () =
         data: { caseId: 'c1', access: 'firm', members: [], exclusions: [], canManage: false },
       };
     }
-    if (path === '/users/directory') {
+    if (path === '/users/directory' || path.endsWith('/parties')) {
       return { data: [] };
     }
     return {

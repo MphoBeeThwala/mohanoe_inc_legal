@@ -77,3 +77,23 @@ export class RollbackSignal extends Error {
     super('rollback');
   }
 }
+
+/**
+ * Runs fn with matter-level restrictions lifted, then restores the caller's
+ * view. For checks that must look across every matter but only report
+ * what the caller may see (conflict checks). fn must not return data from
+ * matters the caller can't see.
+ */
+export async function withSystemScope<T>(fn: () => Promise<T>): Promise<T> {
+  const tx = db();
+  const result = (await tx.execute(
+    sql`select coalesce(current_setting('app.principal', true), '') as principal`,
+  )) as unknown as { rows: Array<{ principal: string }> };
+  const previous = result.rows[0]?.principal ?? '';
+  await tx.execute(sql`select set_config('app.principal', 'system', true)`);
+  try {
+    return await fn();
+  } finally {
+    await tx.execute(sql`select set_config('app.principal', ${previous}, true)`);
+  }
+}

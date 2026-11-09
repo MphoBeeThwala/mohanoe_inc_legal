@@ -81,9 +81,16 @@ export type Permission =
   | 'compliance.write'
   | 'compliance.admin'
   | 'audit.read'
-  | 'users.manage';
+  | 'users.manage'
+  | 'clients.read'
+  | 'clients.write'
+  | 'conflicts.check'
+  | 'conflicts.waive';
 
 const FEE_EARNER: readonly Permission[] = [
+  'clients.read',
+  'clients.write',
+  'conflicts.check',
   'intake.read',
   'intake.write',
   'matters.read',
@@ -110,10 +117,14 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'compliance.admin',
     'audit.read',
     'users.manage',
+    'conflicts.waive',
   ],
   attorney: FEE_EARNER,
   paralegal: FEE_EARNER,
   secretary: [
+    'clients.read',
+    'clients.write',
+    'conflicts.check',
     'intake.read',
     'intake.write',
     'matters.read',
@@ -124,6 +135,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'notifications.read',
   ],
   bookkeeper: [
+    'clients.read',
     'matters.read',
     'billing.read',
     'billing.write',
@@ -292,6 +304,146 @@ export interface UserUpdateInput {
   isActive?: boolean;
 }
 
+// ---------------------------------------------------------------- clients and parties
+
+export type PartyKind = 'individual' | 'entity';
+
+export type MatterPartyRole = 'client' | 'opposing' | 'opposing_attorney' | 'related' | 'witness';
+
+export const MATTER_PARTY_ROLES: readonly MatterPartyRole[] = [
+  'client',
+  'opposing',
+  'opposing_attorney',
+  'related',
+  'witness',
+];
+
+/** Identifying details of a party. Stored encrypted. */
+export interface PartyDetails {
+  name: string;
+  /** SA ID or passport number (individuals). */
+  idNumber?: string;
+  /** Company / CIPC registration number (entities). */
+  registrationNumber?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  notes?: string;
+}
+
+export interface PartyInput {
+  kind: PartyKind;
+  details: PartyDetails;
+}
+
+export interface PartySummary {
+  id: string;
+  partyNumber: string;
+  kind: PartyKind;
+  name: string;
+  isClient: boolean;
+  clientSince: string | null;
+}
+
+export interface PartyRecord extends PartySummary {
+  details: PartyDetails;
+  conflictCheckId: string | null;
+  /** Matters the party is on that the viewer can see. */
+  matters: Array<{
+    caseId: string;
+    caseNumber: string;
+    title: string | null;
+    role: MatterPartyRole;
+  }>;
+  createdAt: string;
+}
+
+/** New client: the conflict check that cleared them, and their details. */
+export interface ClientInput extends PartyInput {
+  conflictCheckId: string;
+}
+
+export interface ConflictSubject {
+  name: string;
+  kind?: PartyKind;
+  idNumber?: string;
+  registrationNumber?: string;
+  email?: string;
+  phone?: string;
+}
+
+export interface ConflictCheckInput {
+  /** Who the check is for: the prospective client and the other parties (1–10). */
+  subjects: ConflictSubject[];
+  /** Short description of the proposed matter (no personal information). */
+  purpose: string;
+}
+
+export type ConflictStrength = 'strong' | 'possible';
+
+export interface ConflictMatch {
+  /** Index into the check's subjects. */
+  subject: number;
+  party: PartySummary;
+  strength: ConflictStrength;
+  /** Which details matched, e.g. ['id_number', 'name']. */
+  reasons: string[];
+  /** Matters the party is on that the viewer can see. */
+  matters: Array<{
+    caseId: string;
+    caseNumber: string;
+    title: string | null;
+    role: MatterPartyRole;
+  }>;
+  /** Matters the party is on that the viewer can't see (restricted or walled). */
+  hiddenMatters: number;
+}
+
+export type ConflictDecision = 'pending' | 'clear' | 'conflict' | 'waived';
+
+export interface ConflictCheck {
+  id: string;
+  subjects: ConflictSubject[];
+  purpose: string;
+  matches: ConflictMatch[];
+  strongMatches: number;
+  possibleMatches: number;
+  decision: ConflictDecision;
+  decisionNotes: string | null;
+  performedBy: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+}
+
+export interface ConflictDecisionInput {
+  decision: Exclude<ConflictDecision, 'pending'>;
+  notes?: string;
+}
+
+/** Open a matter for an existing client. */
+export interface MatterOpenInput {
+  clientId: string;
+  conflictCheckId: string;
+  title: string;
+  practiceArea: string;
+  urgency?: 'low' | 'medium' | 'high' | 'critical';
+}
+
+export interface MatterPartyInput {
+  role: MatterPartyRole;
+  /** An existing party, or details for a new one. */
+  partyId?: string;
+  party?: PartyInput;
+  /** A conflict check recording a waiver, when the party is also a client. */
+  conflictCheckId?: string;
+}
+
+export interface MatterParty {
+  role: MatterPartyRole;
+  party: PartySummary;
+}
+
 // ---------------------------------------------------------------- platform support
 
 export interface SupportGrantInput {
@@ -384,7 +536,8 @@ export interface Assessment {
 
 export interface MatterCaseSummary {
   id: string;
-  submissionId: string;
+  /** The intake the matter came from; null when opened for a client directly. */
+  submissionId: string | null;
   caseNumber: string;
   status: string;
   urgency: string;
@@ -465,7 +618,9 @@ export interface PracticeDashboard {
 
 export interface MatterCase {
   id: string;
-  submissionId: string;
+  title: Nullable<string>;
+  /** The intake the matter came from; null when opened for a client directly. */
+  submissionId: string | null;
   caseNumber: string;
   clientLabel: string;
   practiceArea: string;

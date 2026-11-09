@@ -26,6 +26,7 @@ import ResetPassword from './auth/ResetPassword';
 import StaffAdmin from './components/StaffAdmin';
 import AccountPanel from './components/AccountPanel';
 import RecordsPanel from './components/RecordsPanel';
+import ClientsPanel from './components/ClientsPanel';
 import SignInSettingsPanel from './components/SignInSettingsPanel';
 import SupportAccessPanel from './components/SupportAccessPanel';
 import SupportSignIn from './auth/SupportSignIn';
@@ -56,11 +57,12 @@ const sampleMatter: Omit<IntakeSubmissionInput, 'consentToAi' | 'consentToStorag
   preferredLanguage: 'English',
 };
 
-type SectionId = 'overview' | 'intake' | 'cases' | 'operations' | 'account';
+type SectionId = 'overview' | 'intake' | 'clients' | 'cases' | 'operations' | 'account';
 
 const NAV_SECTIONS: Array<{ id: SectionId; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'intake', label: 'Intake' },
+  { id: 'clients', label: 'Clients' },
   { id: 'cases', label: 'Cases' },
   { id: 'operations', label: 'Operations' },
   { id: 'account', label: 'Account & team' },
@@ -582,6 +584,27 @@ function App() {
               </div>
             </section>
 
+            {currentUser.permissions.includes('clients.read') ? (
+              <section
+                id="section-clients"
+                className="dashboard-section"
+                data-section="clients"
+                ref={(node) => {
+                  sectionRefs.current.clients = node;
+                }}
+              >
+                <ErrorBoundary label="Clients">
+                  <ClientsPanel
+                    currentUser={currentUser}
+                    onMatterOpened={(matter) => {
+                      loadWorkspace().catch(() => undefined);
+                      handleSelectCase(matter);
+                    }}
+                  />
+                </ErrorBoundary>
+              </section>
+            ) : null}
+
             <section
               id="section-cases"
               className="dashboard-section"
@@ -607,13 +630,17 @@ function App() {
           </div>
 
           <aside className="secondary-column">
-            <ErrorBoundary label="Assessment">
-              <AssessmentCard
-                matter={selectedMatter}
-                onGoToIntake={() => scrollToSection('intake')}
-                onGoToCases={() => scrollToSection('cases')}
-              />
-            </ErrorBoundary>
+            {selectedMatter &&
+            'submissionId' in selectedMatter &&
+            selectedMatter.submissionId === null ? null : (
+              <ErrorBoundary label="Assessment">
+                <AssessmentCard
+                  matter={selectedMatter}
+                  onGoToIntake={() => scrollToSection('intake')}
+                  onGoToCases={() => scrollToSection('cases')}
+                />
+              </ErrorBoundary>
+            )}
 
             <CaseWorkspace
               api={api}

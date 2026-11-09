@@ -143,7 +143,7 @@ Environment setup:
 - [x] Per-firm retention and full firm data export on exit
 
 ### 5.5 Core practice features
-- [ ] Clients (individuals and entities) and matters, with conflict-of-interest checks
+- [x] Clients (individuals and entities) and matters, with conflict-of-interest checks (encrypted party register, blind-index search, conflict register with decisions and waivers)
 - [ ] FICA onboarding (KYC documents, risk rating, verification status)
 - [ ] Time recording: timer, manual entries, 6-minute units, fee-earner and matter rates, billable/non-billable, WIP
 - [ ] Billing from time + disbursements, 15% VAT, branded PDFs, email, payments, statements, aging

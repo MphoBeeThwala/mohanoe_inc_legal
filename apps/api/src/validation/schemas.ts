@@ -333,3 +333,75 @@ export function parse<S extends z.ZodType>(schema: S, input: unknown): z.output<
   });
   throw httpError(`Invalid request: ${problems.join('; ')}`, 400);
 }
+
+// ---------------------------------------------------------------- clients and parties
+
+const partyKind = z.enum(['individual', 'entity']);
+
+export const partyDetailsSchema = z.object({
+  name: requiredText(300),
+  idNumber: optionalText(40),
+  registrationNumber: optionalText(40),
+  email: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    email.optional(),
+  ),
+  phone: optionalText(40),
+  address: optionalText(1_000),
+  notes: optionalText(2_000),
+});
+
+export const partyInputSchema = z.object({
+  kind: partyKind,
+  details: partyDetailsSchema,
+});
+
+export const partyUpdateSchema = z.object({ details: partyDetailsSchema });
+
+export const clientInputSchema = partyInputSchema.extend({ conflictCheckId: uuidSchema });
+
+export const conflictCheckSchema = z.object({
+  subjects: z
+    .array(
+      z.object({
+        name: requiredText(300),
+        kind: partyKind.optional(),
+        idNumber: optionalText(40),
+        registrationNumber: optionalText(40),
+        email: z.preprocess(
+          (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+          email.optional(),
+        ),
+        phone: optionalText(40),
+      }),
+    )
+    .min(1)
+    .max(10),
+  purpose: requiredText(300),
+});
+
+export const conflictDecisionSchema = z.object({
+  decision: z.enum(['clear', 'conflict', 'waived']),
+  notes: optionalText(2_000),
+});
+
+export const matterOpenSchema = z.object({
+  clientId: uuidSchema,
+  conflictCheckId: uuidSchema,
+  title: requiredText(200),
+  practiceArea: requiredText(100),
+  urgency: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
+});
+
+const matterPartyRole = z.enum(['client', 'opposing', 'opposing_attorney', 'related', 'witness']);
+
+export const matterPartySchema = z
+  .object({
+    role: matterPartyRole,
+    partyId: uuidSchema.optional(),
+    party: partyInputSchema.optional(),
+    conflictCheckId: uuidSchema.optional(),
+  })
+  .refine((value) => Boolean(value.partyId) !== Boolean(value.party), {
+    message: 'Give either partyId or party details',
+  });

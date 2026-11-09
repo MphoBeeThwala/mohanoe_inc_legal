@@ -16,6 +16,7 @@ import { db } from '../db/client';
 import {
   calendarEvents,
   cases,
+  partyIndex,
   complianceRequests,
   documents,
   invoices,
@@ -38,6 +39,9 @@ import { ensureStringArray } from './ai.service';
 import * as intakeService from './intake.service';
 import * as notificationsService from './notifications.service';
 import * as auditService from './audit.service';
+import * as partyService from './party.service';
+import { indexEntries } from './party-index';
+import type { PartyRecord } from '@ahava88/shared';
 import { currentFirm } from '../db/tenant-context';
 
 /** Statuses that mean a matter is finished and its retention clock runs. */
@@ -267,10 +271,46 @@ export async function buildDataExport(query: unknown): Promise<ComplianceExport>
       submissionIds.add(match.id);
     }
   }
+  const directCases: CaseRow[] = [];
+  // Parties (clients and others) registered with this email, and their matters.
+  const subjectParties: PartyRecord[] = [];
+  if (subjectEmail) {
+    const [entry] = await indexEntries({ email: subjectEmail });
+    const matches = entry
+      ? await db()
+          .select({ partyId: partyIndex.partyId })
+          .from(partyIndex)
+          .where(eq(partyIndex.hash, entry.hash))
+      : [];
+    for (const { partyId } of matches) {
+      const party = await partyService.getParty(partyId);
+      subjectParties.push(party);
+      const rows = party.matters.length
+        ? await db()
+            .select()
+            .from(cases)
+            .where(
+              inArray(
+                cases.id,
+                party.matters.map((m) => m.caseId),
+              ),
+            )
+        : [];
+      for (const row of rows) {
+        if (row.intakeSubmissionId) {
+          submissionIds.add(row.intakeSubmissionId);
+        } else {
+          directCases.push(row);
+        }
+      }
+    }
+  }
   if (caseRef) {
     const matched = await intakeService.findCaseByRef(caseRef);
-    if (matched) {
+    if (matched?.intakeSubmissionId) {
       submissionIds.add(matched.intakeSubmissionId);
+    } else if (matched) {
+      directCases.push(matched);
     }
   }
 
@@ -279,7 +319,8 @@ export async function buildDataExport(query: unknown): Promise<ComplianceExport>
   ).filter((item): item is intakeService.PrivateSubmission => Boolean(item));
   const caseRows = resolved
     .map((item) => item.caseRecord)
-    .filter((row): row is CaseRow => Boolean(row));
+    .filter((row): row is CaseRow => Boolean(row))
+    .concat(directCases);
   const caseIds = caseRows.map((row) => row.id);
 
   const [documentRows, invoiceRows, ledgerRows, calendarRows] = caseIds.length
@@ -365,6 +406,7 @@ export async function buildDataExport(query: unknown): Promise<ComplianceExport>
       .map((item) => formatAssessmentExport(item.assessment))
       .filter((item) => item !== null),
     cases: caseRows.map(formatCaseExport),
+    parties: subjectParties,
     documents: exportDocuments,
     invoices: exportInvoices,
     ledger: exportLedger,
@@ -407,9 +449,7 @@ export async function runRetentionSweep(actor: Actor = {}): Promise<RetentionSwe
     .select({ value: sql<number>`count(*)::int` })
     .from(cases);
   const eligible = await db().select().from(cases).where(retentionEligible());
-  const removedCaseIds = await intakeService.deleteSubmissions(
-    eligible.map((row) => row.intakeSubmissionId),
-  );
+  const removedCaseIds = await intakeService.deleteMatters(eligible);
 
   for (const item of eligible) {
     await notificationsService

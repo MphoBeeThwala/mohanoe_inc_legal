@@ -104,6 +104,15 @@ When the firms table is empty, the server creates a `default` firm from these va
 - After a deploy: `node scripts/smoke-test.js https://<your-host>`.
 - Backup, restore and smoke tests: [`PROD_OPERATIONS.md`](PROD_OPERATIONS.md).
 
+## Clients and conflict checks
+- **Party register:** clients, opposing parties, their attorneys and related persons are *parties*. Their details (name, ID or registration number, contacts) are encrypted with the firm's key. Blind-index hashes let staff search by any name word, ID/registration number, email or phone without decrypting the register.
+- **Conflict checks** (**Clients → New client**, or **New matter for this client**) search the whole register for the prospective client and the other parties:
+  - A *strong* match is the same ID/registration number, email, phone or full name; a *possible* match shares name words.
+  - Checks look across restricted and walled matters too, but only name the matters the person checking can see, and count the rest.
+  - Every check and its decision (clear, conflict, or waived by an administrator with notes) is kept as the firm's conflict register.
+- **Opening clients and matters:** a client, and every matter (`POST /api/cases`), needs a check that was cleared or waived within the last 90 days. Adding an existing client as an opposing party is refused without a recorded waiver.
+- **Matter references:** matters opened for a client have a title and carry the client's party number (never a name) in `clientLabel`. Intake-based matters still work as before.
+
 ## Encryption and records
 - **Per-firm envelope encryption.** Each firm has its own random data key (and a separate blind-index key), stored only wrapped by a key-encryption key: Azure Key Vault in production (`KEY_PROVIDER=azure-keyvault`, `AZURE_KEY_VAULT_KEY_ID`, managed identity), or `INTAKE_ENCRYPTION_KEY` locally. Ciphertext (`v2:`) is bound to its firm, so it can't be decrypted in another firm's rows. Data written before this (`v1:`) still reads; move it with `keys reencrypt`.
 - **Key operations** (`npm run ops -w apps/api -- …`, same environment as the server):

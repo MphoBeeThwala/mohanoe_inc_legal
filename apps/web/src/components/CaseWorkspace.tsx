@@ -4,6 +4,7 @@ import { apiErrorMessage } from '../api';
 import type { CaseDetail, MatterCase } from '@ahava88/shared';
 import type { Notice } from './DismissibleNotice';
 import MatterAccessPanel from './MatterAccessPanel';
+import MatterPartiesPanel from './MatterPartiesPanel';
 
 interface CaseWorkspaceProps {
   api: ApiClient;
@@ -298,6 +299,12 @@ function CaseWorkspace({
               ))}
             </div>
           </section>
+
+          <MatterPartiesPanel
+            key={`parties-${caseRecord.id}`}
+            caseId={caseRecord.id}
+            canEdit={canEdit}
+          />
 
           <MatterAccessPanel
             key={caseRecord.id}

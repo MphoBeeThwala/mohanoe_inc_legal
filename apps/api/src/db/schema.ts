@@ -420,11 +420,13 @@ export const cases = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     firmId: firmId(),
+    /** The intake this matter came from; null for matters opened for a client directly. */
     intakeSubmissionId: uuid('intake_submission_id')
-      .notNull()
       .unique()
       .references(() => submissions.id, { onDelete: 'cascade' }),
     caseNumber: text('case_number').notNull(),
+    /** Short description of the matter (no personal information). */
+    title: text('title'),
     clientLabel: text('client_label').notNull(),
     practiceArea: text('practice_area').notNull(),
     urgency: text('urgency').notNull(),
@@ -445,6 +447,107 @@ export const cases = pgTable(
       using: sql`app_case_visible(access, id)`,
       withCheck: sql`app_case_visible(access, id)`,
     }),
+  ],
+);
+
+// ---------------------------------------------------------------- clients and parties
+
+/**
+ * People and organisations the firm deals with: clients, opposing parties,
+ * their attorneys, related persons. Identifying details are encrypted with
+ * the firm's data key; party_index holds blind-index hashes so parties can be
+ * found (and conflicts checked) without decrypting the register. The register
+ * is firm-wide; which matters a party is on is matter-scoped (case_parties).
+ */
+export const parties = pgTable(
+  'parties',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    partyNumber: text('party_number').notNull(),
+    /** 'individual' | 'entity' */
+    kind: text('kind').notNull(),
+    isClient: boolean('is_client').notNull().default(false),
+    clientSince: timestamp('client_since', { withTimezone: true }),
+    /** Encrypted PartyDetails (name, ID/registration number, contacts, address). */
+    detailsEncrypted: text('details_encrypted').notNull(),
+    /** The conflict check that cleared this party as a client. */
+    conflictCheckId: uuid('conflict_check_id'),
+    ...updatable,
+  },
+  (t) => [
+    uniqueIndex('parties_firm_number_idx').on(t.firmId, t.partyNumber),
+    index('parties_is_client_idx').on(t.isClient),
+    tenantPolicy('parties'),
+  ],
+);
+
+/** Blind-index hashes of a party's names, tokens, ID/registration numbers, email and phone. */
+export const partyIndex = pgTable(
+  'party_index',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    partyId: uuid('party_id')
+      .notNull()
+      .references(() => parties.id, { onDelete: 'cascade' }),
+    /** 'name' | 'token' | 'id_number' | 'reg_number' | 'email' | 'phone' */
+    field: text('field').notNull(),
+    hash: text('hash').notNull(),
+  },
+  (t) => [
+    index('party_index_hash_idx').on(t.firmId, t.hash),
+    index('party_index_party_idx').on(t.partyId),
+    tenantPolicy('party_index'),
+  ],
+);
+
+/**
+ * Conflict-of-interest checks, kept as the firm's record (LPC rules). The
+ * searched names are encrypted; results hold only party ids, strengths and
+ * matter references.
+ */
+export const conflictChecks = pgTable(
+  'conflict_checks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    queryEncrypted: text('query_encrypted').notNull(),
+    results: jsonb('results').$type<Record<string, unknown>[]>().notNull().default([]),
+    strongMatches: integer('strong_matches').notNull().default(0),
+    possibleMatches: integer('possible_matches').notNull().default(0),
+    /** 'pending' | 'clear' | 'conflict' | 'waived' */
+    decision: text('decision').notNull().default('pending'),
+    decisionNotesEncrypted: text('decision_notes_encrypted'),
+    performedBy: uuid('performed_by').references(() => users.id, { onDelete: 'set null' }),
+    decidedBy: uuid('decided_by').references(() => users.id, { onDelete: 'set null' }),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index('conflict_checks_created_idx').on(t.createdAt), tenantPolicy('conflict_checks')],
+);
+
+/** Who is on a matter, and in what role. Matter-scoped. */
+export const caseParties = pgTable(
+  'case_parties',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id, { onDelete: 'cascade' }),
+    partyId: uuid('party_id')
+      .notNull()
+      .references(() => parties.id, { onDelete: 'cascade' }),
+    /** 'client' | 'opposing' | 'opposing_attorney' | 'related' | 'witness' */
+    role: text('role').notNull(),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('case_parties_unique_idx').on(t.caseId, t.partyId, t.role),
+    index('case_parties_party_idx').on(t.partyId),
+    tenantPolicy('case_parties'),
+    matterPolicy('case_parties'),
   ],
 );
 
@@ -782,6 +885,8 @@ export type FirmKeyRow = typeof firmKeys.$inferSelect;
 export type AuditAnchorRow = typeof auditAnchors.$inferSelect;
 export type PlatformOperatorRow = typeof platformOperators.$inferSelect;
 export type SupportGrantRow = typeof supportGrants.$inferSelect;
+export type PartyRow = typeof parties.$inferSelect;
+export type ConflictCheckRow = typeof conflictChecks.$inferSelect;
 export type FirmRow = typeof firms.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type SubmissionRow = typeof submissions.$inferSelect;
