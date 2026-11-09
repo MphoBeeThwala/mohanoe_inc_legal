@@ -27,7 +27,7 @@ import {
 } from '@ahava88/shared';
 import { HttpError, errorMessage, httpError } from '../lib/http';
 import { requireSecret } from '../config/env';
-import { authSettings, oidcSettings } from '../config/auth';
+import { authSettings, oidcSettings, workforceSettings } from '../config/auth';
 import { getFirmBrand } from '../config/brand';
 import { db } from '../db/client';
 import { setPrincipal } from '../db/tenant';
@@ -48,6 +48,7 @@ import {
 import { decryptJson, encryptJson } from './privacy.service';
 import { mailEnabled } from './mail.service';
 import * as sessionService from './session.service';
+import * as supportService from './support.service';
 import * as auditService from './audit.service';
 
 const JWT_ISSUER = process.env.JWT_ISSUER || 'ahava88-legal-pms';
@@ -75,7 +76,7 @@ export function createPasswordHash(password: string) {
 // failed sign-in takes the same time either way (no user enumeration).
 const DUMMY_CREDENTIALS = createPasswordHash(crypto.randomBytes(16).toString('hex'));
 
-function verifyPassword(password: string, salt: string | null, expectedHash: string | null) {
+export function verifyPassword(password: string, salt: string | null, expectedHash: string | null) {
   const credentials =
     salt && expectedHash ? { salt, hash: expectedHash } : { ...DUMMY_CREDENTIALS, real: false };
   const actual = Buffer.from(hashPassword(password, credentials.salt), 'hex');
@@ -233,6 +234,19 @@ export async function signInWithPassword(input: unknown): Promise<SignInResult> 
   }
   const { email, password } = parse(loginSchema, input);
   const user = await findUserByEmail(email);
+  // A firm that requires Microsoft 365 sign-in: work addresses on its domains
+  // can't use passwords, except administrators (break-glass, still with MFA).
+  // Same answer whether or not the account exists.
+  const firm = currentFirm();
+  const domain = email.split('@')[1] ?? '';
+  if (
+    firm.ssoEnforced &&
+    workforceSettings(firm) &&
+    firm.ssoDomains.includes(domain) &&
+    user?.role !== 'admin'
+  ) {
+    throw httpError('Your firm uses Microsoft 365 sign-in. Use "Sign in with Microsoft 365".', 403);
+  }
   const passwordOk = verifyPassword(
     password,
     user?.passwordSalt ?? null,
@@ -476,8 +490,14 @@ export function authenticateRequest(req: Request, _res: Response, next: NextFunc
       fullName: user.fullName,
       sessionId: session.id,
       method: session.method as SignInMethod,
+      sessionExpiresAt: session.expiresAt,
     };
     await setPrincipal({ id: user.id, role: user.role });
+    if (session.method === 'support') {
+      // Platform support: the firm's grant must still be active, and every
+      // request is recorded in the firm's audit trail.
+      await supportService.checkSupportRequest(req, session, user);
+    }
   })().then(
     () => next(),
     (error: unknown) =>
@@ -509,9 +529,16 @@ export function requireRoles(...roles: UserRole[]) {
 
 export function getAuthConfig(): AuthConfig {
   const oidc = oidcSettings();
+  const firm = currentFirm();
+  const microsoft = workforceSettings(firm);
   return {
     passwordLogin: authSettings().passwordLogin,
     oidc: { enabled: Boolean(oidc), label: oidc?.label ?? '' },
+    microsoft: {
+      enabled: Boolean(microsoft),
+      label: microsoft?.label ?? '',
+      enforced: Boolean(microsoft) && firm.ssoEnforced,
+    },
     selfServiceReset: authSettings().passwordLogin && mailEnabled(),
   };
 }

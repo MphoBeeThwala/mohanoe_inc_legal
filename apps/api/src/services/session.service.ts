@@ -38,10 +38,13 @@ export async function createSession(
   method: SignInMethod,
   req: Request,
   res: Response,
+  /** Ends the session earlier than SESSION_MAX_HOURS (support grants). */
+  notAfter?: Date,
 ): Promise<string> {
   const settings = authSettings();
   const token = randomToken();
-  const expiresAt = new Date(Date.now() + settings.sessionMaxHours * 3_600_000);
+  const maxEnd = Date.now() + settings.sessionMaxHours * 3_600_000;
+  const expiresAt = new Date(Math.min(maxEnd, notAfter?.getTime() ?? maxEnd));
   await db()
     .insert(sessions)
     .values({
@@ -54,7 +57,7 @@ export async function createSession(
   setCookie(res, settings.sessionCookie, token, {
     secure: settings.secureCookies,
     sameSite: 'Lax',
-    maxAgeSeconds: settings.sessionMaxHours * 3600,
+    maxAgeSeconds: (expiresAt.getTime() - Date.now()) / 1000,
   });
   return token;
 }

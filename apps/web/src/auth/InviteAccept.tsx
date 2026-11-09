@@ -79,6 +79,17 @@ function InviteAccept({ token, config, onSignedIn, onNotice }: InviteAcceptProps
       <p className="field-hint">
         You've been invited as <strong>{ROLE_LABELS[invite.role]}</strong> ({invite.email}).
       </p>
+      {config.microsoft.enabled ? (
+        <>
+          <a
+            className="primary-button oidc-button"
+            href={`/api/auth/oidc/start?provider=microsoft&invite=${encodeURIComponent(token)}`}
+          >
+            Continue with Microsoft 365
+          </a>
+          <div className="divider">or</div>
+        </>
+      ) : null}
       {config.oidc.enabled ? (
         <>
           <a
