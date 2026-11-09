@@ -11,6 +11,7 @@ import { closeDb, dbDriver, initDb, pingDb } from './db/client';
 import { tenantContext } from './middleware/tenant';
 import { ensureDefaultFirm } from './services/firm.service';
 import { scheduleAnchoring } from './services/audit-anchor.service';
+import { scheduleReminders } from './services/calendar.service';
 import * as supportService from './services/support.service';
 import { createRateLimiter, requestLogger, securityHeaders } from './middleware/security';
 
@@ -162,6 +163,7 @@ if (require.main === module) {
       }
 
       scheduleAnchoring();
+      scheduleReminders();
       const server = app.listen(port, () => {
         console.log(`Legal practice API listening at http://localhost:${port}`);
       });

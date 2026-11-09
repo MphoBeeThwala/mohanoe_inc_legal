@@ -147,7 +147,7 @@ Environment setup:
 - [x] FICA onboarding (KYC documents, risk rating, verification status, review dates, optional enforcement before new matters)
 - [x] Time recording: timer, manual entries, 6-minute units, fee-earner and matter rates, billable/non-billable, WIP
 - [x] Billing from time + disbursements, 15% VAT, branded PDFs, email, payments, statements, aging
-- [ ] Calendar: court dates, deadlines, prescription reminders, email notifications
+- [x] Calendar: court dates, deadlines, prescription reminders, email notifications
 - [ ] Intake → consent → de-identified triage → matter
 
 ### 5.6 SaaS operations

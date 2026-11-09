@@ -16,6 +16,7 @@ Owner: Ahava on 88 (Pty) Ltd. The product is licensed to individual law firms. T
 - **AI** only receives de-identified briefs; output must cite retrieved sources (roadmap §7); AI failures surface as errors.
 - **Money** is integer cents (ZAR); VAT 15% configurable; invoice numbers sequential and gap-free per firm (taken only when issuing, inside `atomically()`). Invoice subjects, notes and lines are encrypted; issued invoices never change (void instead).
 - **Multi-step writes:** a request that answers 4xx still commits. Wrap changes that must happen together in `atomically()` (`db/tenant.ts`), so a failure part-way leaves nothing behind.
+- **Calendar:** event titles/locations/notes are encrypted; reminders and audit rows carry only the matter number, type and time. Times are South African (UTC+2); send offsets from the web app.
 - **Time** is whole 6-minute units with the rate fixed when recorded (`time.service.ts`); narratives are encrypted; billed or written-off time never changes.
 - **Production fails fast:** `apps/api/src/config/env.ts` refuses to boot without real secrets. Don't add silent fallbacks that run in production.
 - Schema changes: edit `apps/api/src/db/schema.ts`, then `npm run db:generate -w apps/api`; commit the migration. Never edit an applied migration; no manual SQL in production.

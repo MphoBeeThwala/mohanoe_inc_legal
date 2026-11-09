@@ -672,6 +672,7 @@ function App() {
               onSelectCase={handleSelectCase}
               onChanged={loadWorkspace}
               canEdit={currentUser.permissions.includes('matters.write')}
+              canEditCalendar={currentUser.permissions.includes('calendar.write')}
             />
 
             <section

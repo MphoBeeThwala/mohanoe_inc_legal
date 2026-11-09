@@ -752,6 +752,10 @@ export interface MatterCase {
   status: string;
   nextAction: Nullable<string>;
   access: MatterAccessLevel;
+  /** Court division code (COURT_DIVISIONS), once the matter is in court. */
+  courtDivision?: Nullable<string>;
+  /** The court's case number, e.g. 12345/2025 or 2025-012345. */
+  courtCaseNumber?: Nullable<string>;
   createdAt: string;
   updatedAt: Nullable<string>;
 }
@@ -1012,18 +1016,190 @@ export interface BillingSummary {
   recentLedger: LedgerEntry[];
 }
 
+export const CALENDAR_EVENT_TYPES = [
+  'court_date',
+  'deadline',
+  'prescription',
+  'meeting',
+  'consultation',
+  'other',
+] as const;
+export type CalendarEventType = (typeof CALENDAR_EVENT_TYPES)[number];
+
+export const CALENDAR_EVENT_LABELS: Readonly<Record<CalendarEventType, string>> = {
+  court_date: 'Court date',
+  deadline: 'Deadline',
+  prescription: 'Prescription',
+  meeting: 'Meeting',
+  consultation: 'Consultation',
+  other: 'Other',
+};
+
+export type CalendarEventStatus = 'scheduled' | 'done' | 'cancelled';
+/** Where an event came from: entered by staff, a prescription, or a court roll. */
+export type CalendarEventSource = 'manual' | 'prescription' | 'court_roll';
+
 export interface CalendarEvent {
   id: string;
   caseId: Nullable<string>;
   caseNumber: Nullable<string>;
   title: string;
-  eventType: string;
+  eventType: CalendarEventType | string;
   startsAt: string;
   endsAt: Nullable<string>;
+  allDay?: boolean;
   location: Nullable<string>;
   notes: Nullable<string>;
+  status?: CalendarEventStatus;
+  source?: CalendarEventSource;
+  assigneeUserId?: Nullable<string>;
+  assigneeName?: Nullable<string>;
+  /** Minutes before the start when reminders go out. */
+  reminderOffsets?: number[];
   createdBy: Nullable<string>;
   createdAt: string;
+}
+
+export interface CalendarEventInput {
+  caseId: string;
+  title: string;
+  eventType?: CalendarEventType;
+  startsAt: string;
+  endsAt?: string | null;
+  allDay?: boolean;
+  location?: string;
+  notes?: string;
+  assigneeUserId?: string | null;
+  reminderOffsets?: number[];
+}
+
+export type CalendarEventUpdate = Partial<Omit<CalendarEventInput, 'caseId'>> & {
+  status?: CalendarEventStatus;
+};
+
+/** Default reminders (minutes before) by event type. */
+export const DEFAULT_REMINDERS: Readonly<Record<CalendarEventType, number[]>> = {
+  court_date: [7 * 1440, 1440],
+  deadline: [3 * 1440, 1440],
+  prescription: [90 * 1440, 30 * 1440, 7 * 1440, 1440],
+  meeting: [60],
+  consultation: [60],
+  other: [1440],
+};
+
+// ---------------------------------------------------------------- courts and prescription
+
+/** High Court divisions (SAFLII codes), the Labour Court, and lower courts. */
+export const COURT_DIVISIONS = [
+  { code: 'ZAGPPHC', name: 'Gauteng Division, Pretoria' },
+  { code: 'ZAGPJHC', name: 'Gauteng Local Division, Johannesburg' },
+  { code: 'ZAWCHC', name: 'Western Cape Division, Cape Town' },
+  { code: 'ZAKZDHC', name: 'KwaZulu-Natal Local Division, Durban' },
+  { code: 'ZAKZPHC', name: 'KwaZulu-Natal Division, Pietermaritzburg' },
+  { code: 'ZAECGHC', name: 'Eastern Cape Division, Makhanda' },
+  { code: 'ZAFSHC', name: 'Free State Division, Bloemfontein' },
+  { code: 'ZANCHC', name: 'Northern Cape Division, Kimberley' },
+  { code: 'ZANWHC', name: 'North West Division, Mahikeng' },
+  { code: 'ZALMPPHC', name: 'Limpopo Division, Polokwane' },
+  { code: 'ZAMPMBHC', name: 'Mpumalanga Division, Mbombela' },
+  { code: 'ZALCJHB', name: 'Labour Court, Johannesburg' },
+  { code: 'MAGISTRATE', name: "Magistrate's court" },
+  { code: 'OTHER', name: 'Other court or tribunal' },
+] as const;
+export type CourtDivisionCode = (typeof COURT_DIVISIONS)[number]['code'];
+
+/**
+ * Common limitation periods. The attorney confirms the period and the date it
+ * started to run; delays (minority, curatorship, s13 of the Prescription Act)
+ * and interruptions are entered by changing the dates.
+ */
+export const PRESCRIPTION_RULES = [
+  {
+    code: 'general_3y',
+    label: 'Ordinary debt: 3 years',
+    source: 'Prescription Act 68 of 1969, s11(d)',
+    months: 36,
+  },
+  {
+    code: 'bill_notarial_6y',
+    label: 'Bill of exchange or notarial contract: 6 years',
+    source: 'Prescription Act 68 of 1969, s11(c)',
+    months: 72,
+  },
+  {
+    code: 'state_15y',
+    label: 'Certain debts owed to the State: 15 years',
+    source: 'Prescription Act 68 of 1969, s11(b)',
+    months: 180,
+  },
+  {
+    code: 'bond_judgment_30y',
+    label: 'Mortgage bond or judgment debt: 30 years',
+    source: 'Prescription Act 68 of 1969, s11(a)',
+    months: 360,
+  },
+  {
+    code: 'organ_of_state_notice',
+    label: 'Notice to an organ of state: 6 months',
+    source: 'Act 40 of 2002, s3(2)(a)',
+    months: 6,
+  },
+  {
+    code: 'raf_identified',
+    label: 'RAF claim, driver or owner identified: 3 years',
+    source: 'Road Accident Fund Act 56 of 1996, s23(1)',
+    months: 36,
+  },
+  {
+    code: 'raf_unidentified',
+    label: 'RAF claim, hit-and-run: 2 years',
+    source: 'RAF regulations, reg 2(1)',
+    months: 24,
+  },
+  { code: 'custom', label: 'Other period (enter the last day)', source: '', months: 0 },
+] as const;
+export type PrescriptionRuleCode = (typeof PRESCRIPTION_RULES)[number]['code'];
+
+export type PrescriptionStatus = 'running' | 'interrupted' | 'closed';
+
+export interface Prescription {
+  id: string;
+  caseId: string;
+  caseNumber: string;
+  rule: PrescriptionRuleCode;
+  /** YYYY-MM-DD the period started to run (debt due, accident, etc.). */
+  startsOn: string;
+  /** YYYY-MM-DD: the last day to act. */
+  lastDay: string;
+  status: PrescriptionStatus;
+  /** Running and the last day has passed. */
+  lapsed: boolean;
+  daysLeft: number;
+  notes: string;
+  eventId: Nullable<string>;
+  createdAt: string;
+}
+
+export interface PrescriptionInput {
+  caseRef: string;
+  rule: PrescriptionRuleCode;
+  startsOn: string;
+  /** Required for 'custom'; otherwise computed. */
+  lastDay?: string;
+  notes?: string;
+  assigneeUserId?: string | null;
+}
+
+export interface PrescriptionUpdate {
+  status?: PrescriptionStatus;
+  startsOn?: string;
+  lastDay?: string;
+  notes?: string;
+}
+
+export interface MatterCourtInput {
+  courtDivision: CourtDivisionCode | null;
+  courtCaseNumber: string | null;
 }
 
 export interface NotificationRecord {

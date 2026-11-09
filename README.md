@@ -145,6 +145,19 @@ When the firms table is empty, the server creates a `default` firm from these va
 - **Encryption:** subjects, notes and line descriptions can name people, so they are encrypted with the firm's key. Amounts, numbers and dates stay readable for reports.
 - **Not covered:** trust accounting under the Legal Practice Act (section 86) is not built yet. The trust/operating ledger is a simple record.
 
+## Calendar and prescription
+- **Events:** court dates, deadlines, meetings and consultations are recorded on a matter, with an optional assignee, and appear in Operations → Calendar as a 90-day agenda. Times are South African time. Events can be marked done or cancelled. **Download for Outlook (.ics)** exports the agenda for Outlook or Google Calendar.
+- **Court details:** each matter records its court (High Court division, Labour Court, magistrate's court or other) and the court's case number. Numbers are normalised (`34660/16`, `034660/2016` and `2016-034660` are the same case) so court rolls can be matched.
+- **Prescription:** each matter can record limitation periods:
+  - Prescription Act s11 periods: 3, 6, 15 and 30 years.
+  - Notice to an organ of state: 6 months (Act 40 of 2002, s3(2)(a)).
+  - RAF claims: 3 years where the driver or owner is identified, 2 years for hit-and-run.
+  - Any other period, entered with its last day.
+
+  The last day is the day before the anniversary, and it goes on the calendar with reminders 90, 30 and 7 days and a day before. The attorney confirms the period and when it started to run; delays and interruptions are entered by changing the dates or marking the period interrupted or closed. This is a reminder, not legal advice.
+- **Reminders:** reminders go out by email and in the app, to the event's assignee or else the matter's team. They show the matter number, event type and time, not the title. Run `npm run ops -w apps/api -- reminders` every 15 minutes as a scheduled job (an Azure Container Apps job), or set `CALENDAR_REMINDER_INTERVAL_MINUTES`. Reminders more than six hours late, after downtime, are skipped.
+- **Encryption:** event titles, locations and notes, and prescription notes, are encrypted with the firm's key.
+
 ## Encryption and records
 - **Per-firm envelope encryption.** Each firm has its own random data key (and a separate blind-index key), stored only wrapped by a key-encryption key: Azure Key Vault in production (`KEY_PROVIDER=azure-keyvault`, `AZURE_KEY_VAULT_KEY_ID`, managed identity), or `INTAKE_ENCRYPTION_KEY` locally. Ciphertext (`v2:`) is bound to its firm, so it can't be decrypted in another firm's rows. Data written before this (`v1:`) still reads; move it with `keys reencrypt`.
 - **Key operations** (`npm run ops -w apps/api -- …`, same environment as the server):

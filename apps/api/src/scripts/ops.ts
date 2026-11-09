@@ -25,6 +25,7 @@ import {
   pruneRetiredKeys,
   reencryptFirm,
 } from '../services/reencrypt.service';
+import { sendRemindersForAllFirms } from '../services/calendar.service';
 import { anchorAllFirms } from '../services/audit-anchor.service';
 import { createOperator, listOperators, setOperatorActive } from '../services/support.service';
 import * as auditService from '../services/audit.service';
@@ -150,9 +151,13 @@ async function main(): Promise<void> {
     for (const result of await anchorAllFirms()) {
       console.log(`${result.firm}: ${result.anchored ? 'anchored' : 'no new events'}`);
     }
+  } else if (command === 'reminders') {
+    for (const result of await sendRemindersForAllFirms()) {
+      console.log(`${result.firm}: ${result.events} event(s), ${result.emails} email(s)`);
+    }
   } else {
     throw new Error(
-      'Usage: ops keys status|rotate|reencrypt|rewrap|prune [--slug <slug>] | ops anchor | ops operator create|list|disable|enable',
+      'Usage: ops keys status|rotate|reencrypt|rewrap|prune [--slug <slug>] | ops anchor | ops reminders | ops operator create|list|disable|enable',
     );
   }
 }
