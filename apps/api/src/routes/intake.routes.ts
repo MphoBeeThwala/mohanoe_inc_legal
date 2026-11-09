@@ -1,9 +1,6 @@
 import express from 'express';
 import * as intakeController from '../controllers/intake.controller';
-import {
-  authenticateRequest,
-  requireRoles,
-} from '../services/auth.service';
+import { authenticateRequest, requireRoles } from '../services/auth.service';
 
 const router = express.Router();
 

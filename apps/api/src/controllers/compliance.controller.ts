@@ -63,11 +63,4 @@ async function retentionSweep(req: Request, res: Response) {
   }
 }
 
-export {
-  create,
-  exportData,
-  fulfill,
-  index,
-  retentionSweep,
-  summary,
-};
+export { create, exportData, fulfill, index, retentionSweep, summary };

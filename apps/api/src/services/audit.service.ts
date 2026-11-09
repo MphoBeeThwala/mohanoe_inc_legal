@@ -28,7 +28,9 @@ function canonicalize(value: unknown): string {
   if (value && typeof value === 'object') {
     return `{${Object.keys(value)
       .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalize((value as Record<string, unknown>)[key])}`)
+      .map(
+        (key) => `${JSON.stringify(key)}:${canonicalize((value as Record<string, unknown>)[key])}`,
+      )
       .join(',')}}`;
   }
 
@@ -71,10 +73,7 @@ async function insertEvent(record: DbRow) {
 }
 
 async function logEvent(input: RequestBody = {}, actor: Actor = {}) {
-  const previousHash =
-    memory.events[0]?.entry_hash ||
-    process.env.AUDIT_CHAIN_SEED ||
-    'genesis';
+  const previousHash = memory.events[0]?.entry_hash || process.env.AUDIT_CHAIN_SEED || 'genesis';
   const record: DbRow = {
     id: randomUUID(),
     entity_type: input.entityType || 'system',
@@ -164,8 +163,4 @@ async function verifyEventChain() {
   };
 }
 
-export {
-  listEvents,
-  logEvent,
-  verifyEventChain,
-};
+export { listEvents, logEvent, verifyEventChain };

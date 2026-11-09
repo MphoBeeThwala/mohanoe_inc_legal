@@ -29,8 +29,4 @@ async function create(req: Request, res: Response) {
   }
 }
 
-export {
-  create,
-  index,
-  upcoming,
-};
+export { create, index, upcoming };

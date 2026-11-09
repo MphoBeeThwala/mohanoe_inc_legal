@@ -25,7 +25,9 @@ function readColor(name: string, fallback: string): string {
 }
 
 function readCasePrefix(): string {
-  const value = String(process.env.FIRM_CASE_PREFIX || '').trim().toUpperCase();
+  const value = String(process.env.FIRM_CASE_PREFIX || '')
+    .trim()
+    .toUpperCase();
   return CASE_PREFIX.test(value) ? value : 'MAT';
 }
 
@@ -54,8 +56,4 @@ function getPublicBranding(): PublicBranding {
   };
 }
 
-export {
-  PLATFORM,
-  getFirmBrand,
-  getPublicBranding,
-};
+export { PLATFORM, getFirmBrand, getPublicBranding };

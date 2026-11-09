@@ -1,4 +1,3 @@
-
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 let cachedClient: SupabaseClient | null = null;
@@ -9,8 +8,7 @@ function getSupabaseClient(): SupabaseClient | null {
   }
 
   const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
     return null;
@@ -26,6 +24,4 @@ function getSupabaseClient(): SupabaseClient | null {
   return cachedClient;
 }
 
-export {
-  getSupabaseClient,
-};
+export { getSupabaseClient };

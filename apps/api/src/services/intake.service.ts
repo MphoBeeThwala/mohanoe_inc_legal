@@ -4,12 +4,7 @@ import { httpError } from '../lib/http';
 import { randomUUID } from 'crypto';
 import { getSupabaseClient } from '../config/supabase';
 import { assessMatter, ensureStringArray } from './ai.service';
-import {
-  decryptJson,
-  encryptJson,
-  redactMatterForAi,
-  redactText,
-} from './privacy.service';
+import { decryptJson, encryptJson, redactMatterForAi, redactText } from './privacy.service';
 import * as auditService from './audit.service';
 import { getFirmBrand } from '../config/brand';
 
@@ -39,17 +34,11 @@ function normalizeSubmission(input: RequestBody = {}) {
   const consentToStorage = Boolean(input.consentToStorage);
 
   if (!fullName || !email || !phone || !practiceArea || !matterSummary) {
-    throw httpError(
-      'fullName, email, phone, practiceArea, and matterSummary are required',
-    400,
-  );
+    throw httpError('fullName, email, phone, practiceArea, and matterSummary are required', 400);
   }
 
   if (!consentToAi || !consentToStorage) {
-    throw httpError(
-      'Consent for storage and AI assessment is required before submission',
-    400,
-  );
+    throw httpError('Consent for storage and AI assessment is required before submission', 400);
   }
 
   return {
@@ -101,11 +90,7 @@ function createCaseNumber(existingCount: number) {
 async function insertRow(table: string, record: DbRow) {
   const db = getSupabaseClient();
   if (db) {
-    const { data, error } = await db
-      .from(table)
-      .insert(record)
-      .select()
-      .single();
+    const { data, error } = await db.from(table).insert(record).select().single();
 
     if (error) {
       throw error;
@@ -121,11 +106,7 @@ async function insertRow(table: string, record: DbRow) {
 async function upsertRow(table: string, record: DbRow, matchKey: string = 'id') {
   const db = getSupabaseClient();
   if (db) {
-    const existing = await db
-      .from(table)
-      .select('*')
-      .eq(matchKey, record[matchKey])
-      .maybeSingle();
+    const existing = await db.from(table).select('*').eq(matchKey, record[matchKey]).maybeSingle();
 
     if (existing.data) {
       const { data, error } = await db
@@ -145,9 +126,7 @@ async function upsertRow(table: string, record: DbRow, matchKey: string = 'id') 
     return insertRow(table, record);
   }
 
-  const index = memory[table].findIndex(
-    (entry) => entry[matchKey] === record[matchKey],
-  );
+  const index = memory[table].findIndex((entry) => entry[matchKey] === record[matchKey]);
 
   if (index >= 0) {
     memory[table][index] = record;
@@ -181,11 +160,7 @@ async function listRows(table: string) {
 async function findRow(table: string, id: string) {
   const db = getSupabaseClient();
   if (db) {
-    const { data, error } = await db
-      .from(table)
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+    const { data, error } = await db.from(table).select('*').eq('id', id).maybeSingle();
 
     if (error) {
       throw error;
@@ -211,34 +186,32 @@ function toPublicSubmission(
     status: submission.status,
     summary: submission.summary_redacted,
     createdAt: submission.created_at,
-    assessment:
-      assessment && {
-        id: assessment.id,
-        matterType: assessment.matter_type,
-        urgency: assessment.urgency,
-        summary: assessment.summary,
-        keyFacts: ensureStringArray(assessment.key_facts),
-        attorneyQuestions: ensureStringArray(assessment.attorney_questions),
-        recommendedDocuments: ensureStringArray(assessment.recommended_documents),
-        complianceFlags: ensureStringArray(assessment.compliance_flags),
-        nextActions: ensureStringArray(assessment.next_actions),
-        confidence: assessment.confidence,
-        model: assessment.model_name,
-        provider: assessment.provider,
-        popiaNotes: ensureStringArray(assessment.popia_notes),
-        createdAt: assessment.created_at,
-      },
-    matterCase:
-      caseRecord && {
-        id: caseRecord.id,
-        submissionId: caseRecord.intake_submission_id,
-        caseNumber: caseRecord.case_number,
-        status: caseRecord.status,
-        urgency: caseRecord.urgency,
-        practiceArea: caseRecord.practice_area,
-        nextAction: caseRecord.next_action,
-        createdAt: caseRecord.created_at,
-      },
+    assessment: assessment && {
+      id: assessment.id,
+      matterType: assessment.matter_type,
+      urgency: assessment.urgency,
+      summary: assessment.summary,
+      keyFacts: ensureStringArray(assessment.key_facts),
+      attorneyQuestions: ensureStringArray(assessment.attorney_questions),
+      recommendedDocuments: ensureStringArray(assessment.recommended_documents),
+      complianceFlags: ensureStringArray(assessment.compliance_flags),
+      nextActions: ensureStringArray(assessment.next_actions),
+      confidence: assessment.confidence,
+      model: assessment.model_name,
+      provider: assessment.provider,
+      popiaNotes: ensureStringArray(assessment.popia_notes),
+      createdAt: assessment.created_at,
+    },
+    matterCase: caseRecord && {
+      id: caseRecord.id,
+      submissionId: caseRecord.intake_submission_id,
+      caseNumber: caseRecord.case_number,
+      status: caseRecord.status,
+      urgency: caseRecord.urgency,
+      practiceArea: caseRecord.practice_area,
+      nextAction: caseRecord.next_action,
+      createdAt: caseRecord.created_at,
+    },
   };
 }
 
@@ -249,10 +222,7 @@ async function createSubmission(input: RequestBody) {
   const encryptedPayload = encryptJson(normalized);
   const redactedBrief = normalizeAssessmentSubmission(normalized);
   const now = toIso();
-  const clientLabel = `Client ${String(existingSubmissions.length + 1).padStart(
-    3,
-    '0',
-  )}`;
+  const clientLabel = `Client ${String(existingSubmissions.length + 1).padStart(3, '0')}`;
 
   const record = {
     id: submissionId,
@@ -327,15 +297,15 @@ async function getPrivateSubmission(id: string) {
   return {
     submission,
     raw,
-    assessment:
-      assessments.find((item) => item.intake_submission_id === submission.id) || null,
-    caseRecord:
-      cases.find((item) => item.intake_submission_id === submission.id) || null,
+    assessment: assessments.find((item) => item.intake_submission_id === submission.id) || null,
+    caseRecord: cases.find((item) => item.intake_submission_id === submission.id) || null,
   };
 }
 
 async function findSubmissionsByEmail(email: string) {
-  const normalized = String(email || '').trim().toLowerCase();
+  const normalized = String(email || '')
+    .trim()
+    .toLowerCase();
   if (!normalized) {
     return [];
   }
@@ -349,7 +319,12 @@ async function findSubmissionsByEmail(email: string) {
       submission,
       raw: decryptJson(submission.raw_payload_encrypted),
     }))
-    .filter((item) => String(item.raw?.email || '').trim().toLowerCase() === normalized)
+    .filter(
+      (item) =>
+        String(item.raw?.email || '')
+          .trim()
+          .toLowerCase() === normalized,
+    )
     .map((item) =>
       toPublicSubmission(
         item.submission,
@@ -390,11 +365,7 @@ async function assessSubmission(id: string) {
     created_at: now,
   };
 
-  const savedAssessment = await upsertRow(
-    'assessments',
-    assessmentRecord,
-    'intake_submission_id',
-  );
+  const savedAssessment = await upsertRow('assessments', assessmentRecord, 'intake_submission_id');
 
   const existingCases = await listRows('cases');
   const caseRecord = {
@@ -406,8 +377,7 @@ async function assessSubmission(id: string) {
     urgency: assessment.urgency,
     status: assessment.urgency === 'critical' ? 'priority-review' : 'triage',
     next_action:
-      assessment.nextActions?.[0] ||
-      'Attorney to review the intake and confirm next steps.',
+      assessment.nextActions?.[0] || 'Attorney to review the intake and confirm next steps.',
     created_at: now,
     updated_at: now,
   };
@@ -489,9 +459,7 @@ async function getSummary() {
 
 async function deleteSubmission(submissionId: string) {
   const cases = await listRows('cases');
-  const relatedCases = cases.filter(
-    (item) => item.intake_submission_id === submissionId,
-  );
+  const relatedCases = cases.filter((item) => item.intake_submission_id === submissionId);
 
   const db = getSupabaseClient();
   if (db) {
@@ -504,9 +472,7 @@ async function deleteSubmission(submissionId: string) {
     memory.assessments = memory.assessments.filter(
       (item) => item.intake_submission_id !== submissionId,
     );
-    memory.cases = memory.cases.filter(
-      (item) => item.intake_submission_id !== submissionId,
-    );
+    memory.cases = memory.cases.filter((item) => item.intake_submission_id !== submissionId);
   }
 
   return {

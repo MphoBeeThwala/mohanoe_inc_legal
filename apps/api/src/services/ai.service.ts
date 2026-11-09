@@ -100,11 +100,7 @@ function inferPracticeArea(text: string, fallback = 'General'): string {
   if (lowered.includes('property') || lowered.includes('transfer')) {
     return 'Conveyancing';
   }
-  if (
-    lowered.includes('estate') ||
-    lowered.includes('will') ||
-    lowered.includes('deceased')
-  ) {
+  if (lowered.includes('estate') || lowered.includes('will') || lowered.includes('deceased')) {
     return 'Estate Administration';
   }
   if (lowered.includes('contract') || lowered.includes('shareholder')) {
@@ -129,9 +125,7 @@ function fallbackAssessment(input: MatterBrief): AiAssessment {
     summary: `The intake indicates a ${urgency} priority ${practiceArea.toLowerCase()} matter. The attorney should review the facts, confirm jurisdiction, and validate all dates and deadlines before proceeding.`,
     keyFacts: [
       input.jurisdiction ? `Jurisdiction: ${input.jurisdiction}` : null,
-      input.requestedOutcome
-        ? `Requested outcome: ${input.requestedOutcome}`
-        : null,
+      input.requestedOutcome ? `Requested outcome: ${input.requestedOutcome}` : null,
       'Raw PII was excluded from the model prompt.',
     ].filter((fact): fact is string => Boolean(fact)),
     attorneyQuestions: [
@@ -231,8 +225,4 @@ async function assessMatter(input: MatterBrief): Promise<AiAssessment> {
   }
 }
 
-export {
-  assessMatter,
-  fallbackAssessment,
-  ensureStringArray,
-};
+export { assessMatter, fallbackAssessment, ensureStringArray };

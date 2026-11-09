@@ -29,8 +29,4 @@ async function index(req: Request, res: Response) {
   }
 }
 
-export {
-  dashboard,
-  generate,
-  index,
-};
+export { dashboard, generate, index };

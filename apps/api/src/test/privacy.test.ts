@@ -1,10 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import {
-  encryptJson,
-  decryptJson,
-  redactText,
-} from '../services/privacy.service';
+import { encryptJson, decryptJson, redactText } from '../services/privacy.service';
 
 test('encrypt/decrypt round-trips and never stores plaintext', () => {
   const record = { fullName: 'Thandi Nkosi', email: 'thandi@example.com' };

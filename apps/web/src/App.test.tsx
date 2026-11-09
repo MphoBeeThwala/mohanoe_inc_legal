@@ -7,6 +7,14 @@ test('renders the loading shell while the session is checked', () => {
   expect(screen.getByLabelText(/loading workspace/i)).toBeInTheDocument();
 });
 
+test('shows the sign-in screen when there is no session', async () => {
+  render(<App />);
+  expect(
+    await screen.findByRole('heading', { name: /legal practice management platform/i }),
+  ).toBeInTheDocument();
+  expect(screen.getByText('Your Firm')).toBeInTheDocument();
+});
+
 test('applies firm branding to the page title and theme colours', () => {
   applyBranding({
     ...DEFAULT_BRANDING,

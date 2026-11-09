@@ -126,11 +126,7 @@ async function listRows() {
 async function saveRow(record: DbRow) {
   const db = getSupabaseClient();
   if (db) {
-    const { data, error } = await db
-      .from('compliance_requests')
-      .insert(record)
-      .select()
-      .single();
+    const { data, error } = await db.from('compliance_requests').insert(record).select().single();
     if (error) {
       throw error;
     }
@@ -181,7 +177,9 @@ async function listRequests(filters: RequestBody = {}) {
 async function createRequest(input: RequestBody = {}, actor: Actor = {}) {
   const requestType = String(input.requestType || 'access').trim();
   const subjectName = String(input.subjectName || '').trim();
-  const subjectEmail = String(input.subjectEmail || '').trim().toLowerCase();
+  const subjectEmail = String(input.subjectEmail || '')
+    .trim()
+    .toLowerCase();
   const caseRef = String(input.caseRef || '').trim();
   const description = String(input.description || '').trim();
 
@@ -281,7 +279,9 @@ async function fulfillRequest(requestId: string, input: RequestBody = {}, actor:
 }
 
 async function buildDataExport(input: RequestBody = {}) {
-  const email = String(input.subjectEmail || '').trim().toLowerCase();
+  const email = String(input.subjectEmail || '')
+    .trim()
+    .toLowerCase();
   const caseRef = String(input.caseRef || '').trim();
 
   if (!email && !caseRef) {
@@ -323,8 +323,8 @@ async function buildDataExport(input: RequestBody = {}) {
       intakeService.getPrivateSubmission(submissionId).catch(() => null),
     ),
   );
-  const resolvedSubmissions = privateLookups.filter(
-    (item): item is NonNullable<typeof item> => Boolean(item),
+  const resolvedSubmissions = privateLookups.filter((item): item is NonNullable<typeof item> =>
+    Boolean(item),
   );
   const targetCaseIds = new Set(targetCases.map((item) => item.id));
   resolvedSubmissions.forEach((item) => {
@@ -369,7 +369,9 @@ async function getComplianceSummary() {
   const threshold = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
 
   const eligibleForRetention = cases.filter((item) => {
-    const closed = ['closed', 'resolved', 'completed'].includes(String(item.status || '').toLowerCase());
+    const closed = ['closed', 'resolved', 'completed'].includes(
+      String(item.status || '').toLowerCase(),
+    );
     // NOTE: eligibility uses createdAt first; it should probably use the closing
     // date. Kept as-is in the TypeScript migration (behaviour-preserving).
     const updatedAt = Date.parse(item.createdAt || item.updatedAt || new Date(0).toISOString());
@@ -391,7 +393,9 @@ async function runRetentionSweep(actor: Actor = {}) {
   const threshold = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
   const cases = await intakeService.listCases();
   const eligibleCases = cases.filter((item) => {
-    const closed = ['closed', 'resolved', 'completed'].includes(String(item.status || '').toLowerCase());
+    const closed = ['closed', 'resolved', 'completed'].includes(
+      String(item.status || '').toLowerCase(),
+    );
     const updatedAt = Date.parse(item.createdAt || new Date(0).toISOString());
     return closed && Number.isFinite(updatedAt) && updatedAt < threshold;
   });
@@ -412,16 +416,18 @@ async function runRetentionSweep(actor: Actor = {}) {
     removedDocuments += await documentsService.deleteByCaseIds(result.caseIds);
     removedInvoices += await billingService.deleteByCaseIds(result.caseIds);
     removedCalendar += await calendarService.deleteByCaseIds(result.caseIds);
-    await notificationsService.createNotification(
-      {
-        title: `Retained matter removed: ${item.caseNumber}`,
-        body: `Closed matter ${item.caseNumber} exceeded the retention window and was removed from active records.`,
-        category: 'compliance',
-        priority: 'medium',
-        recipientRole: 'admin',
-      },
-      actor,
-    ).catch(() => {});
+    await notificationsService
+      .createNotification(
+        {
+          title: `Retained matter removed: ${item.caseNumber}`,
+          body: `Closed matter ${item.caseNumber} exceeded the retention window and was removed from active records.`,
+          category: 'compliance',
+          priority: 'medium',
+          recipientRole: 'admin',
+        },
+        actor,
+      )
+      .catch(() => {});
   }
 
   const summary = {

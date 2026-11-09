@@ -1,12 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import type { ApiClient } from '../api';
+import { apiErrorMessage } from '../api';
+import type { CaseDetail, MatterCase } from '@ahava88/shared';
+import type { Notice } from './DismissibleNotice';
 
-function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }) {
-  const [caseRecord, setCaseRecord] = useState(null);
+interface CaseWorkspaceProps {
+  api: ApiClient;
+  selectedCaseId: string | null;
+  onSelectCase?: (caseRow: Pick<MatterCase, 'id' | 'submissionId' | 'caseNumber'>) => void;
+  onChanged: () => Promise<void>;
+}
+
+function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }: CaseWorkspaceProps) {
+  const [caseRecord, setCaseRecord] = useState<CaseDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [taskForm, setTaskForm] = useState({ title: '', description: '' });
   const [statusForm, setStatusForm] = useState({ status: '', nextAction: '' });
   const [noteForm, setNoteForm] = useState('');
-  const [notice, setNotice] = useState(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
 
   const loadCase = async () => {
     if (!selectedCaseId) {
@@ -14,11 +25,11 @@ function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }) {
       return;
     }
 
-    const { data } = await api.get(`/cases/${selectedCaseId}`);
+    const { data } = await api.get<CaseDetail>(`/cases/${selectedCaseId}`);
     setCaseRecord(data);
     setStatusForm({
       status: data.status || '',
-      nextAction: data.nextAction || data.next_action || '',
+      nextAction: data.nextAction || '',
     });
   };
 
@@ -32,7 +43,7 @@ function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCaseId]);
 
-  const submitTask = async (event) => {
+  const submitTask = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedCaseId || !taskForm.title.trim()) {
       return;
@@ -48,15 +59,14 @@ function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }) {
     } catch (error) {
       setNotice({
         tone: 'error',
-        message:
-          error?.response?.data?.message || error?.message || 'Could not add task.',
+        message: apiErrorMessage(error, 'Could not add task.'),
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const changeStatus = async (event) => {
+  const changeStatus = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedCaseId || !statusForm.status) {
       return;
@@ -71,17 +81,14 @@ function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }) {
     } catch (error) {
       setNotice({
         tone: 'error',
-        message:
-          error?.response?.data?.message ||
-          error?.message ||
-          'Could not update status.',
+        message: apiErrorMessage(error, 'Could not update status.'),
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const addNote = async (event) => {
+  const addNote = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedCaseId || !noteForm.trim()) {
       return;
@@ -100,17 +107,14 @@ function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }) {
     } catch (error) {
       setNotice({
         tone: 'error',
-        message:
-          error?.response?.data?.message ||
-          error?.message ||
-          'Could not add note.',
+        message: apiErrorMessage(error, 'Could not add note.'),
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const completeTask = async (taskId) => {
+  const completeTask = async (taskId: string) => {
     if (!selectedCaseId) {
       return;
     }
@@ -123,10 +127,7 @@ function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }) {
     } catch (error) {
       setNotice({
         tone: 'error',
-        message:
-          error?.response?.data?.message ||
-          error?.message ||
-          'Could not complete task.',
+        message: apiErrorMessage(error, 'Could not complete task.'),
       });
     } finally {
       setBusy(false);
@@ -140,8 +141,7 @@ function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }) {
 
       {!caseRecord ? (
         <div className="empty-state">
-          Select a matter from the list to manage tasks, status changes, and the
-          timeline.
+          Select a matter from the list to manage tasks, status changes, and the timeline.
         </div>
       ) : (
         <>
@@ -274,7 +274,7 @@ function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }) {
                 <div key={entry.id} className="timeline-item">
                   <div className="timeline-dot" />
                   <div>
-                    <strong>{entry.eventType}</strong>
+                    <strong>{entry.event_type}</strong>
                     <div className="muted">{entry.message}</div>
                   </div>
                 </div>
@@ -284,9 +284,7 @@ function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }) {
         </>
       )}
 
-      {notice ? (
-        <div className={`notice notice-${notice.tone}`}>{notice.message}</div>
-      ) : null}
+      {notice ? <div className={`notice notice-${notice.tone}`}>{notice.message}</div> : null}
     </div>
   );
 }

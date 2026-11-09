@@ -97,7 +97,9 @@ async function readUsers() {
 }
 
 async function findUserByEmail(email: string) {
-  const normalized = String(email || '').trim().toLowerCase();
+  const normalized = String(email || '')
+    .trim()
+    .toLowerCase();
   const users = await readUsers();
   return users.find((user) => String(user.email).trim().toLowerCase() === normalized) || null;
 }
@@ -131,12 +133,7 @@ async function saveUser(record: DbRow) {
 async function updateUser(id: string, patch: RequestBody) {
   const db = getSupabaseClient();
   if (db) {
-    const { data, error } = await db
-      .from('users')
-      .update(patch)
-      .eq('id', id)
-      .select()
-      .single();
+    const { data, error } = await db.from('users').update(patch).eq('id', id).select().single();
 
     if (error) {
       throw error;
@@ -156,7 +153,9 @@ async function updateUser(id: string, patch: RequestBody) {
 
 async function registerUser(input: RequestBody, options: RequestBody = {}): Promise<AuthResult> {
   const fullName = String(input.fullName || '').trim();
-  const email = String(input.email || '').trim().toLowerCase();
+  const email = String(input.email || '')
+    .trim()
+    .toLowerCase();
   const password = String(input.password || '');
   const role = options.allowRoleOverride
     ? String(options.role || input.role || 'attorney').trim()
@@ -216,7 +215,9 @@ async function registerUser(input: RequestBody, options: RequestBody = {}): Prom
 }
 
 async function loginUser(input: RequestBody): Promise<AuthResult> {
-  const email = String(input.email || '').trim().toLowerCase();
+  const email = String(input.email || '')
+    .trim()
+    .toLowerCase();
   const password = String(input.password || '');
 
   if (!email || !password) {
@@ -326,14 +327,17 @@ async function seedDefaultUsers() {
     return toPublicUser(existing);
   }
 
-  const created = await registerUser({
-    fullName: seedName,
-    email: seedEmail,
-    password: seedPassword,
-  }, {
-    allowRoleOverride: true,
-    role: 'admin',
-  });
+  const created = await registerUser(
+    {
+      fullName: seedName,
+      email: seedEmail,
+      password: seedPassword,
+    },
+    {
+      allowRoleOverride: true,
+      role: 'admin',
+    },
+  );
 
   return created.user;
 }

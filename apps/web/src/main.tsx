@@ -2,18 +2,19 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
-import reportWebVitals from './reportWebVitals';
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
+const container = document.getElementById('root');
+if (!container) {
+  throw new Error('Root element #root not found');
+}
+const root = ReactDOM.createRoot(container);
 root.render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,
 );
 
-reportWebVitals();
-
-function showUpdateBanner(onConfirm) {
+function showUpdateBanner(onConfirm: () => void): void {
   const existing = document.getElementById('sw-update-banner');
   if (existing) {
     return;
@@ -54,10 +55,10 @@ function showUpdateBanner(onConfirm) {
   document.body.appendChild(banner);
 }
 
-if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
-      .register(`${process.env.PUBLIC_URL || ''}/sw.js`)
+      .register(`${import.meta.env.BASE_URL}sw.js`)
       .then((registration) => {
         registration.addEventListener('updatefound', () => {
           const worker = registration.installing;
@@ -75,9 +76,10 @@ if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
           });
         });
 
-        if (registration.waiting) {
+        const waiting = registration.waiting;
+        if (waiting) {
           showUpdateBanner(() => {
-            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            waiting.postMessage({ type: 'SKIP_WAITING' });
             window.location.reload();
           });
         }

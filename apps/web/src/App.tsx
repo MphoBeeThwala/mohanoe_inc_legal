@@ -1,5 +1,25 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import axios from 'axios';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
+import type {
+  AuthConfig,
+  AuthResult,
+  IntakeSubmissionInput,
+  IntakeSummary,
+  MatterCase,
+  PublicBranding,
+  PublicSubmission,
+  PublicUser,
+} from '@ahava88/shared';
+import { api, apiErrorMessage, sessionStore } from './api';
+import Field from './components/Field';
+import type { Notice } from './components/DismissibleNotice';
 import IntakeForm from './components/IntakeForm';
 import AssessmentCard from './components/AssessmentCard';
 import CaseTable from './components/CaseTable';
@@ -10,48 +30,7 @@ import DismissibleNotice from './components/DismissibleNotice';
 import { useBranding } from './branding';
 import './App.css';
 
-const TOKEN_KEY = 'pms_session_token';
-
-// Browser storage can be missing or throw (private mode, locked-down
-// browsers, test environments). Never let that crash the workspace.
-const sessionStore = {
-  get() {
-    try {
-      return window.localStorage?.getItem(TOKEN_KEY) ?? null;
-    } catch (error) {
-      return null;
-    }
-  },
-  set(value) {
-    try {
-      window.localStorage?.setItem(TOKEN_KEY, value);
-    } catch (error) {
-      // ignore: the session simply won't survive a reload
-    }
-  },
-  clear() {
-    try {
-      window.localStorage?.removeItem(TOKEN_KEY);
-    } catch (error) {
-      // ignore
-    }
-  },
-};
-
-const api = axios.create({
-  baseURL: '/api',
-  timeout: 35000,
-});
-
-api.interceptors.request.use((config) => {
-  const token = sessionStore.get();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-const sampleMatter = {
+const sampleMatter: Omit<IntakeSubmissionInput, 'consentToAi' | 'consentToStorage'> = {
   fullName: 'Thandi Nkosi',
   email: 'thandi.nkosi@example.com',
   phone: '+27821234567',
@@ -67,14 +46,23 @@ const sampleMatter = {
   preferredLanguage: 'English',
 };
 
-const NAV_SECTIONS = [
+type SectionId = 'overview' | 'intake' | 'cases' | 'operations';
+
+const NAV_SECTIONS: Array<{ id: SectionId; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'intake', label: 'Intake' },
   { id: 'cases', label: 'Cases' },
   { id: 'operations', label: 'Operations' },
 ];
 
-function StatCard({ label, value, detail, tone = 'neutral' }) {
+interface StatCardProps {
+  label: string;
+  value: ReactNode;
+  detail: ReactNode;
+  tone?: string;
+}
+
+function StatCard({ label, value, detail, tone = 'neutral' }: StatCardProps) {
   return (
     <article className={`stat-card stat-${tone}`}>
       <div className="stat-label">{label}</div>
@@ -101,7 +89,7 @@ function LoadingShell() {
   );
 }
 
-function BrandMark({ branding }) {
+function BrandMark({ branding }: { branding: PublicBranding }) {
   if (branding.logoUrl) {
     return (
       <img
@@ -121,35 +109,35 @@ function BrandMark({ branding }) {
 
 function App() {
   const branding = useBranding();
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState<PublicUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
-  const [authNotice, setAuthNotice] = useState({
+  const [authNotice, setAuthNotice] = useState<Notice>({
     tone: 'info',
     message: 'Sign in with your staff account to access the practice workspace.',
   });
-  const [authConfig, setAuthConfig] = useState({
+  const [authConfig, setAuthConfig] = useState<AuthConfig>({
     publicRegistration: false,
     seedAdminOnStartup: false,
   });
-  const [authMode, setAuthMode] = useState('login');
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authForm, setAuthForm] = useState({
     fullName: '',
     email: '',
     password: '',
   });
-  const [summary, setSummary] = useState(null);
-  const [cases, setCases] = useState([]);
-  const [selectedMatter, setSelectedMatter] = useState(null);
-  const [selectedCaseId, setSelectedCaseId] = useState(null);
+  const [summary, setSummary] = useState<IntakeSummary | null>(null);
+  const [cases, setCases] = useState<MatterCase[]>([]);
+  const [selectedMatter, setSelectedMatter] = useState<PublicSubmission | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [activeSection, setActiveSection] = useState('overview');
+  const [activeSection, setActiveSection] = useState<SectionId>('overview');
 
-  const sectionRefs = useRef({});
+  const sectionRefs = useRef<Partial<Record<SectionId, HTMLElement | null>>>({});
   const workspaceReady = useMemo(() => Boolean(currentUser), [currentUser]);
 
-  const scrollToSection = useCallback((sectionId) => {
+  const scrollToSection = useCallback((sectionId: SectionId) => {
     const node = sectionRefs.current[sectionId];
     if (node) {
       node.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -158,12 +146,11 @@ function App() {
   }, []);
 
   const loadWorkspace = async () => {
-    const [summaryResponse, casesResponse, submissionsResponse] =
-      await Promise.all([
-        api.get('/intake/summary'),
-        api.get('/cases'),
-        api.get('/intake/submissions'),
-      ]);
+    const [summaryResponse, casesResponse, submissionsResponse] = await Promise.all([
+      api.get<IntakeSummary>('/intake/summary'),
+      api.get<MatterCase[]>('/cases'),
+      api.get<PublicSubmission[]>('/intake/submissions'),
+    ]);
 
     setSummary(summaryResponse.data);
     setCases(casesResponse.data);
@@ -171,7 +158,7 @@ function App() {
     const latest = submissionsResponse.data[0];
     if (latest) {
       setSelectedMatter(latest);
-      setSelectedCaseId(latest.matterCase?.id || latest.matterCase?.submissionId);
+      setSelectedCaseId(latest.matterCase?.id || latest.matterCase?.submissionId || null);
     }
   };
 
@@ -184,7 +171,7 @@ function App() {
     }
 
     try {
-      const { data } = await api.get('/auth/me');
+      const { data } = await api.get<{ user: PublicUser }>('/auth/me');
       setCurrentUser(data.user);
       await loadWorkspace();
     } catch (error) {
@@ -202,13 +189,12 @@ function App() {
   useEffect(() => {
     const bootstrap = async () => {
       try {
-        const { data } = await api.get('/auth/config');
+        const { data } = await api.get<AuthConfig>('/auth/config');
         setAuthConfig(data);
         if (data.publicRegistration) {
           setAuthNotice({
             tone: 'info',
-            message:
-              'Create the first staff account, then sign in to open the workspace.',
+            message: 'Create the first staff account, then sign in to open the workspace.',
           });
         }
       } catch (error) {
@@ -232,8 +218,9 @@ function App() {
         const visible = entries
           .filter((entry) => entry.isIntersecting)
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-        if (visible[0]?.target?.dataset?.section) {
-          setActiveSection(visible[0].target.dataset.section);
+        const section = (visible[0]?.target as HTMLElement | undefined)?.dataset?.section;
+        if (section) {
+          setActiveSection(section as SectionId);
         }
       },
       { rootMargin: '-20% 0px -55% 0px', threshold: [0.15, 0.4, 0.7] },
@@ -249,7 +236,7 @@ function App() {
     return () => observer.disconnect();
   }, [workspaceReady]);
 
-  const handleAuthSubmit = async (event) => {
+  const handleAuthSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setAuthBusy(true);
     try {
@@ -265,7 +252,7 @@ function App() {
               email: authForm.email,
               password: authForm.password,
             };
-      const { data } = await api.post(endpoint, payload);
+      const { data } = await api.post<AuthResult>(endpoint, payload);
       sessionStore.set(data.token);
       setCurrentUser(data.user);
       setAuthNotice({
@@ -276,10 +263,7 @@ function App() {
     } catch (error) {
       setAuthNotice({
         tone: 'error',
-        message:
-          error?.response?.data?.message ||
-          error?.message ||
-          'Authentication failed.',
+        message: apiErrorMessage(error, 'Authentication failed.'),
       });
     } finally {
       setAuthBusy(false);
@@ -299,17 +283,16 @@ function App() {
     });
   };
 
-  const handleSubmit = async (payload) => {
+  const handleSubmit = async (payload: IntakeSubmissionInput): Promise<boolean> => {
     setBusy(true);
     setAuthNotice({
       tone: 'info',
-      message:
-        'Submitting encrypted intake and generating an attorney-facing assessment...',
+      message: 'Submitting encrypted intake and generating an attorney-facing assessment...',
     });
 
     try {
-      const submissionResponse = await api.post('/intake/submissions', payload);
-      const assessmentResponse = await api.post(
+      const submissionResponse = await api.post<PublicSubmission>('/intake/submissions', payload);
+      const assessmentResponse = await api.post<PublicSubmission>(
         `/intake/submissions/${submissionResponse.data.id}/assess`,
       );
 
@@ -328,10 +311,7 @@ function App() {
     } catch (error) {
       setAuthNotice({
         tone: 'error',
-        message:
-          error?.response?.data?.message ||
-          error?.message ||
-          'Unable to submit intake.',
+        message: apiErrorMessage(error, 'Unable to submit intake.'),
       });
       return false;
     } finally {
@@ -339,7 +319,9 @@ function App() {
     }
   };
 
-  const handleSelectCase = async (caseRow) => {
+  const handleSelectCase = async (
+    caseRow: Pick<MatterCase, 'id' | 'submissionId' | 'caseNumber'>,
+  ) => {
     try {
       const caseKey = caseRow.id || caseRow.submissionId || caseRow.caseNumber;
       setSelectedCaseId(caseKey);
@@ -358,7 +340,7 @@ function App() {
     return <LoadingShell />;
   }
 
-  if (!workspaceReady) {
+  if (!currentUser) {
     return (
       <div className="app-shell auth-shell">
         <header className="hero">
@@ -368,8 +350,8 @@ function App() {
               <p className="eyebrow">{branding.firmName}</p>
               <h1>Legal practice management platform</h1>
               <p className="hero-text">
-                Encrypted intake, role-based workspace access, case management,
-                and POPIA-safe AI triage.
+                Encrypted intake, role-based workspace access, case management, and POPIA-safe AI
+                triage.
               </p>
             </div>
           </div>
@@ -433,20 +415,14 @@ function App() {
               </Field>
               <div className="action-row">
                 <button type="submit" className="primary-button" disabled={authBusy}>
-                  {authBusy
-                    ? 'Working...'
-                    : authMode === 'register'
-                      ? 'Create account'
-                      : 'Sign in'}
+                  {authBusy ? 'Working...' : authMode === 'register' ? 'Create account' : 'Sign in'}
                 </button>
                 {authConfig.publicRegistration ? (
                   <button
                     type="button"
                     className="secondary-button"
                     onClick={() =>
-                      setAuthMode((current) =>
-                        current === 'login' ? 'register' : 'login',
-                      )
+                      setAuthMode((current) => (current === 'login' ? 'register' : 'login'))
                     }
                   >
                     {authMode === 'login' ? 'Create account' : 'Back to sign in'}
@@ -675,18 +651,6 @@ function App() {
           </aside>
         </section>
       </main>
-    </div>
-  );
-}
-
-function Field({ label, hint, id, children }) {
-  return (
-    <div className="field">
-      <label className="field-label" htmlFor={id}>
-        {label}
-      </label>
-      {hint ? <div className="field-hint">{hint}</div> : null}
-      {children}
     </div>
   );
 }

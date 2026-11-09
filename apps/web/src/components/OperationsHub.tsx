@@ -1,4 +1,22 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import type { ApiClient } from '../api';
+import { apiErrorMessage } from '../api';
+import type {
+  AuditEventRecord,
+  BillingSummary,
+  CalendarEvent,
+  ComplianceExport,
+  ComplianceRequest,
+  ComplianceSummary,
+  DocumentRecord,
+  Invoice,
+  LedgerEntry,
+  MatterCase,
+  NotificationRecord,
+  PublicUser,
+  ReportSnapshot,
+} from '@ahava88/shared';
+import type { Notice } from './DismissibleNotice';
 import DismissibleNotice from './DismissibleNotice';
 
 const initialDocumentForm = {
@@ -58,22 +76,45 @@ const initialExportForm = {
   caseRef: '',
 };
 
-function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged }) {
-  const [tab, setTab] = useState('documents');
-  const [documents, setDocuments] = useState([]);
-  const [billingSummary, setBillingSummary] = useState(null);
-  const [billingInvoices, setBillingInvoices] = useState([]);
-  const [billingLedger, setBillingLedger] = useState([]);
-  const [calendar, setCalendar] = useState([]);
-  const [audit, setAudit] = useState([]);
-  const [notifications, setNotifications] = useState([]);
-  const [reports, setReports] = useState([]);
-  const [complianceSummary, setComplianceSummary] = useState(null);
-  const [complianceRequests, setComplianceRequests] = useState([]);
-  const [exportPreview, setExportPreview] = useState(null);
+type OpsTab =
+  'documents' | 'billing' | 'calendar' | 'notifications' | 'reports' | 'compliance' | 'audit';
+
+interface OperationsHubProps {
+  api: ApiClient;
+  selectedCaseId: string | null;
+  cases?: MatterCase[];
+  currentUser: PublicUser;
+  onChanged: () => Promise<void>;
+}
+
+interface BatchResult {
+  path: string;
+  ok: boolean;
+  data: unknown;
+}
+
+function OperationsHub({
+  api,
+  selectedCaseId,
+  cases = [],
+  currentUser,
+  onChanged,
+}: OperationsHubProps) {
+  const [tab, setTab] = useState<OpsTab>('documents');
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
+  const [billingInvoices, setBillingInvoices] = useState<Invoice[]>([]);
+  const [billingLedger, setBillingLedger] = useState<LedgerEntry[]>([]);
+  const [calendar, setCalendar] = useState<CalendarEvent[]>([]);
+  const [audit, setAudit] = useState<AuditEventRecord[]>([]);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [reports, setReports] = useState<ReportSnapshot[]>([]);
+  const [complianceSummary, setComplianceSummary] = useState<ComplianceSummary | null>(null);
+  const [complianceRequests, setComplianceRequests] = useState<ComplianceRequest[]>([]);
+  const [exportPreview, setExportPreview] = useState<ComplianceExport | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [notice, setNotice] = useState(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [documentForm, setDocumentForm] = useState(initialDocumentForm);
   const [invoiceForm, setInvoiceForm] = useState(initialInvoiceForm);
   const [ledgerForm, setLedgerForm] = useState(initialLedgerForm);
@@ -88,7 +129,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
     [cases, selectedCaseId],
   );
 
-  const loadBatch = async (paths) => {
+  const loadBatch = async (paths: string[]): Promise<BatchResult[]> => {
     const results = await Promise.allSettled(paths.map((path) => api.get(path)));
     return results.map((result, index) => ({
       path: paths[index],
@@ -114,19 +155,28 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
       '/compliance/requests',
     ]);
     const responses = [...batchOne, ...batchTwo];
-    const byPath = Object.fromEntries(responses.map((item) => [item.path, item]));
+    const byPath: Record<string, BatchResult> = Object.fromEntries(
+      responses.map((item) => [item.path, item]),
+    );
     const failed = responses.filter((item) => !item.ok);
 
-    if (byPath['/documents']?.ok) setDocuments(byPath['/documents'].data);
-    if (byPath['/billing/summary']?.ok) setBillingSummary(byPath['/billing/summary'].data);
-    if (byPath['/billing/invoices']?.ok) setBillingInvoices(byPath['/billing/invoices'].data);
-    if (byPath['/billing/ledger']?.ok) setBillingLedger(byPath['/billing/ledger'].data);
-    if (byPath['/calendar/upcoming']?.ok) setCalendar(byPath['/calendar/upcoming'].data);
-    if (byPath['/audit']?.ok) setAudit(byPath['/audit'].data);
-    if (byPath['/notifications']?.ok) setNotifications(byPath['/notifications'].data);
-    if (byPath['/reports']?.ok) setReports(byPath['/reports'].data);
-    if (byPath['/compliance/summary']?.ok) setComplianceSummary(byPath['/compliance/summary'].data);
-    if (byPath['/compliance/requests']?.ok) setComplianceRequests(byPath['/compliance/requests'].data);
+    if (byPath['/documents']?.ok) setDocuments(byPath['/documents'].data as DocumentRecord[]);
+    if (byPath['/billing/summary']?.ok)
+      setBillingSummary(byPath['/billing/summary'].data as BillingSummary);
+    if (byPath['/billing/invoices']?.ok)
+      setBillingInvoices(byPath['/billing/invoices'].data as Invoice[]);
+    if (byPath['/billing/ledger']?.ok)
+      setBillingLedger(byPath['/billing/ledger'].data as LedgerEntry[]);
+    if (byPath['/calendar/upcoming']?.ok)
+      setCalendar(byPath['/calendar/upcoming'].data as CalendarEvent[]);
+    if (byPath['/audit']?.ok) setAudit(byPath['/audit'].data as AuditEventRecord[]);
+    if (byPath['/notifications']?.ok)
+      setNotifications(byPath['/notifications'].data as NotificationRecord[]);
+    if (byPath['/reports']?.ok) setReports(byPath['/reports'].data as ReportSnapshot[]);
+    if (byPath['/compliance/summary']?.ok)
+      setComplianceSummary(byPath['/compliance/summary'].data as ComplianceSummary);
+    if (byPath['/compliance/requests']?.ok)
+      setComplianceRequests(byPath['/compliance/requests'].data as ComplianceRequest[]);
 
     if (failed.length === responses.length) {
       throw new Error('All operations endpoints failed');
@@ -154,7 +204,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
 
   const activeCaseId = selectedCaseId || selectedCase?.id || '';
 
-  const submitDocument = async (event) => {
+  const submitDocument = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!activeCaseId || !documentForm.title || !documentForm.body) {
       return;
@@ -178,14 +228,14 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
     } catch (error) {
       setNotice({
         tone: 'error',
-        message: error?.response?.data?.message || 'Could not save document.',
+        message: apiErrorMessage(error, 'Could not save document.'),
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const submitInvoice = async (event) => {
+  const submitInvoice = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!activeCaseId || !invoiceForm.subject || !invoiceForm.lineAmount) {
       return;
@@ -213,14 +263,14 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
     } catch (error) {
       setNotice({
         tone: 'error',
-        message: error?.response?.data?.message || 'Could not issue invoice.',
+        message: apiErrorMessage(error, 'Could not issue invoice.'),
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const submitLedger = async (event) => {
+  const submitLedger = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!activeCaseId || !ledgerForm.amount) {
       return;
@@ -242,14 +292,14 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
     } catch (error) {
       setNotice({
         tone: 'error',
-        message: error?.response?.data?.message || 'Could not record ledger entry.',
+        message: apiErrorMessage(error, 'Could not record ledger entry.'),
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const submitEvent = async (event) => {
+  const submitEvent = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!activeCaseId || !eventForm.title || !eventForm.startsAt) {
       return;
@@ -271,14 +321,14 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
     } catch (error) {
       setNotice({
         tone: 'error',
-        message: error?.response?.data?.message || 'Could not add calendar event.',
+        message: apiErrorMessage(error, 'Could not add calendar event.'),
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const submitNotification = async (event) => {
+  const submitNotification = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!notificationForm.title || !notificationForm.body) {
       return;
@@ -293,14 +343,14 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
     } catch (error) {
       setNotice({
         tone: 'error',
-        message: error?.response?.data?.message || 'Could not create notification.',
+        message: apiErrorMessage(error, 'Could not create notification.'),
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const submitReport = async (event) => {
+  const submitReport = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setBusy(true);
     try {
@@ -310,16 +360,20 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
     } catch (error) {
       setNotice({
         tone: 'error',
-        message: error?.response?.data?.message || 'Could not generate report.',
+        message: apiErrorMessage(error, 'Could not generate report.'),
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const submitComplianceRequest = async (event) => {
+  const submitComplianceRequest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!complianceForm.subjectName || !complianceForm.subjectEmail || !complianceForm.description) {
+    if (
+      !complianceForm.subjectName ||
+      !complianceForm.subjectEmail ||
+      !complianceForm.description
+    ) {
       return;
     }
 
@@ -332,14 +386,14 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
     } catch (error) {
       setNotice({
         tone: 'error',
-        message: error?.response?.data?.message || 'Could not create compliance request.',
+        message: apiErrorMessage(error, 'Could not create compliance request.'),
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const submitExportPreview = async (event) => {
+  const submitExportPreview = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!exportForm.subjectEmail && !exportForm.caseRef) {
       return;
@@ -347,7 +401,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
 
     setBusy(true);
     try {
-      const { data } = await api.get('/compliance/export', {
+      const { data } = await api.get<ComplianceExport>('/compliance/export', {
         params: exportForm,
       });
       setExportPreview(data);
@@ -355,14 +409,14 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
     } catch (error) {
       setNotice({
         tone: 'error',
-        message: error?.response?.data?.message || 'Could not generate export preview.',
+        message: apiErrorMessage(error, 'Could not generate export preview.'),
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const fulfillComplianceRequest = async (requestId) => {
+  const fulfillComplianceRequest = async (requestId: string) => {
     setBusy(true);
     try {
       await api.post(`/compliance/requests/${requestId}/fulfill`, {
@@ -374,7 +428,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
     } catch (error) {
       setNotice({
         tone: 'error',
-        message: error?.response?.data?.message || 'Could not fulfill request.',
+        message: apiErrorMessage(error, 'Could not fulfill request.'),
       });
     } finally {
       setBusy(false);
@@ -390,14 +444,14 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
     } catch (error) {
       setNotice({
         tone: 'error',
-        message: error?.response?.data?.message || 'Could not run retention sweep.',
+        message: apiErrorMessage(error, 'Could not run retention sweep.'),
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const markNotificationRead = async (notificationId) => {
+  const markNotificationRead = async (notificationId: string) => {
     setBusy(true);
     try {
       await api.post(`/notifications/${notificationId}/read`);
@@ -406,14 +460,14 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
     } catch (error) {
       setNotice({
         tone: 'error',
-        message: error?.response?.data?.message || 'Could not update notification.',
+        message: apiErrorMessage(error, 'Could not update notification.'),
       });
     } finally {
       setBusy(false);
     }
   };
 
-  const tabs = [
+  const tabs: Array<[OpsTab, string]> = [
     ['documents', 'Documents'],
     ['billing', 'Billing'],
     ['calendar', 'Calendar'],
@@ -521,7 +575,11 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
             ) : (
               <EmptyHint
                 message="No documents yet."
-                hint={activeCaseId ? 'Save your first document above.' : 'Select a case to attach documents.'}
+                hint={
+                  activeCaseId
+                    ? 'Save your first document above.'
+                    : 'Select a case to attach documents.'
+                }
               />
             )}
           </div>
@@ -759,10 +817,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
       {!loading && tab === 'notifications' ? (
         <section className="ops-section">
           <div className="mini-grid">
-            <Stat
-              label="Unread"
-              value={notifications.filter((item) => !item.isRead).length}
-            />
+            <Stat label="Unread" value={notifications.filter((item) => !item.isRead).length} />
             <Stat label="Total" value={notifications.length} />
           </div>
 
@@ -859,7 +914,10 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
         <section className="ops-section">
           <div className="mini-grid">
             <Stat label="Snapshots" value={reports.length} />
-            <Stat label="Unread notifications" value={notifications.filter((item) => !item.isRead).length} />
+            <Stat
+              label="Unread notifications"
+              value={notifications.filter((item) => !item.isRead).length}
+            />
           </div>
 
           <form className="stack-form" onSubmit={submitReport}>
@@ -1005,7 +1063,12 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
           </form>
 
           {currentUser?.role === 'admin' ? (
-            <button type="button" className="secondary-button" onClick={runRetentionSweep} disabled={busy}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={runRetentionSweep}
+              disabled={busy}
+            >
               Run retention sweep
             </button>
           ) : null}
@@ -1028,7 +1091,9 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
               <div key={item.id} className="mini-item">
                 <div>
                   <strong>{item.requestType}</strong>
-                  <div className="muted">{item.subjectName} - {item.status}</div>
+                  <div className="muted">
+                    {item.subjectName} - {item.status}
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -1054,11 +1119,14 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
                     <strong>{item.action}</strong>
                     <div className="muted">{item.summary}</div>
                   </div>
-                  <div className="muted">{item.createdAt}</div>
+                  <div className="muted">{item.created_at}</div>
                 </div>
               ))
             ) : (
-              <EmptyHint message="No audit entries yet." hint="Activity will appear here as you work." />
+              <EmptyHint
+                message="No audit entries yet."
+                hint="Activity will appear here as you work."
+              />
             )}
           </div>
         </section>
@@ -1073,7 +1141,7 @@ function OperationsHub({ api, selectedCaseId, cases = [], currentUser, onChanged
   );
 }
 
-function Stat({ label, value }) {
+function Stat({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="mini-stat">
       <div className="mini-label">{label}</div>
@@ -1097,7 +1165,7 @@ function OpsSkeleton() {
   );
 }
 
-function EmptyHint({ message, hint }) {
+function EmptyHint({ message, hint }: { message: string; hint?: string }) {
   return (
     <div className="empty-state empty-state-compact">
       <p>{message}</p>

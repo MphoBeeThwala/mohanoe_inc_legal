@@ -177,9 +177,4 @@ async function markRead(notificationId: string, actor: Actor = {}) {
   return formatNotification(updated);
 }
 
-export {
-  createNotification,
-  listNotifications,
-  markRead,
-  unreadCount,
-};
+export { createNotification, listNotifications, markRead, unreadCount };

@@ -42,14 +42,20 @@ async function fetchJson(path, expectedStatus = 200) {
   results.push(await check('/', 200, '<div id="root"></div>'));
   results.push(await check('/manifest.json', 200, '"short_name"'));
 
-  const assetManifest = await fetchJson('/asset-manifest.json');
-  const mainJsPath = assetManifest.files?.['main.js'];
+  // Vite injects the hashed entry script into index.html.
+  const html = await (await fetch(new URL('/', baseUrl))).text();
+  const mainJsPath = html.match(/<script[^>]+src="([^"]+\.js)"/)?.[1];
 
   if (!mainJsPath) {
-    throw new Error('asset-manifest.json did not include files["main.js"]');
+    throw new Error('index.html did not reference a JavaScript entry bundle');
   }
 
   results.push(await check(mainJsPath, 200));
+  const branding = await fetchJson('/api/tenant/branding');
+  if (!branding.firmName) {
+    throw new Error('/api/tenant/branding did not return a firm name');
+  }
+  results.push({ path: '/api/tenant/branding', status: 200, firmName: branding.firmName });
   console.log(JSON.stringify({ ok: true, results }, null, 2));
 })().catch((error) => {
   console.error(JSON.stringify({ ok: false, message: error.message }, null, 2));

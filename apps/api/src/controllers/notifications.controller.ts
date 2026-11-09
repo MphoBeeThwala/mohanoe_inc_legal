@@ -6,12 +6,7 @@ async function index(req: Request, res: Response) {
   try {
     const notifications = await notificationsService.listNotifications({
       recipientRole: req.query.recipientRole,
-      isRead:
-        req.query.isRead === 'true'
-          ? true
-          : req.query.isRead === 'false'
-            ? false
-            : undefined,
+      isRead: req.query.isRead === 'true' ? true : req.query.isRead === 'false' ? false : undefined,
     });
     res.status(200).json(notifications);
   } catch (error) {
@@ -30,7 +25,10 @@ async function create(req: Request, res: Response) {
 
 async function markRead(req: Request, res: Response) {
   try {
-    const notification = await notificationsService.markRead(String(req.params.notificationId), req.auth);
+    const notification = await notificationsService.markRead(
+      String(req.params.notificationId),
+      req.auth,
+    );
     res.status(200).json(notification);
   } catch (error) {
     sendError(res, error);
@@ -48,9 +46,4 @@ async function unread(req: Request, res: Response) {
   }
 }
 
-export {
-  create,
-  index,
-  markRead,
-  unread,
-};
+export { create, index, markRead, unread };

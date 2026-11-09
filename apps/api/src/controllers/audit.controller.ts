@@ -23,7 +23,4 @@ async function verify(req: Request, res: Response) {
   }
 }
 
-export {
-  index,
-  verify,
-};
+export { index, verify };

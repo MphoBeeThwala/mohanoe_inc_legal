@@ -17,6 +17,11 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "check:brand": "node scripts/check-legacy-brand.js",
-    "start": "npm run start --workspace apps/api"
+    "start": "npm run start --workspace apps/api",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.9.10"
   }
 }

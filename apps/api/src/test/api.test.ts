@@ -47,7 +47,9 @@ describe('authentication and roles', () => {
   });
 
   test('protected routes reject forged tokens', async () => {
-    const res = await request(app).get('/api/cases').set('authorization', 'Bearer not-a-real-token');
+    const res = await request(app)
+      .get('/api/cases')
+      .set('authorization', 'Bearer not-a-real-token');
     expect(res.status).toBe(401);
   });
 
@@ -83,18 +85,15 @@ describe('intake to matter', () => {
 
   test('assessment creates a case numbered with the firm prefix, without leaking PII', async () => {
     const auth = { authorization: `Bearer ${token}` };
-    const created = await request(app)
-      .post('/api/intake/submissions')
-      .set(auth)
-      .send({
-        fullName: 'Thandi Nkosi',
-        email: 'thandi@example.com',
-        phone: '0821234567',
-        practiceArea: 'Family Law',
-        matterSummary: 'Thandi Nkosi needs urgent advice on custody; call 0821234567.',
-        consentToAi: true,
-        consentToStorage: true,
-      });
+    const created = await request(app).post('/api/intake/submissions').set(auth).send({
+      fullName: 'Thandi Nkosi',
+      email: 'thandi@example.com',
+      phone: '0821234567',
+      practiceArea: 'Family Law',
+      matterSummary: 'Thandi Nkosi needs urgent advice on custody; call 0821234567.',
+      consentToAi: true,
+      consentToStorage: true,
+    });
     expect(created.status).toBe(201);
     expect(JSON.stringify(created.body)).not.toContain('thandi@example.com');
     expect(created.body.summary).not.toContain('Thandi');

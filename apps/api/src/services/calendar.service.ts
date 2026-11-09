@@ -27,9 +27,7 @@ async function listRows() {
     return data || [];
   }
 
-  return [...memory.events].sort((a, b) =>
-    String(a.starts_at).localeCompare(String(b.starts_at)),
-  );
+  return [...memory.events].sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)));
 }
 
 async function saveRow(record: DbRow) {
@@ -163,9 +161,4 @@ async function deleteByCaseIds(caseIds: DbRow[] = []) {
   return normalized.size;
 }
 
-export {
-  createEvent,
-  deleteByCaseIds,
-  getUpcomingEvents,
-  listEvents,
-};
+export { createEvent, deleteByCaseIds, getUpcomingEvents, listEvents };

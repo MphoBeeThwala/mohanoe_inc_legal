@@ -32,12 +32,7 @@ async function writeRow(table: string, memoryKey: string, record: DbRow) {
 async function updateCaseRecord(caseId: string, patch: RequestBody) {
   const db = getSupabaseClient();
   if (db) {
-    const { data, error } = await db
-      .from('cases')
-      .update(patch)
-      .eq('id', caseId)
-      .select()
-      .single();
+    const { data, error } = await db.from('cases').update(patch).eq('id', caseId).select().single();
 
     if (error) {
       throw error;
@@ -64,9 +59,8 @@ async function getCasesIndex() {
   return cases.map((item) => ({
     ...item,
     taskCount: tasks.filter((task) => task.case_id === item.id).length,
-    openTaskCount: tasks.filter(
-      (task) => task.case_id === item.id && task.status !== 'done',
-    ).length,
+    openTaskCount: tasks.filter((task) => task.case_id === item.id && task.status !== 'done')
+      .length,
     timelineCount: timeline.filter((entry) => entry.case_id === item.id).length,
   }));
 }
@@ -74,10 +68,7 @@ async function getCasesIndex() {
 async function getCase(caseId: string) {
   const cases = await intakeService.listCases();
   const current = cases.find(
-    (item) =>
-      item.id === caseId ||
-      item.caseNumber === caseId ||
-      item.submissionId === caseId,
+    (item) => item.id === caseId || item.caseNumber === caseId || item.submissionId === caseId,
   );
   if (!current) {
     return null;
@@ -86,9 +77,7 @@ async function getCase(caseId: string) {
   return {
     ...current,
     tasks: (await listTasks()).filter((task) => task.case_id === current.id),
-    timeline: (await listTimeline()).filter(
-      (entry) => entry.case_id === current.id,
-    ),
+    timeline: (await listTimeline()).filter((entry) => entry.case_id === current.id),
   };
 }
 
@@ -105,9 +94,7 @@ async function listTasks() {
     return data || [];
   }
 
-  return [...memory.tasks].sort((a, b) =>
-    String(b.created_at).localeCompare(String(a.created_at)),
-  );
+  return [...memory.tasks].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 }
 
 async function listTimeline() {
@@ -166,11 +153,15 @@ async function addTask(caseId: string, input: RequestBody, actor: Actor = {}) {
       actor,
     )
     .catch(() => {});
-  await addTimeline(caseRecord.id, {
-    eventType: 'task_created',
-    message: `Task created: ${task.title}`,
-    metadata: { taskId: task.id },
-  }, actor);
+  await addTimeline(
+    caseRecord.id,
+    {
+      eventType: 'task_created',
+      message: `Task created: ${task.title}`,
+      metadata: { taskId: task.id },
+    },
+    actor,
+  );
 
   return saved;
 }
@@ -182,9 +173,7 @@ async function completeTask(caseId: string, taskId: string, actor: Actor = {}) {
   }
 
   const tasks = await listTasks();
-  const existing = tasks.find(
-    (task) => task.id === taskId && task.case_id === caseRecord.id,
-  );
+  const existing = tasks.find((task) => task.id === taskId && task.case_id === caseRecord.id);
   if (!existing) {
     throw httpError('Task not found', 404);
   }
@@ -213,11 +202,15 @@ async function completeTask(caseId: string, taskId: string, actor: Actor = {}) {
     }
   }
 
-  await addTimeline(caseId, {
-    eventType: 'task_completed',
-    message: `Task completed: ${existing.title}`,
-    metadata: { taskId },
-  }, actor);
+  await addTimeline(
+    caseId,
+    {
+      eventType: 'task_completed',
+      message: `Task completed: ${existing.title}`,
+      metadata: { taskId },
+    },
+    actor,
+  );
   await auditService
     .logEvent(
       {
@@ -251,11 +244,15 @@ async function updateCaseStatus(caseId: string, input: RequestBody, actor: Actor
     next_action: input.nextAction || caseRecord.nextAction,
   });
 
-  await addTimeline(caseRecord.id, {
-    eventType: 'status_changed',
-    message: `Case status changed to ${status}`,
-    metadata: { previousStatus: caseRecord.status, newStatus: status },
-  }, actor);
+  await addTimeline(
+    caseRecord.id,
+    {
+      eventType: 'status_changed',
+      message: `Case status changed to ${status}`,
+      metadata: { previousStatus: caseRecord.status, newStatus: status },
+    },
+    actor,
+  );
   await auditService
     .logEvent(
       {
@@ -310,7 +307,10 @@ async function deleteByCaseIds(caseIds: DbRow[] = []) {
   const normalized = new Set(caseIds.map((value) => String(value)));
   const db = getSupabaseClient();
   if (db) {
-    const { error } = await db.from('case_tasks').delete().in('case_id', [...normalized]);
+    const { error } = await db
+      .from('case_tasks')
+      .delete()
+      .in('case_id', [...normalized]);
     if (error) {
       throw error;
     }

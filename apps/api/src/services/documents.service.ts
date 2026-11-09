@@ -22,10 +22,7 @@ async function resolveCase(caseRef: string) {
   const cases = await intakeService.listCases();
   return (
     cases.find(
-      (item) =>
-        item.id === caseRef ||
-        item.caseNumber === caseRef ||
-        item.submissionId === caseRef,
+      (item) => item.id === caseRef || item.caseNumber === caseRef || item.submissionId === caseRef,
     ) || null
   );
 }
@@ -226,7 +223,10 @@ async function deleteByCaseIds(caseIds: DbRow[] = []) {
   const normalized = new Set(caseIds.map((value) => String(value)));
   const db = getSupabaseClient();
   if (db) {
-    const { error } = await db.from('documents').delete().in('case_id', [...normalized]);
+    const { error } = await db
+      .from('documents')
+      .delete()
+      .in('case_id', [...normalized]);
     if (error) {
       throw error;
     }
@@ -237,10 +237,4 @@ async function deleteByCaseIds(caseIds: DbRow[] = []) {
   return normalized.size;
 }
 
-export {
-  createDocument,
-  deleteByCaseIds,
-  getDocument,
-  listDocuments,
-  signDocument,
-};
+export { createDocument, deleteByCaseIds, getDocument, listDocuments, signDocument };

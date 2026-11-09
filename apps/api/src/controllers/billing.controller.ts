@@ -47,10 +47,4 @@ async function createLedger(req: Request, res: Response) {
   }
 }
 
-export {
-  createInvoice,
-  createLedger,
-  listInvoices,
-  listLedger,
-  summary,
-};
+export { createInvoice, createLedger, listInvoices, listLedger, summary };

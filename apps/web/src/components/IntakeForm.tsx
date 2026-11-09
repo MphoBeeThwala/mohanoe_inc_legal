@@ -1,6 +1,11 @@
-import React, { useRef, useState } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
+import type { IntakeSubmissionInput } from '@ahava88/shared';
+import Field from './Field';
+import type { Notice } from './DismissibleNotice';
 
-const defaultState = {
+type IntakeFormState = Required<IntakeSubmissionInput>;
+
+const defaultState: IntakeFormState = {
   fullName: '',
   email: '',
   phone: '',
@@ -15,13 +20,20 @@ const defaultState = {
   consentToAi: true,
 };
 
-function IntakeForm({ onSubmit, busy, sampleMatter, onGoToCases }) {
-  const [form, setForm] = useState(defaultState);
-  const [status, setStatus] = useState(null);
+interface IntakeFormProps {
+  onSubmit: (payload: IntakeSubmissionInput) => Promise<boolean>;
+  busy: boolean;
+  sampleMatter?: Partial<IntakeSubmissionInput>;
+  onGoToCases?: () => void;
+}
+
+function IntakeForm({ onSubmit, busy, sampleMatter, onGoToCases }: IntakeFormProps) {
+  const [form, setForm] = useState<IntakeFormState>(defaultState);
+  const [status, setStatus] = useState<Notice | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
-  const updateField = (name, value) => {
+  const updateField = <K extends keyof IntakeFormState>(name: K, value: IntakeFormState[K]) => {
     setForm((current) => ({ ...current, [name]: value }));
   };
 
@@ -33,7 +45,7 @@ function IntakeForm({ onSubmit, busy, sampleMatter, onGoToCases }) {
     });
   };
 
-  const handleSubmit = async (event) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (busy || submitting || submittingRef.current) {
       return;
@@ -120,9 +132,7 @@ function IntakeForm({ onSubmit, busy, sampleMatter, onGoToCases }) {
             id="intake-jurisdiction"
             name="jurisdiction"
             value={form.jurisdiction}
-            onChange={(event) =>
-              updateField('jurisdiction', event.target.value)
-            }
+            onChange={(event) => updateField('jurisdiction', event.target.value)}
             placeholder="Gauteng Division, Johannesburg"
             disabled={isDisabled}
           />
@@ -165,9 +175,7 @@ function IntakeForm({ onSubmit, busy, sampleMatter, onGoToCases }) {
           id="intake-requestedOutcome"
           name="requestedOutcome"
           value={form.requestedOutcome}
-          onChange={(event) =>
-            updateField('requestedOutcome', event.target.value)
-          }
+          onChange={(event) => updateField('requestedOutcome', event.target.value)}
           placeholder="Urgent interdict, settlement draft, summons, estate guidance..."
           disabled={isDisabled}
         />
@@ -180,9 +188,7 @@ function IntakeForm({ onSubmit, busy, sampleMatter, onGoToCases }) {
             name="documentsMentioned"
             rows={4}
             value={form.documentsMentioned}
-            onChange={(event) =>
-              updateField('documentsMentioned', event.target.value)
-            }
+            onChange={(event) => updateField('documentsMentioned', event.target.value)}
             placeholder="Notices, contracts, WhatsApp messages, court papers..."
             disabled={isDisabled}
           />
@@ -192,9 +198,7 @@ function IntakeForm({ onSubmit, busy, sampleMatter, onGoToCases }) {
             id="intake-language"
             name="preferredLanguage"
             value={form.preferredLanguage}
-            onChange={(event) =>
-              updateField('preferredLanguage', event.target.value)
-            }
+            onChange={(event) => updateField('preferredLanguage', event.target.value)}
             disabled={isDisabled}
           >
             <option>English</option>
@@ -212,9 +216,7 @@ function IntakeForm({ onSubmit, busy, sampleMatter, onGoToCases }) {
             id="intake-consent-storage"
             type="checkbox"
             checked={form.consentToStorage}
-            onChange={(event) =>
-              updateField('consentToStorage', event.target.checked)
-            }
+            onChange={(event) => updateField('consentToStorage', event.target.checked)}
             disabled={isDisabled}
           />
           <span>Consent to encrypted storage of the client record</span>
@@ -259,18 +261,6 @@ function IntakeForm({ onSubmit, busy, sampleMatter, onGoToCases }) {
         </div>
       ) : null}
     </form>
-  );
-}
-
-function Field({ label, hint, id, children }) {
-  return (
-    <div className="field">
-      <label className="field-label" htmlFor={id}>
-        {label}
-      </label>
-      {hint ? <div className="field-hint">{hint}</div> : null}
-      {children}
-    </div>
   );
 }
 

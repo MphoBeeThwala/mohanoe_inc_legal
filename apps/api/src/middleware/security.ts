@@ -76,8 +76,4 @@ function requestLogger(req: Request, res: Response, next: NextFunction): void {
   next();
 }
 
-export {
-  createRateLimiter,
-  requestLogger,
-  securityHeaders,
-};
+export { createRateLimiter, requestLogger, securityHeaders };

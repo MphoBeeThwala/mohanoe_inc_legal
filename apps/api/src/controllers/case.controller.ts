@@ -61,22 +61,11 @@ async function updateStatus(req: Request, res: Response) {
 
 async function addTimeline(req: Request, res: Response) {
   try {
-    const entry = await caseService.addTimeline(
-      String(req.params.caseId),
-      req.body,
-      req.auth,
-    );
+    const entry = await caseService.addTimeline(String(req.params.caseId), req.body, req.auth);
     res.status(201).json(entry);
   } catch (error) {
     sendError(res, error);
   }
 }
 
-export {
-  addTask,
-  addTimeline,
-  completeTask,
-  index,
-  show,
-  updateStatus,
-};
+export { addTask, addTimeline, completeTask, index, show, updateStatus };

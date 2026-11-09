@@ -27,10 +27,7 @@ async function resolveCase(caseRef: string) {
   const cases = await intakeService.listCases();
   return (
     cases.find(
-      (item) =>
-        item.id === caseRef ||
-        item.caseNumber === caseRef ||
-        item.submissionId === caseRef,
+      (item) => item.id === caseRef || item.caseNumber === caseRef || item.submissionId === caseRef,
     ) || null
   );
 }
@@ -70,8 +67,7 @@ async function saveRow(table: string, memoryKey: string, record: DbRow) {
 
 function sumLineItems(items: DbRow[] = []) {
   return items.reduce(
-    (total, item) =>
-      total + toNumber(item.quantity || 1) * toNumber(item.rate || item.amount || 0),
+    (total, item) => total + toNumber(item.quantity || 1) * toNumber(item.rate || item.amount || 0),
     0,
   );
 }

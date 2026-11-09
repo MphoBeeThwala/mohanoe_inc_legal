@@ -42,9 +42,4 @@ async function sign(req: Request, res: Response) {
   }
 }
 
-export {
-  create,
-  index,
-  show,
-  sign,
-};
+export { create, index, show, sign };

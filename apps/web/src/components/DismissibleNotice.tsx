@@ -1,6 +1,17 @@
-import React from 'react';
+export type NoticeTone = 'info' | 'success' | 'warn' | 'error';
 
-function DismissibleNotice({ tone = 'info', message, onDismiss }) {
+export interface Notice {
+  tone: NoticeTone;
+  message: string;
+}
+
+interface DismissibleNoticeProps {
+  tone?: NoticeTone;
+  message?: string | null;
+  onDismiss?: () => void;
+}
+
+function DismissibleNotice({ tone = 'info', message, onDismiss }: DismissibleNoticeProps) {
   if (!message) {
     return null;
   }

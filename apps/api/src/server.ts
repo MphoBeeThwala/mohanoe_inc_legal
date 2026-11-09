@@ -1,4 +1,3 @@
-
 import './load-env';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -9,11 +8,7 @@ import routes from './routes';
 import { assertConfig, configWarnings } from './config/env';
 import { getPublicBranding } from './config/brand';
 import { seedDefaultUsers } from './services/auth.service';
-import {
-  createRateLimiter,
-  requestLogger,
-  securityHeaders,
-} from './middleware/security';
+import { createRateLimiter, requestLogger, securityHeaders } from './middleware/security';
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -66,9 +61,9 @@ app.get('/health', (req, res) => {
 app.get('/ready', (req, res) => {
   const configured = Boolean(
     process.env.JWT_SECRET &&
-      (process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL) &&
-      process.env.SUPABASE_URL &&
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
+    (process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL) &&
+    process.env.SUPABASE_URL &&
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
   );
 
   res.json({
@@ -93,18 +88,14 @@ const frontendBuildCandidates = [
   process.env.WEB_DIST_DIR,
   path.resolve(__dirname, '..', '..', 'web', 'dist'),
 ].filter((candidate): candidate is string => Boolean(candidate));
-const frontendBuildPath = frontendBuildCandidates.find((candidate) =>
-  fs.existsSync(candidate),
-);
+const frontendBuildPath = frontendBuildCandidates.find((candidate) => fs.existsSync(candidate));
 if (frontendBuildPath) {
   app.use(express.static(frontendBuildPath));
   app.get(/^\/(?!api).*/, (req, res) => {
     res.sendFile(path.join(frontendBuildPath, 'index.html'));
   });
 } else {
-  console.warn(
-    `Frontend build not found. Checked: ${frontendBuildCandidates.join(', ')}`,
-  );
+  console.warn(`Frontend build not found. Checked: ${frontendBuildCandidates.join(', ')}`);
 }
 
 app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {

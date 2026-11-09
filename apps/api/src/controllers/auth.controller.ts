@@ -55,10 +55,4 @@ async function seedAdmin(req: Request, res: Response) {
   }
 }
 
-export {
-  config,
-  login,
-  me,
-  seedAdmin,
-  register,
-};
+export { config, login, me, seedAdmin, register };

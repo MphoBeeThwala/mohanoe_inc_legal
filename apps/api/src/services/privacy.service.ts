@@ -1,19 +1,11 @@
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  randomBytes,
-} from 'crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 
 import { isProduction } from '../config/env';
 
-const FALLBACK_KEY = createHash('sha256')
-  .update('local-development-intake-key')
-  .digest();
+const FALLBACK_KEY = createHash('sha256').update('local-development-intake-key').digest();
 
 function getEncryptionKey(): Buffer {
-  const keySource =
-    process.env.INTAKE_ENCRYPTION_KEY || process.env.PII_ENCRYPTION_KEY;
+  const keySource = process.env.INTAKE_ENCRYPTION_KEY || process.env.PII_ENCRYPTION_KEY;
 
   if (!keySource) {
     if (isProduction()) {
@@ -131,12 +123,9 @@ function encryptJson(value: unknown): string {
   const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const tag = cipher.getAuthTag();
 
-  return [
-    'v1',
-    iv.toString('base64'),
-    tag.toString('base64'),
-    encrypted.toString('base64'),
-  ].join(':');
+  return ['v1', iv.toString('base64'), tag.toString('base64'), encrypted.toString('base64')].join(
+    ':',
+  );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -145,20 +134,14 @@ function decryptJson<T = any>(payload: string | null | undefined): T | null {
     return null;
   }
 
-  const [version, ivBase64, tagBase64, encryptedBase64] = String(payload).split(
-    ':',
-  );
+  const [version, ivBase64, tagBase64, encryptedBase64] = String(payload).split(':');
 
   if (version !== 'v1') {
     throw new Error('Unsupported encrypted payload version');
   }
 
   const key = getEncryptionKey();
-  const decipher = createDecipheriv(
-    'aes-256-gcm',
-    key,
-    Buffer.from(ivBase64, 'base64'),
-  );
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivBase64, 'base64'));
   decipher.setAuthTag(Buffer.from(tagBase64, 'base64'));
   const decrypted = Buffer.concat([
     decipher.update(Buffer.from(encryptedBase64, 'base64')),
@@ -168,9 +151,4 @@ function decryptJson<T = any>(payload: string | null | undefined): T | null {
   return JSON.parse(decrypted.toString('utf8'));
 }
 
-export {
-  decryptJson,
-  encryptJson,
-  redactMatterForAi,
-  redactText,
-};
+export { decryptJson, encryptJson, redactMatterForAi, redactText };

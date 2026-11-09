@@ -1,6 +1,12 @@
-import React from 'react';
+import type { MatterCase } from '@ahava88/shared';
 
-function CaseTable({ cases, onSelectCase, onGoToIntake }) {
+interface CaseTableProps {
+  cases: MatterCase[];
+  onSelectCase: (item: MatterCase) => void;
+  onGoToIntake?: () => void;
+}
+
+function CaseTable({ cases, onSelectCase, onGoToIntake }: CaseTableProps) {
   if (!cases?.length) {
     return (
       <div className="empty-state">
@@ -41,11 +47,7 @@ function CaseTable({ cases, onSelectCase, onGoToIntake }) {
               </td>
               <td>{item.status}</td>
               <td>
-                <button
-                  type="button"
-                  className="link-button"
-                  onClick={() => onSelectCase(item)}
-                >
+                <button type="button" className="link-button" onClick={() => onSelectCase(item)}>
                   Open
                 </button>
               </td>

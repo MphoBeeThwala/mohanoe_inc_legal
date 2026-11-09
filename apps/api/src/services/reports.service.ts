@@ -51,16 +51,15 @@ async function saveRow(record: DbRow) {
 }
 
 async function buildDashboard() {
-  const [summary, cases, tasks, invoices, events, notifications, audit] =
-    await Promise.all([
-      intakeService.getSummary(),
-      intakeService.listCases(),
-      caseService.listTasks(),
-      billingService.listInvoices(),
-      calendarService.listEvents(),
-      notificationsService.listNotifications(),
-      auditService.listEvents(),
-    ]);
+  const [summary, cases, tasks, invoices, events, notifications, audit] = await Promise.all([
+    intakeService.getSummary(),
+    intakeService.listCases(),
+    caseService.listTasks(),
+    billingService.listInvoices(),
+    calendarService.listEvents(),
+    notificationsService.listNotifications(),
+    auditService.listEvents(),
+  ]);
 
   const criticalCases = cases.filter((item) => item.urgency === 'critical').length;
   const openTasks = tasks.filter((task) => task.status !== 'done').length;
@@ -80,14 +79,20 @@ async function buildDashboard() {
     unreadNotifications,
     upcomingHearings,
     auditEvents: audit.length,
-    casesByStatus: cases.reduce((acc, item) => {
-      acc[item.status] = (acc[item.status] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>),
-    casesByPracticeArea: cases.reduce((acc, item) => {
-      acc[item.practiceArea] = (acc[item.practiceArea] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>),
+    casesByStatus: cases.reduce(
+      (acc, item) => {
+        acc[item.status] = (acc[item.status] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    ),
+    casesByPracticeArea: cases.reduce(
+      (acc, item) => {
+        acc[item.practiceArea] = (acc[item.practiceArea] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    ),
   };
 }
 
@@ -139,8 +144,4 @@ async function listSnapshots() {
   );
 }
 
-export {
-  buildDashboard,
-  generateSnapshot,
-  listSnapshots,
-};
+export { buildDashboard, generateSnapshot, listSnapshots };

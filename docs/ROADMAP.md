@@ -114,7 +114,7 @@ Environment setup:
 - [x] Delete dead code (Mongoose, `config/db.js`, client model/service/routes, root HTML prototypes, unused React components)
 - [x] `npm audit` clean on the backend
 - [x] Production refuses to start without real secrets; timing-safe password check; seed-admin and data-subject export/fulfilment restricted to admins
-- [ ] TypeScript monorepo (`apps/api`, `apps/web`, `packages/shared`), Vite instead of CRA — epic 2
+- [x] TypeScript monorepo (`apps/api`, `apps/web`, `packages/shared`), Vite instead of CRA — epic 2
 - [ ] Dependabot and secret scanning enabled in GitHub settings
 
 ### 5.2 Multi-tenancy and data layer
@@ -203,8 +203,8 @@ Trust accounting and AI research ship behind feature flags to pilots first.
 ## 10. Build order (one branch and PR per epic)
 
 1. **Rebrand and clean-up** — done on `chore/rebrand-ahava88-cleanup`.
-2. **TypeScript monorepo** — apps/api, apps/web (Vite), packages/shared; strict TS without behaviour change; Vitest.
-3. **Data layer** — Drizzle on Postgres; one migration history from `database.sql` + migrations 001–003; remove in-memory fallbacks; zod env validation.
+2. **TypeScript monorepo** — done on `chore/typescript-monorepo-vite`.
+3. **Data layer** — Drizzle on Postgres; one migration history from `database.sql` + migrations 001–003; remove in-memory fallbacks; zod env and request validation; replace `DbRow`/`RequestBody`. Also fix, found during epic 2: audit chain `previous_hash` is read from the in-memory list even in Supabase mode; retention eligibility uses `createdAt` rather than the closing date; case tasks/timeline are returned as raw snake_case rows.
 4. **Multi-tenancy** — `firms` table, `firm_id`, RLS, tenant resolver, isolation tests; branding from `firms`.
 5. **Identity** — Entra External ID (+ Entra ID), MFA, cookies, invites, per-firm roles, matter access, super-admin.
 6. **Encryption** — Key Vault envelope encryption, re-encryption migration, per-firm audit chain.
