@@ -3,8 +3,8 @@
 Owner: Ahava on 88 (Pty) Ltd. The product is licensed to individual law firms. The plan and build order live in `docs/ROADMAP.md`; read the relevant section before starting an epic, and tick its checklist when done.
 
 ## Non-negotiables
-- **No hard-coded brands.** Firm branding comes from `apps/api/src/config/brand.ts` (env today, the `firms` table after epic 4). `node scripts/check-legacy-brand.js` must pass.
-- **Tenant isolation (from epic 4):** every table has `firm_id`; every query runs with `app.firm_id` set; never use a DB role that bypasses RLS; every endpoint gets an isolation test.
+- **No hard-coded brands.** Firm branding comes from `apps/api/src/config/brand.ts` (read from the `firms` row; `FIRM_*` env vars only seed the first firm). `node scripts/check-legacy-brand.js` must pass.
+- **Tenant isolation:** every table has `firm_id`; every query runs with `app.firm_id` set; never use a DB role that bypasses RLS; every endpoint gets an isolation test.
 - **Every new endpoint:** input validation, `authenticateRequest`, `requireRoles(...)`, tests.
 - **Client personal information** is encrypted before storage (`privacy.service.ts`; per-firm Key Vault keys after epic 6). Look people up by `blindIndex()`, never by decrypting everything. Never log personal information.
 - **AI** only receives de-identified briefs; output must cite retrieved sources (roadmap §7); AI failures surface as errors.
@@ -15,9 +15,9 @@ Owner: Ahava on 88 (Pty) Ltd. The product is licensed to individual law firms. T
 
 ## Stack
 - npm workspaces: `apps/api` (Express 5, Node 22, strict TypeScript compiled to CommonJS), `apps/web` (React 18 + Vite, strict TypeScript), `packages/shared` (shared types — put API request/response shapes here).
-- Data: Drizzle ORM over PostgreSQL (`DATABASE_URL`); PGlite (embedded Postgres) in development and tests. Call `db()` for queries; rows are typed from the schema. Use `nextValue()` for human-readable numbers. Money is integer cents (`lib/money.ts`).
+- Data: Drizzle ORM over PostgreSQL (`DATABASE_URL`); PGlite (embedded Postgres) in development and tests. Call `db()` for tenant queries: it returns the request's tenant transaction (running as `app_tenant` with `app.firm_id` set) and throws outside `withTenant()`. `rootDb()` is only for platform work (firms, migrations, the tenant middleware). New tenant tables need `firmId()` and `tenantPolicy()` in the schema, and the migration must FORCE RLS and grant `app_tenant` access (the schema guard in `tenancy.test.ts` enforces this). Rows are typed from the schema. Use `nextValue()` for human-readable numbers. Money is integer cents (`lib/money.ts`).
 - Input: services take `unknown` and `parse(schema, input)` with zod schemas from `validation/schemas.ts`.
-- Tests: Vitest everywhere; every API test file gets a fresh migrated PGlite database (`src/test/setup.ts`). HTTP tests use Supertest against the real app. `npm run test:postgres -w apps/api` with `TEST_DATABASE_URL` runs them on real PostgreSQL.
+- Tests: Vitest everywhere; every API test file gets a fresh migrated PGlite database (`src/test/setup.ts`). HTTP tests use Supertest against the real app; direct service/database calls go inside `inDefaultFirm()` (`src/test/helpers.ts`), never around an HTTP call. `npm run test:postgres -w apps/api` with `TEST_DATABASE_URL` runs them on real PostgreSQL.
 - Errors: throw `httpError(message, status)`; controllers answer with `sendError(res, error)`.
 - Target infra: Azure South Africa North (DR: South Africa West) via Terraform — Container Apps, PostgreSQL Flexible Server, Blob Storage, Key Vault, Service Bus, Entra External ID, Front Door. Claude via Microsoft Foundry (Sweden Central) behind one AI client interface.
 

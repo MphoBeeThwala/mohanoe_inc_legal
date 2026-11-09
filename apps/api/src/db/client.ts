@@ -6,13 +6,20 @@
 //   for local development and tests only. Production refuses to start
 //   without DATABASE_URL (see config/env.ts).
 //
-// Call initDb() once at startup (server.ts, or the test setup), then use db().
+// Call initDb() once at startup (server.ts, or the test setup).
+//
+// Tenant data is reached ONLY through db(), which returns the current
+// request's transaction (see tenant.ts): it runs as the restricted app_tenant
+// role with app.firm_id set, so row-level security confines every query to
+// one firm. db() throws outside a tenant context. Platform-level work (the
+// firms table, migrations, bootstrapping) uses rootDb().
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { sql } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import * as schema from './schema';
+import { currentTenant } from './tenant-context';
 
 export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -76,11 +83,21 @@ export async function initDb(): Promise<Db> {
   return current.db;
 }
 
-export function db(): Db {
+/** Platform-level access (firms table, migrations). Never for tenant data. */
+export function rootDb(): Db {
   if (!current) {
     throw new Error('Database not initialised: call initDb() at startup');
   }
   return current.db;
+}
+
+/** The current firm's transaction. Throws outside a tenant context. */
+export function db(): Executor {
+  const tenant = currentTenant();
+  if (!tenant) {
+    throw new Error('No tenant context: tenant data must be accessed within withTenant()');
+  }
+  return tenant.tx;
 }
 
 export function dbDriver(): 'postgres' | 'pglite' | null {

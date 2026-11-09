@@ -3,6 +3,7 @@ import request from 'supertest';
 import { eq, sql } from 'drizzle-orm';
 import app from '../server';
 import { db } from '../db/client';
+import { inDefaultFirm as asFirm } from './helpers';
 import { nextValue } from '../db/sequences';
 import { auditEvents, cases, documents, invoices, submissions } from '../db/schema';
 import * as auditService from '../services/audit.service';
@@ -41,51 +42,60 @@ beforeAll(async () => {
 });
 
 describe('audit chain', () => {
-  test('every event links to the previous one and the chain verifies', async () => {
-    await auditService.logEvent({ action: 'test_one', summary: 'one' });
-    await auditService.logEvent({ action: 'test_two', summary: 'two', details: { n: 2 } });
+  test('every event links to the previous one and the chain verifies', () =>
+    asFirm(async () => {
+      await auditService.logEvent({ action: 'test_one', summary: 'one' });
+      await auditService.logEvent({ action: 'test_two', summary: 'two', details: { n: 2 } });
 
-    const rows = await db().select().from(auditEvents).orderBy(auditEvents.seq);
-    for (let i = 1; i < rows.length; i += 1) {
-      expect(rows[i]!.previousHash).toBe(rows[i - 1]!.entryHash);
-    }
-    expect(await auditService.verifyEventChain()).toMatchObject({ valid: true });
-  });
+      const rows = await db().select().from(auditEvents).orderBy(auditEvents.seq);
+      for (let i = 1; i < rows.length; i += 1) {
+        expect(rows[i]!.previousHash).toBe(rows[i - 1]!.entryHash);
+      }
+      expect(await auditService.verifyEventChain()).toMatchObject({ valid: true });
+    }));
 
-  test('concurrent writes still form a single unbroken chain', async () => {
+  test('concurrent requests still form a single unbroken chain', async () => {
+    // Each write is its own tenant transaction, like concurrent requests.
     await Promise.all(
       Array.from({ length: 20 }, (_, i) =>
-        auditService.logEvent({ action: 'concurrent', summary: `event ${i}` }),
+        asFirm(() => auditService.logEvent({ action: 'concurrent', summary: `event ${i}` })),
       ),
     );
-    const result = await auditService.verifyEventChain();
+    const result = await asFirm(() => auditService.verifyEventChain());
     expect(result.valid).toBe(true);
   });
 
-  test('details with undefined values hash the same after storage', async () => {
-    await auditService.logEvent({ action: 'sparse', details: { kept: 1, dropped: undefined } });
-    expect((await auditService.verifyEventChain()).valid).toBe(true);
-  });
+  test('details with undefined values hash the same after storage', () =>
+    asFirm(async () => {
+      await auditService.logEvent({ action: 'sparse', details: { kept: 1, dropped: undefined } });
+      expect((await auditService.verifyEventChain()).valid).toBe(true);
+    }));
 
-  test('editing a stored event breaks the chain', async () => {
-    const [row] = await db()
-      .select()
-      .from(auditEvents)
-      .where(eq(auditEvents.action, 'test_one'))
-      .limit(1);
-    await db().update(auditEvents).set({ summary: 'tampered' }).where(eq(auditEvents.id, row!.id));
+  test('editing a stored event breaks the chain', () =>
+    asFirm(async () => {
+      const [row] = await db()
+        .select()
+        .from(auditEvents)
+        .where(eq(auditEvents.action, 'test_one'))
+        .limit(1);
+      await db()
+        .update(auditEvents)
+        .set({ summary: 'tampered' })
+        .where(eq(auditEvents.id, row!.id));
 
-    const result = await auditService.verifyEventChain();
-    expect(result).toMatchObject({ valid: false, brokenAt: row!.id });
+      const result = await auditService.verifyEventChain();
+      expect(result).toMatchObject({ valid: false, brokenAt: row!.id });
 
-    await db().update(auditEvents).set({ summary: 'one' }).where(eq(auditEvents.id, row!.id));
-    expect((await auditService.verifyEventChain()).valid).toBe(true);
-  });
+      await db().update(auditEvents).set({ summary: 'one' }).where(eq(auditEvents.id, row!.id));
+      expect((await auditService.verifyEventChain()).valid).toBe(true);
+    }));
 });
 
 describe('numbering', () => {
   test('counters never hand out the same value under concurrency', async () => {
-    const values = await Promise.all(Array.from({ length: 25 }, () => nextValue('test-counter')));
+    const values = await Promise.all(
+      Array.from({ length: 25 }, () => asFirm(() => nextValue('test-counter'))),
+    );
     expect(new Set(values).size).toBe(25);
     expect(Math.max(...values)).toBe(25);
   });
@@ -121,7 +131,9 @@ describe('billing', () => {
     expect(res.body.vat).toBe(225.08);
     expect(res.body.total).toBe(1725.58);
 
-    const [row] = await db().select().from(invoices).where(eq(invoices.id, res.body.id));
+    const [row] = await asFirm(() =>
+      db().select().from(invoices).where(eq(invoices.id, res.body.id)),
+    );
     expect(row!.totalCents).toBe(172558);
 
     const summary = await request(app).get('/api/billing/summary').set(auth());
@@ -175,16 +187,17 @@ describe('privacy', () => {
     expect(res.body.submissions[0].personalData.fullName).toBe('Kagiso Sithole');
     expect(res.body.cases[0].id).toBe(matter.matterCase.id);
 
-    const [stored] = await db().select().from(submissions).where(eq(submissions.id, matter.id));
+    const [stored] = await asFirm(() =>
+      db().select().from(submissions).where(eq(submissions.id, matter.id)),
+    );
     expect(stored!.emailLookup).not.toContain('kagiso');
     expect(stored!.rawPayloadEncrypted).not.toContain('Kagiso');
   });
 
   test('audit entries for intake do not contain client names or emails', async () => {
-    const rows = await db()
-      .select()
-      .from(auditEvents)
-      .where(eq(auditEvents.action, 'submission_created'));
+    const rows = await asFirm(() =>
+      db().select().from(auditEvents).where(eq(auditEvents.action, 'submission_created')),
+    );
     expect(rows.length).toBeGreaterThan(0);
     expect(JSON.stringify(rows)).not.toMatch(/@example\.com|Sithole|Zulu/);
   });
@@ -207,10 +220,12 @@ describe('retention', () => {
       .set(auth())
       .send({ status: 'closed' });
     // Backdate only the old matter's closing beyond the 10-year default.
-    await db()
-      .update(cases)
-      .set({ updatedAt: sql`now() - interval '11 years'` })
-      .where(eq(cases.id, matter.matterCase.id));
+    await asFirm(() =>
+      db()
+        .update(cases)
+        .set({ updatedAt: sql`now() - interval '11 years'` })
+        .where(eq(cases.id, matter.matterCase.id)),
+    );
 
     const summary = await request(app).get('/api/compliance/summary').set(auth());
     expect(summary.body.eligibleForRetention).toBe(1);
@@ -219,14 +234,18 @@ describe('retention', () => {
     expect(sweep.status).toBe(200);
     expect(sweep.body.removedCases).toBe(1);
 
-    expect(await db().select().from(cases).where(eq(cases.id, matter.matterCase.id))).toHaveLength(
-      0,
-    );
-    expect(
-      await db().select().from(documents).where(eq(documents.caseId, matter.matterCase.id)),
-    ).toHaveLength(0);
-    expect(await db().select().from(cases).where(eq(cases.id, keep.matterCase.id))).toHaveLength(1);
-    expect((await auditService.verifyEventChain()).valid).toBe(true);
+    await asFirm(async () => {
+      expect(
+        await db().select().from(cases).where(eq(cases.id, matter.matterCase.id)),
+      ).toHaveLength(0);
+      expect(
+        await db().select().from(documents).where(eq(documents.caseId, matter.matterCase.id)),
+      ).toHaveLength(0);
+      expect(await db().select().from(cases).where(eq(cases.id, keep.matterCase.id))).toHaveLength(
+        1,
+      );
+      expect((await auditService.verifyEventChain()).valid).toBe(true);
+    });
   });
 });
 

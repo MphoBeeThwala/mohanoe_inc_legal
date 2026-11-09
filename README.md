@@ -46,8 +46,25 @@ Requires Node 22+.
 2. `npm run db:generate -w apps/api -- --name short_description` and commit the new file in `apps/api/drizzle/`.
 3. Never edit a migration that has been applied anywhere, and never change a shared database by hand.
 
-## Branding a deployment (one firm per deployment, until multi-tenancy)
-Set these environment variables; anything missing falls back to a neutral default:
+## Firms (multi-tenancy)
+One deployment serves many firms. Every tenant table has a `firm_id`, and PostgreSQL row-level security keeps each firm's rows invisible to the others.
+
+- **Which firm a request belongs to** is decided by the host name: `<slug>.<PLATFORM_BASE_DOMAIN>` first, then a custom domain stored on the firm, then `DEFAULT_FIRM_SLUG`. Unknown hosts get `404 Unknown workspace`; suspended firms get `403`.
+- Sessions are bound to their firm: a token issued by one firm is rejected by another.
+- **Onboard a firm** (after `npm run build`, with the same `DATABASE_URL` and secrets as the server):
+
+  ```bash
+  npm run firm -w apps/api -- create --slug nkosi --name "Nkosi & Partners Inc." --prefix NKP \
+    --domain portal.nkosi.co.za --primary-color "#1b7a58" \
+    --admin-email admin@nkosi.co.za --admin-name "Thandi Nkosi"
+  npm run firm -w apps/api -- list
+  ```
+
+  The admin's one-time password is printed once; share it securely.
+- The app connects as the database owner but runs every request as the `app_tenant` role (`SET LOCAL ROLE`), which cannot bypass RLS. Migration `0001` creates that role and grants it to the connecting user; see `PROD_OPERATIONS.md` if your server does not allow that.
+
+### Bootstrap branding
+When the firms table is empty, the server creates a `default` firm from these variables (existing data is moved into it by the migration). After that, branding is read from the firm row:
 
 | Variable | Example | Used for |
 |---|---|---|

@@ -2,6 +2,7 @@
 // The server also migrates on start unless DB_MIGRATE_ON_START=false.
 import '../load-env';
 import { closeDb, initDb } from './client';
+import { describeError } from '../lib/http';
 
 initDb()
   .then(async () => {
@@ -9,7 +10,7 @@ initDb()
     await closeDb();
   })
   .catch(async (error: unknown) => {
-    console.error('Migration failed:', error instanceof Error ? error.message : error);
+    console.error('Migration failed:', describeError(error));
     await closeDb().catch(() => {});
     process.exit(1);
   });
