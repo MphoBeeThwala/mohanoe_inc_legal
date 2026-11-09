@@ -27,6 +27,7 @@ const PLAIN_TABLES: Record<string, PgTable> = {
   invoicePayments: schema.invoicePayments,
   ledgerEntries: schema.ledgerEntries,
   staffRates: schema.staffRates,
+  courtRollMatches: schema.courtRollMatches,
   matterRates: schema.matterRates,
   notifications: schema.notifications,
   auditEvents: schema.auditEvents,

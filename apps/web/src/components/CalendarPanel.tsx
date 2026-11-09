@@ -11,14 +11,11 @@ import {
   type PublicUser,
 } from '@ahava88/shared';
 import { api, apiErrorMessage } from '../api';
+import CourtRollPanel from './CourtRollPanel';
 
-const ZONE = 'Africa/Johannesburg';
+import { localDate, saDateTime, ZONE } from '../lib/dates';
 
-export const localDate = (value: Date = new Date()) =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: ZONE }).format(value);
-
-/** A date and time entered in South Africa (UTC+2, no DST) as an ISO string. */
-export const saDateTime = (date: string, time: string) => `${date}T${time || '00:00'}:00+02:00`;
+export { localDate, saDateTime };
 
 const dayHeading = (value: string) =>
   new Intl.DateTimeFormat('en-ZA', {
@@ -261,6 +258,8 @@ function CalendarPanel({ currentUser, cases, selectedCaseId, onChanged }: Props)
       ) : (
         <p className="field-hint">Nothing scheduled in the next 90 days.</p>
       )}
+
+      <CourtRollPanel currentUser={currentUser} onChanged={load} />
 
       <h3>Running prescriptions</h3>
       {periods.length ? (

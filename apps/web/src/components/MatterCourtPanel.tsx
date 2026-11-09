@@ -7,7 +7,7 @@ import {
   type PrescriptionRuleCode,
 } from '@ahava88/shared';
 import { api, apiErrorMessage } from '../api';
-import { localDate } from './CalendarPanel';
+import { localDate } from '../lib/dates';
 
 interface Props {
   matter: MatterCase;

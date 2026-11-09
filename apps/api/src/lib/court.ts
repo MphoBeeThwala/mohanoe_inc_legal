@@ -28,7 +28,8 @@ export function courtCaseKey(value: string | null | undefined, now = new Date())
 /** Court case numbers in free text (e.g. a line of a court roll), normalised. */
 export function courtCaseKeysIn(text: string, now = new Date()): string[] {
   const found = new Set<string>();
-  const pattern = /\b(\d{4}-\d{3,8}|\d{1,8}\s*\/\s*(?:\d{4}|\d{2}))\b/g;
+  // Not part of a date such as 13/07/2023: no slash or digit on either side.
+  const pattern = /(?<![\w/-])(\d{4}-\d{3,8}|\d{1,8}\s*\/\s*(?:\d{4}|\d{2}))(?![\w/-])/g;
   for (const match of text.matchAll(pattern)) {
     const key = courtCaseKey(match[1], now);
     if (key) found.add(key);

@@ -1446,3 +1446,50 @@ export interface WipSummary {
   matters: WipMatter[];
   feeEarners: WipFeeEarner[];
 }
+
+// ---------------------------------------------------------------- court rolls
+
+export type CourtRollMatchStatus = 'new' | 'accepted' | 'dismissed' | 'removed';
+
+/** A matter found on a court roll, for staff to put on the calendar or dismiss. */
+export interface CourtRollMatch {
+  id: string;
+  caseId: string;
+  caseNumber: string;
+  courtCaseNumber: string | null;
+  origin: 'sync' | 'upload';
+  /** The roll's URL (synced rolls only). */
+  documentUrl: string | null;
+  documentTitle: string;
+  division: string;
+  hearingDate: string | null;
+  hearingTime: string | null;
+  courtroom: string | null;
+  judge: string | null;
+  section: string | null;
+  status: CourtRollMatchStatus;
+  /** A scheduled court date on that day is already on the matter's calendar. */
+  onCalendar: boolean;
+  eventId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CourtRollAcceptInput {
+  /** Needed when the roll gave no date (ISO, with offset). */
+  startsAt?: string;
+  assigneeUserId?: string | null;
+}
+
+export interface CourtRollUploadInput {
+  division: string;
+  title?: string;
+  fileName: string;
+  contentType: string;
+  contentBase64: string;
+}
+
+export interface CourtRollUploadResult {
+  hearings: number;
+  matches: CourtRollMatch[];
+}

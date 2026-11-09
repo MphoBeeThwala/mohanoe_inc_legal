@@ -148,6 +148,7 @@ Environment setup:
 - [x] Time recording: timer, manual entries, 6-minute units, fee-earner and matter rates, billable/non-billable, WIP
 - [x] Billing from time + disbursements, 15% VAT, branded PDFs, email, payments, statements, aging
 - [x] Calendar: court dates, deadlines, prescription reminders, email notifications
+- [x] Court roll sync (brought forward from P1): published rolls fetched twice a week and matched by court case number for staff to confirm; amended rolls flag removed matters; roll upload. Next: CaseLines / Court Online integration.
 - [ ] Intake → consent → de-identified triage → matter
 
 ### 5.6 SaaS operations

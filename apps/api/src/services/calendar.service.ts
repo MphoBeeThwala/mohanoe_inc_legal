@@ -491,20 +491,60 @@ export async function icsExport(options: { assigneeUserId?: string } = {}): Prom
 
 // ---------------------------------------------------------------- reminders
 
-async function recipientsFor(row: CalendarEventRow) {
-  const ids = row.assigneeUserId
-    ? [row.assigneeUserId]
+/** The assignee if there is one, else the matter's team (active staff, not support). */
+export async function matterTeam(caseId: string, assigneeUserId: string | null = null) {
+  const ids = assigneeUserId
+    ? [assigneeUserId]
     : (
         await db()
           .select({ userId: caseMembers.userId })
           .from(caseMembers)
-          .where(eq(caseMembers.caseId, row.caseId))
+          .where(eq(caseMembers.caseId, caseId))
       ).map((member) => member.userId);
   if (!ids.length) return [];
   return db()
     .select({ id: users.id, email: users.email, fullName: users.fullName, role: users.role })
     .from(users)
     .where(and(inArray(users.id, ids), eq(users.isActive, true), ne(users.role, 'support')));
+}
+
+export interface TeamNotice {
+  caseId: string;
+  subject: string;
+  /** Plain text, no personal information (it is stored unencrypted). */
+  body: string;
+  priority: 'high' | 'medium';
+  entityType: string;
+  entityId: string;
+  assigneeUserId?: string | null;
+}
+
+/** Tells a matter's team in the app and by email. Returns the emails sent. */
+export async function notifyMatterTeam(notice: TeamNotice): Promise<number> {
+  const firm = currentFirm();
+  const brand = getFirmBrand(firm);
+  const link = `${firmOrigin(firm)}/`;
+  let emails = 0;
+  for (const person of await matterTeam(notice.caseId, notice.assigneeUserId ?? null)) {
+    await db().insert(notifications).values({
+      title: notice.subject,
+      body: notice.body,
+      category: 'calendar',
+      priority: notice.priority,
+      recipientRole: person.role,
+      recipientUserId: person.id,
+      relatedEntityType: notice.entityType,
+      relatedEntityId: notice.entityId,
+      createdBy: 'system',
+    });
+    const sent = await sendMail({
+      to: person.email,
+      subject: `${brand.firmName}: ${notice.subject}`,
+      text: [`Hello ${person.fullName},`, '', notice.body, '', `Open it here: ${link}`].join('\n'),
+    });
+    if (sent) emails += 1;
+  }
+  return emails;
 }
 
 export interface ReminderRun {
@@ -529,9 +569,6 @@ export async function sendDueReminders(now = new Date()): Promise<ReminderRun> {
         lte(calendarEvents.startsAt, horizon),
       ),
     );
-  const firm = currentFirm();
-  const brand = getFirmBrand(firm);
-  const link = `${firmOrigin(firm)}/`;
   const run: ReminderRun = { events: 0, emails: 0 };
 
   for (const row of rows) {
@@ -556,38 +593,17 @@ export async function sendDueReminders(now = new Date()): Promise<ReminderRun> {
 
     const label = CALENDAR_EVENT_LABELS[row.eventType as CalendarEventType] ?? 'Event';
     const when = row.allDay ? localDay(row.startsAt) : localDateTime(row.startsAt);
-    const subject = `${label} on ${row.caseNumber}: ${when}`;
-    const people = await recipientsFor(row);
     run.events += 1;
-    for (const person of people) {
-      await db()
-        .insert(notifications)
-        .values({
-          title: subject,
-          body: `Reminder: ${label.toLowerCase()} on matter ${row.caseNumber}, ${when}.`,
-          category: 'calendar',
-          priority:
-            row.eventType === 'prescription' || row.eventType === 'court_date' ? 'high' : 'medium',
-          recipientRole: person.role,
-          recipientUserId: person.id,
-          relatedEntityType: 'calendar_event',
-          relatedEntityId: row.id,
-          createdBy: 'system',
-        });
-      const sent = await sendMail({
-        to: person.email,
-        subject: `${brand.firmName}: ${subject}`,
-        text: [
-          `Hello ${person.fullName},`,
-          '',
-          `Reminder: ${label.toLowerCase()} on matter ${row.caseNumber}.`,
-          `When: ${when}`,
-          '',
-          `Open the matter for the details: ${link}`,
-        ].join('\n'),
-      });
-      if (sent) run.emails += 1;
-    }
+    run.emails += await notifyMatterTeam({
+      caseId: row.caseId,
+      assigneeUserId: row.assigneeUserId,
+      subject: `${label} on ${row.caseNumber}: ${when}`,
+      body: `Reminder: ${label.toLowerCase()} on matter ${row.caseNumber}, ${when}.`,
+      priority:
+        row.eventType === 'prescription' || row.eventType === 'court_date' ? 'high' : 'medium',
+      entityType: 'calendar_event',
+      entityId: row.id,
+    });
   }
   return run;
 }
