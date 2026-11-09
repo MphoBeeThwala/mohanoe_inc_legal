@@ -34,6 +34,7 @@ import { checkPendingDomains } from '../services/white-label.service';
 import { anchorAllFirms } from '../services/audit-anchor.service';
 import { createOperator, listOperators, setOperatorActive } from '../services/support.service';
 import * as auditService from '../services/audit.service';
+import * as subscriptions from '../services/subscription.service';
 
 const OPERATOR = { fullName: 'Platform operations', role: 'system' };
 
@@ -140,6 +141,39 @@ async function operators(action: string, email?: string, name?: string): Promise
   }
 }
 
+const rands = (cents: number) => `R${(cents / 100).toFixed(2)}`;
+
+async function plans(action: string, values: Record<string, string | undefined>): Promise<void> {
+  if (action === 'list') {
+    for (const plan of await subscriptions.listAllPlans()) {
+      console.log(
+        `${plan.code.padEnd(16)} ${plan.isActive ? 'active  ' : 'retired '} ${plan.name}: ${rands(plan.monthlySeatPriceCents)}/seat/month, ${rands(plan.annualSeatPriceCents)}/seat/year (excl. VAT), seats ${plan.minSeats}-${plan.maxSeats ?? 'any'}`,
+      );
+    }
+  } else if (action === 'set') {
+    const saved = await subscriptions.upsertPlan({
+      code: values.code,
+      name: values.name,
+      description: values.description,
+      monthlySeatPriceCents: values.monthly,
+      annualSeatPriceCents: values.annual,
+      minSeats: values['min-seats'],
+      maxSeats: values['max-seats'] ?? null,
+      sortOrder: values.order,
+    });
+    console.log(`Plan ${saved.code} saved.`);
+  } else if (action === 'disable') {
+    if (!values.code) throw new Error('plans disable needs --code');
+    console.log(
+      (await subscriptions.disablePlan(values.code))
+        ? `${values.code}: retired`
+        : `No plan ${values.code}`,
+    );
+  } else {
+    throw new Error(`Unknown plans action "${action}"`);
+  }
+}
+
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   const { values, positionals } = parseArgs({
@@ -151,12 +185,43 @@ async function main(): Promise<void> {
       file: { type: 'string' },
       division: { type: 'string' },
       title: { type: 'string' },
+      code: { type: 'string' },
+      description: { type: 'string' },
+      monthly: { type: 'string' },
+      annual: { type: 'string' },
+      'min-seats': { type: 'string' },
+      'max-seats': { type: 'string' },
+      order: { type: 'string' },
+      until: { type: 'string' },
+      seats: { type: 'string' },
     },
     allowPositionals: true,
   });
   await initDb();
   if (command === 'keys') {
     await keys(positionals[0] ?? 'status', values.slug);
+  } else if (command === 'plans') {
+    await plans(positionals[0] ?? 'list', values as Record<string, string | undefined>);
+  } else if (command === 'subscriptions') {
+    for (const result of await subscriptions.checkAllSubscriptions()) {
+      console.log(
+        `${result.firm}: ${result.status}${result.changed ? ' (changed)' : ''}, ${result.emails} email(s)`,
+      );
+    }
+  } else if (command === 'subscription') {
+    if (positionals[0] !== 'comp' || !values.slug) {
+      throw new Error(
+        'Usage: ops subscription comp --slug <slug> [--until YYYY-MM-DD] [--seats N]',
+      );
+    }
+    const until = values.until ? new Date(`${values.until}T23:59:59+02:00`) : null;
+    if (until && Number.isNaN(until.getTime())) throw new Error('--until must be YYYY-MM-DD');
+    const seats = values.seats ? Number(values.seats) : null;
+    const [firm] = await targetFirms(values.slug);
+    await asSystem(firm!, () => subscriptions.setComplimentary(until, seats));
+    console.log(
+      `${firm!.slug}: complimentary ${until ? `until ${values.until}` : 'with no end date'}`,
+    );
   } else if (command === 'operator') {
     await operators(positionals[0] ?? 'list', values.email, values.name);
   } else if (command === 'anchor') {
@@ -198,7 +263,7 @@ async function main(): Promise<void> {
     }
   } else {
     throw new Error(
-      'Usage: ops keys status|rotate|reencrypt|rewrap|prune [--slug <slug>] | ops anchor | ops reminders | ops domains | ops restore-check | ops court-rolls [--file <roll> --division <code> --title <title>] | ops operator create|list|disable|enable',
+      'Usage: ops keys status|rotate|reencrypt|rewrap|prune [--slug <slug>] | ops anchor | ops reminders | ops domains | ops restore-check | ops subscriptions | ops plans list|set|disable | ops subscription comp --slug <slug> | ops court-rolls [--file <roll> --division <code> --title <title>] | ops operator create|list|disable|enable',
     );
   }
 }

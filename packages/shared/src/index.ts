@@ -116,7 +116,8 @@ export type Permission =
   | 'time.read'
   | 'time.record'
   | 'time.manage'
-  | 'rates.manage';
+  | 'rates.manage'
+  | 'subscription.manage';
 
 const FEE_EARNER: readonly Permission[] = [
   'clients.read',
@@ -159,6 +160,8 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'rates.manage',
     // Voids issued invoices (the number stays used).
     'billing.void',
+    // The firm's own subscription to the platform (plan, seats, payment).
+    'subscription.manage',
   ],
   attorney: FEE_EARNER,
   paralegal: FEE_EARNER,
@@ -1593,4 +1596,90 @@ export interface OnboardingStatus {
   steps: Array<{ id: OnboardingStep; label: string; done: boolean }>;
   complete: boolean;
   completedAt: string | null;
+}
+
+// ------------------------------------------------------------ subscriptions
+
+export type SubscriptionInterval = 'monthly' | 'annual';
+
+/**
+ * Stored lifecycle of a firm's subscription. What a firm may do depends on
+ * the effective status (see SubscriptionStatus.effectiveStatus), which also
+ * accounts for dates: a trial or paid period that has run out becomes
+ * past_due, and after the grace period suspended (read-only).
+ */
+export type SubscriptionState =
+  'trialing' | 'active' | 'past_due' | 'cancelled' | 'suspended' | 'complimentary';
+
+export interface SubscriptionPlan {
+  code: string;
+  name: string;
+  description: string;
+  /** Per seat per month, excluding VAT. */
+  monthlySeatPriceCents: number;
+  /** Per seat per year, excluding VAT. */
+  annualSeatPriceCents: number;
+  minSeats: number;
+  maxSeats: number | null;
+}
+
+export interface SubscriptionPayment {
+  id: string;
+  amountCents: number;
+  status: 'complete' | 'failed' | 'mismatch';
+  paidAt: string;
+  reference: string;
+}
+
+/** What every signed-in member of the firm may see (banner, read-only mode). */
+export interface SubscriptionBanner {
+  effectiveStatus: SubscriptionState;
+  readOnly: boolean;
+  /** End of the trial or the paid period (null for open-ended complimentary). */
+  paidThrough: string | null;
+  /** When read-only mode starts if nothing is paid (null when not applicable). */
+  suspendsAt: string | null;
+  daysLeft: number | null;
+}
+
+export interface SubscriptionStatus extends SubscriptionBanner {
+  state: SubscriptionState;
+  planCode: string | null;
+  planName: string | null;
+  interval: SubscriptionInterval | null;
+  /** Seats paid for (null = not limited). */
+  seats: number | null;
+  /** Active staff plus pending invites (platform support not counted). */
+  seatsUsed: number;
+  /** What each billing period costs, including VAT. */
+  recurringAmountCents: number | null;
+  cancelledAt: string | null;
+  /** A PayFast checkout was started and its payment is not confirmed yet. */
+  pendingCheckout: boolean;
+  payments: SubscriptionPayment[];
+  vatRate: number;
+  onlinePayments: boolean;
+}
+
+export interface SubscriptionCheckoutRequest {
+  planCode: string;
+  interval: SubscriptionInterval;
+  seats: number;
+}
+
+/** A signed PayFast form: the browser POSTs these fields to `action`. */
+export interface SubscriptionCheckout {
+  action: string;
+  fields: Array<[string, string]>;
+  amountCents: number;
+}
+
+export function subscriptionPriceCents(
+  plan: Pick<SubscriptionPlan, 'monthlySeatPriceCents' | 'annualSeatPriceCents'>,
+  interval: SubscriptionInterval,
+  seats: number,
+  vatRate: number,
+): number {
+  const perSeat = interval === 'annual' ? plan.annualSeatPriceCents : plan.monthlySeatPriceCents;
+  return Math.round(perSeat * seats * (1 + vatRate));
 }

@@ -16,7 +16,7 @@ Everything runs in **Azure South Africa North**; backups and storage replicate t
    | `PUBLIC_URL` | `https://<platform host>` (goes through Front Door) |
    | `STAGING_ACR_RESOURCE_ID` | production only: the staging registry's resource ID, for `az acr import` |
 
-   Secrets: `SMTP_URL` and `SENTRY_DSN` (optional).
+   Secrets: `SMTP_URL` and `SENTRY_DSN` (optional); `PAYFAST_MERCHANT_KEY` and `PAYFAST_PASSPHRASE` with variable `PAYFAST_MERCHANT_ID` once the PayFast account is approved (set `payfast_sandbox = false` in `prod.tfvars` for live payments).
 5. Fill `envs/<env>.tfvars` (hostnames, alert emails, budget) and run the **Infrastructure** workflow (or `terraform apply -var-file=envs/<env>.tfvars` with `TF_VAR_deployer_ip` set to your address).
 6. Point the platform hostnames at Front Door: if `platform_dns_zone` is set Terraform creates the records; otherwise create the CNAME and `_dnsauth` TXT records from `terraform output custom_domain_validation`.
 7. First firm: run the migrate job, then `npm run firm -w apps/api -- create …` through `az containerapp exec` (or a one-off job) and invite its first administrator.
@@ -24,7 +24,7 @@ Everything runs in **Azure South Africa North**; backups and storage replicate t
 ## Each release
 `main` passes CI → **Deploy** builds one image tagged with the commit and:
 1. runs the `migrate` job with it (migrations only ever add; a failed migration stops the release and the old revision keeps serving),
-2. points the scheduled jobs (anchor, reminders, court-rolls, domains) at it,
+2. points the scheduled jobs (anchor, reminders, court-rolls, domains, subscriptions) at it,
 3. rolls the API to it and waits for `/ready` through Front Door,
 4. after approval, imports the **same image** into production and repeats.
 
@@ -37,6 +37,7 @@ Roll back: `az containerapp revision list` and `az containerapp ingress traffic 
 | reminders | every 15 minutes | `ops reminders` |
 | court-rolls | 06:00 SAST Monday and Thursday | `ops court-rolls` |
 | domains | hourly | `ops domains` |
+| subscriptions | 07:00 SAST daily | `ops subscriptions` (trial and overdue notices, read-only mode) |
 
 A failed job execution raises the "job failures" alert.
 

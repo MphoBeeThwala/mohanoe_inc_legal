@@ -48,16 +48,21 @@ locals {
       SESSION_COOKIE_SECURE              = "true"
       LOG_HTTP                           = "true"
       PLATFORM_SUPPORT_EMAIL             = var.platform_support_email
+      PAYFAST_MERCHANT_ID                = var.payfast_merchant_id
+      PAYFAST_SANDBOX                    = var.payfast_sandbox ? "true" : "false"
+      SUBSCRIPTION_TRIAL_DAYS            = tostring(var.subscription_trial_days)
+      PLATFORM_VAT_RATE                  = tostring(var.platform_vat_rate)
     },
     var.app_settings,
   )
 
   # Scheduled work (see README: calendar, court rolls, audit, domains).
   jobs = {
-    anchor      = { cron = "30 22 * * *", args = ["apps/api/dist/scripts/ops.js", "anchor"] }      # 00:30 SAST daily
-    reminders   = { cron = "*/15 * * * *", args = ["apps/api/dist/scripts/ops.js", "reminders"] }  # every 15 minutes
-    court-rolls = { cron = "0 4 * * 1,4", args = ["apps/api/dist/scripts/ops.js", "court-rolls"] } # Mon and Thu 06:00 SAST
-    domains     = { cron = "0 * * * *", args = ["apps/api/dist/scripts/ops.js", "domains"] }       # hourly
+    anchor        = { cron = "30 22 * * *", args = ["apps/api/dist/scripts/ops.js", "anchor"] }      # 00:30 SAST daily
+    reminders     = { cron = "*/15 * * * *", args = ["apps/api/dist/scripts/ops.js", "reminders"] }  # every 15 minutes
+    court-rolls   = { cron = "0 4 * * 1,4", args = ["apps/api/dist/scripts/ops.js", "court-rolls"] } # Mon and Thu 06:00 SAST
+    domains       = { cron = "0 * * * *", args = ["apps/api/dist/scripts/ops.js", "domains"] }       # hourly
+    subscriptions = { cron = "0 5 * * *", args = ["apps/api/dist/scripts/ops.js", "subscriptions"] } # 07:00 SAST daily
   }
 }
 
@@ -79,10 +84,10 @@ resource "azurerm_container_app" "api" {
   }
 
   dynamic "secret" {
-    for_each = azurerm_key_vault_secret.app
+    for_each = toset(local.secret_names)
     content {
       name                = secret.key
-      key_vault_secret_id = secret.value.versionless_id
+      key_vault_secret_id = azurerm_key_vault_secret.app[secret.key].versionless_id
       identity            = azurerm_user_assigned_identity.app.id
     }
   }
@@ -117,7 +122,7 @@ resource "azurerm_container_app" "api" {
       }
 
       dynamic "env" {
-        for_each = azurerm_key_vault_secret.app
+        for_each = toset(local.secret_names)
         content {
           name        = local.secret_env[env.key]
           secret_name = env.key
@@ -192,10 +197,10 @@ resource "azurerm_container_app_job" "scheduled" {
   }
 
   dynamic "secret" {
-    for_each = azurerm_key_vault_secret.app
+    for_each = toset(local.secret_names)
     content {
       name                = secret.key
-      key_vault_secret_id = secret.value.versionless_id
+      key_vault_secret_id = azurerm_key_vault_secret.app[secret.key].versionless_id
       identity            = azurerm_user_assigned_identity.app.id
     }
   }
@@ -218,7 +223,7 @@ resource "azurerm_container_app_job" "scheduled" {
       }
 
       dynamic "env" {
-        for_each = azurerm_key_vault_secret.app
+        for_each = toset(local.secret_names)
         content {
           name        = local.secret_env[env.key]
           secret_name = env.key
@@ -260,10 +265,10 @@ resource "azurerm_container_app_job" "migrate" {
   }
 
   dynamic "secret" {
-    for_each = azurerm_key_vault_secret.app
+    for_each = toset(local.secret_names)
     content {
       name                = secret.key
-      key_vault_secret_id = secret.value.versionless_id
+      key_vault_secret_id = azurerm_key_vault_secret.app[secret.key].versionless_id
       identity            = azurerm_user_assigned_identity.app.id
     }
   }
@@ -286,7 +291,7 @@ resource "azurerm_container_app_job" "migrate" {
       }
 
       dynamic "env" {
-        for_each = azurerm_key_vault_secret.app
+        for_each = toset(local.secret_names)
         content {
           name        = local.secret_env[env.key]
           secret_name = env.key

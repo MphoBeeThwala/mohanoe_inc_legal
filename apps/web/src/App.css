@@ -1359,3 +1359,99 @@
   border-bottom: 1px solid var(--line, #e3e7e5);
   padding: 0.75rem 0;
 }
+
+/* Subscription */
+.subscription-banner {
+  margin: 0 0 16px;
+}
+
+.status-pill {
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: #eef5ff;
+  color: #274672;
+}
+
+.status-active,
+.status-complimentary {
+  background: #e6f7ef;
+  color: #18593f;
+}
+
+.status-past_due,
+.status-cancelled {
+  background: #fff6df;
+  color: #7a5812;
+}
+
+.status-suspended {
+  background: #fde8eb;
+  color: #7b2130;
+}
+
+.subscription-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 12px 0;
+}
+
+.subscription-facts dt {
+  font-weight: 600;
+}
+
+.subscription-facts dd {
+  margin: 0;
+}
+
+.subscribe-form {
+  display: grid;
+  gap: 12px;
+}
+
+.plan-options {
+  display: grid;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+}
+
+.plan-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  padding: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 14px;
+}
+
+.plan-option > span {
+  grid-column: 2;
+}
+
+.subscription-total {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.subscription-payments {
+  width: 100%;
+  margin-top: 16px;
+  border-collapse: collapse;
+}
+
+.subscription-payments caption {
+  text-align: left;
+  font-weight: 600;
+  padding-bottom: 6px;
+}
+
+.subscription-payments th,
+.subscription-payments td {
+  text-align: left;
+  padding: 6px 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}

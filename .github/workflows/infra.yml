@@ -79,6 +79,9 @@ jobs:
         env:
           TF_VAR_smtp_url: ${{ secrets.SMTP_URL }}
           TF_VAR_sentry_dsn: ${{ secrets.SENTRY_DSN }}
+          TF_VAR_payfast_merchant_id: ${{ vars.PAYFAST_MERCHANT_ID }}
+          TF_VAR_payfast_merchant_key: ${{ secrets.PAYFAST_MERCHANT_KEY }}
+          TF_VAR_payfast_passphrase: ${{ secrets.PAYFAST_PASSPHRASE }}
         run: terraform apply -input=false -auto-approve -lock-timeout=5m -var-file=envs/${{ matrix.target.tfvars }}.tfvars
       - name: Remove the runner address from the Key Vault firewall
         if: always()

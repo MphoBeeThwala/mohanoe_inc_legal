@@ -637,3 +637,36 @@ export const courtRollUploadSchema = z.object({
   // 10 MB of file as base64.
   contentBase64: z.string().min(1).max(14_000_000),
 });
+
+// ---------------------------------------------------------------- subscriptions
+
+const seatCount = z.coerce.number().int().min(1).max(10_000);
+
+export const subscriptionCheckoutSchema = z.object({
+  planCode: requiredText(40),
+  interval: z.enum(['monthly', 'annual']),
+  seats: seatCount,
+});
+
+export const subscriptionSeatsSchema = z.object({ seats: seatCount });
+
+const cents = z.coerce.number().int().min(0).max(100_000_000);
+
+export const subscriptionPlanSchema = z
+  .object({
+    code: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(/^[a-z0-9][a-z0-9-]{0,39}$/, 'lower-case letters, digits and dashes'),
+    name: requiredText(80),
+    description: optionalText(500),
+    monthlySeatPriceCents: cents,
+    annualSeatPriceCents: cents,
+    minSeats: z.coerce.number().int().min(1).max(10_000).default(1),
+    maxSeats: z.coerce.number().int().min(1).max(10_000).nullable().optional(),
+    sortOrder: z.coerce.number().int().min(0).max(1000).default(0),
+  })
+  .refine((plan) => plan.maxSeats == null || plan.maxSeats >= plan.minSeats, {
+    message: 'maxSeats must be at least minSeats',
+  });

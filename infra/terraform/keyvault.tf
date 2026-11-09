@@ -105,8 +105,24 @@ locals {
       "intake-encryption-key" = random_id.intake_key.hex
       "database-url"          = local.database_url
     },
-    var.smtp_url == "" ? {} : { "smtp-url" = var.smtp_url },
-    var.sentry_dsn == "" ? {} : { "sentry-dsn" = var.sentry_dsn },
+    { for name, value in local.optional_secrets : name => value if contains(local.optional_secret_names, name) },
+  )
+
+  # Optional secrets that were given. Whether a secret is set is not itself
+  # secret, so the names can drive for_each (sensitive values cannot).
+  optional_secrets = {
+    "smtp-url"             = var.smtp_url
+    "sentry-dsn"           = var.sentry_dsn
+    "payfast-merchant-key" = var.payfast_merchant_key
+    "payfast-passphrase"   = var.payfast_passphrase
+  }
+  optional_secret_names = [
+    for name in ["smtp-url", "sentry-dsn", "payfast-merchant-key", "payfast-passphrase"] : name
+    if nonsensitive(local.optional_secrets[name] != "")
+  ]
+  secret_names = concat(
+    ["jwt-secret", "audit-chain-secret", "intake-encryption-key", "database-url"],
+    local.optional_secret_names,
   )
 
   # Environment variable name for each secret.
@@ -117,13 +133,15 @@ locals {
     "database-url"          = "DATABASE_URL"
     "smtp-url"              = "SMTP_URL"
     "sentry-dsn"            = "SENTRY_DSN"
+    "payfast-merchant-key"  = "PAYFAST_MERCHANT_KEY"
+    "payfast-passphrase"    = "PAYFAST_PASSPHRASE"
   }
 }
 
 resource "azurerm_key_vault_secret" "app" {
-  for_each     = local.secrets
+  for_each     = toset(local.secret_names)
   name         = each.key
-  value        = each.value
+  value        = local.secrets[each.key]
   key_vault_id = azurerm_key_vault.main.id
   content_type = "text/plain"
   depends_on   = [azurerm_role_assignment.deployer_kv_admin]

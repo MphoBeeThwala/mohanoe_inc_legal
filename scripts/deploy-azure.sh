@@ -23,7 +23,7 @@ for _ in $(seq 1 90); do
 done
 [ "${status:-}" = "Succeeded" ] || { echo "Migration timed out"; exit 1; }
 
-for job in anchor reminders court-rolls domains; do
+for job in anchor reminders court-rolls domains subscriptions; do
   az containerapp job update -g "$RESOURCE_GROUP" -n "${JOB_PREFIX}-${job}" --image "$image" >/dev/null
 done
 

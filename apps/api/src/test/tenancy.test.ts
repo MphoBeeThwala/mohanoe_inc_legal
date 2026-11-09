@@ -14,6 +14,8 @@ import { createStaff, signInAgain, type TestStaff } from './helpers';
 
 /** Platform-level tables: no firm_id, and no access for app_tenant. */
 const PLATFORM_TABLES = ['platform_operators', 'court_roll_documents', 'court_roll_entries'];
+/** Platform-level tables requests may read but never change. */
+const PLATFORM_READ_TABLES = ['subscription_plans'];
 
 const HOST_A = 'portal.alpha-law.test';
 const HOST_B = 'portal.beta-law.test';
@@ -393,6 +395,13 @@ describe('the database enforces isolation (row-level security)', () => {
     expect(tables.length).toBeGreaterThan(10);
     for (const table of tables) {
       if (table.name === 'firms') {
+        continue;
+      }
+      if (PLATFORM_READ_TABLES.includes(table.name)) {
+        const privileges = (await rootDb().execute(
+          sql`select has_table_privilege('app_tenant', ${table.name}, 'select') as read, has_table_privilege('app_tenant', ${table.name}, 'insert, update, delete') as write`,
+        )) as { rows: Array<{ read: boolean; write: boolean }> };
+        expect(privileges.rows[0], table.name).toEqual({ read: true, write: false });
         continue;
       }
       // Platform tables carry no firm data, and requests can't touch them.

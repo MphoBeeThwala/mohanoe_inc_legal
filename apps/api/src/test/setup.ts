@@ -25,6 +25,8 @@ if (testDatabaseUrl) {
 }
 // Many sign-ins come from one address in tests.
 process.env.AUTH_RATE_LIMIT_MAX = '10000';
+// Test files sign in many staff; seat limits are tested in subscription.test.ts.
+process.env.SUBSCRIPTION_TRIAL_SEATS ??= '1000';
 process.env.RATE_LIMIT_MAX = '100000';
 delete process.env.OIDC_ISSUER;
 delete process.env.SMTP_URL;

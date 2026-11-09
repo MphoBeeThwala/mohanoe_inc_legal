@@ -71,6 +71,14 @@ function validateConfig(env: NodeJS.ProcessEnv = process.env): string[] {
   if (env.OBJECT_STORE && !['filesystem', 'azure-blob'].includes(env.OBJECT_STORE)) {
     problems.push('OBJECT_STORE must be filesystem or azure-blob');
   }
+  const payfast = ['PAYFAST_MERCHANT_ID', 'PAYFAST_MERCHANT_KEY', 'PAYFAST_PASSPHRASE'].filter(
+    (name) => String(env[name] || '').trim(),
+  );
+  if (payfast.length > 0 && payfast.length < 3) {
+    problems.push(
+      'PayFast needs PAYFAST_MERCHANT_ID, PAYFAST_MERCHANT_KEY and PAYFAST_PASSPHRASE together',
+    );
+  }
   if (String(env.SESSION_COOKIE_SECURE || '').toLowerCase() === 'false') {
     problems.push('SESSION_COOKIE_SECURE cannot be false in production');
   }
@@ -87,6 +95,11 @@ function configWarnings(env: NodeJS.ProcessEnv = process.env): string[] {
     warnings.push(
       'SMTP_URL is not set: invite and reset links are shown to administrators but not emailed',
     );
+  }
+  if (!String(env.PAYFAST_MERCHANT_ID || '').trim()) {
+    warnings.push('PayFast is not configured: firms cannot subscribe online');
+  } else if (String(env.PAYFAST_SANDBOX || '').toLowerCase() === 'true') {
+    warnings.push('PAYFAST_SANDBOX=true: subscription payments go to the PayFast sandbox');
   }
   if ((env.KEY_PROVIDER || 'local') === 'local') {
     warnings.push(
