@@ -124,7 +124,7 @@ Environment setup:
 - [x] One versioned migration history (Drizzle) replacing the hand-run SQL files
 - [x] Remove all in-memory fallbacks; zod request validation (config validated by `config/env.ts`)
 - [x] Indexes and bounded queries; no whole-table reads (cursor pagination for large lists still to do)
-- [ ] Per-firm sequences for case, client and invoice numbers (gap-free invoices) — per-firm atomic counters done for case numbers and client labels; gap-free invoice numbering with epic 7
+- [x] Per-firm sequences for case, client and invoice numbers (gap-free invoices): per-firm atomic counters; invoice numbers are taken when issuing, in the same transaction
 - [x] Isolation tests across every endpoint (`tenancy.test.ts`, plus a schema guard that fails if a table lacks `firm_id` or RLS)
 
 ### 5.3 Identity and access
@@ -146,7 +146,7 @@ Environment setup:
 - [x] Clients (individuals and entities) and matters, with conflict-of-interest checks (encrypted party register, blind-index search, conflict register with decisions and waivers)
 - [x] FICA onboarding (KYC documents, risk rating, verification status, review dates, optional enforcement before new matters)
 - [x] Time recording: timer, manual entries, 6-minute units, fee-earner and matter rates, billable/non-billable, WIP
-- [ ] Billing from time + disbursements, 15% VAT, branded PDFs, email, payments, statements, aging
+- [x] Billing from time + disbursements, 15% VAT, branded PDFs, email, payments, statements, aging
 - [ ] Calendar: court dates, deadlines, prescription reminders, email notifications
 - [ ] Intake → consent → de-identified triage → matter
 

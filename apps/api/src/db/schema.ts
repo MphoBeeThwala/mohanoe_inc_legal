@@ -50,6 +50,20 @@ export interface FirmBranding {
   accentColor?: string;
 }
 
+/** What a firm prints on its invoices and statements. */
+export interface FirmBillingSettings {
+  /** VAT vendor: charge VAT and issue tax invoices (default true). */
+  vatRegistered?: boolean;
+  /** Days from issue to due date (default 30). */
+  paymentTermsDays?: number;
+  /** Physical / postal address (required on a tax invoice). */
+  address?: string;
+  /** Business account for payments (never a trust account number in emails). */
+  bankDetails?: string;
+  /** Short note at the foot of every invoice. */
+  invoiceFooter?: string;
+}
+
 /** A law firm licensed to use the platform (a tenant). Platform-level table. */
 export const firms = pgTable(
   'firms',
@@ -83,6 +97,7 @@ export const firms = pgTable(
     ssoEnforced: boolean('sso_enforced').notNull().default(false),
     /** New matters only for FICA-verified clients (FIC Act customer due diligence). */
     ficaEnforced: boolean('fica_enforced').notNull().default(false),
+    billingSettings: jsonb('billing_settings').$type<FirmBillingSettings>().notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -736,11 +751,34 @@ export const documents = pgTable(
 
 // ---------------------------------------------------------------- billing
 
+/** Line items of invoices created before epic 7 (kept for reading). */
 export interface StoredLineItem {
   description: string;
   quantity: number;
   /** Unit price in cents. */
   rateCents: number;
+}
+
+/** One line of an invoice (stored encrypted with the subject and notes). */
+export interface InvoiceLineRecord {
+  kind: 'fee' | 'disbursement' | 'other';
+  description: string;
+  /** Hours for fees; a count otherwise. */
+  quantity: number;
+  unitCents: number;
+  amountCents: number;
+  vatable: boolean;
+  workDate?: string;
+  feeEarner?: string;
+  timeEntryId?: string;
+  disbursementId?: string;
+}
+
+/** The encrypted part of an invoice: everything that may name people. */
+export interface InvoiceContent {
+  subject: string;
+  notes?: string;
+  lines: InvoiceLineRecord[];
 }
 
 export const invoices = pgTable(
@@ -753,17 +791,30 @@ export const invoices = pgTable(
       .references(() => cases.id, { onDelete: 'cascade' }),
     caseNumber: text('case_number').notNull(),
     clientLabel: text('client_label').notNull(),
-    invoiceNumber: text('invoice_number').notNull(),
-    subject: text('subject').notNull(),
+    /** Gap-free per firm, given when the invoice is issued (null for drafts). */
+    invoiceNumber: text('invoice_number'),
+    /** Pre-epic-7 invoices only; newer ones keep the subject in contentEncrypted. */
+    subject: text('subject').notNull().default(''),
     currency: text('currency').notNull().default('ZAR'),
-    status: text('status').notNull().default('issued'),
+    /** 'draft' | 'issued' | 'partially_paid' | 'paid' | 'void' */
+    status: text('status').notNull().default('draft'),
+    /** Pre-epic-7 invoices only. */
     lineItems: jsonb('line_items').$type<StoredLineItem[]>().notNull().default([]),
+    /** InvoiceContent, encrypted with privacy.service. */
+    contentEncrypted: text('content_encrypted'),
+    /** The client billed. */
+    clientPartyId: uuid('client_party_id').references(() => parties.id, { onDelete: 'set null' }),
+    /** VAT rate in basis points (1500 = 15%) used for this invoice. */
+    vatRateBp: integer('vat_rate_bp'),
     subtotalCents: bigint('subtotal_cents', { mode: 'number' }).notNull().default(0),
     vatCents: bigint('vat_cents', { mode: 'number' }).notNull().default(0),
     totalCents: bigint('total_cents', { mode: 'number' }).notNull().default(0),
-    issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
+    paidCents: bigint('paid_cents', { mode: 'number' }).notNull().default(0),
+    issuedAt: timestamp('issued_at', { withTimezone: true }),
     dueAt: timestamp('due_at', { withTimezone: true }),
     paidAt: timestamp('paid_at', { withTimezone: true }),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
     createdBy: text('created_by').notNull(),
     ...updatable,
   },
@@ -798,6 +849,65 @@ export const ledgerEntries = pgTable(
     matterPolicy('billing_ledger'),
   ],
 );
+
+/** Costs paid on a client's behalf (sheriff, counsel, court fees), billed at cost. */
+export const disbursements = pgTable(
+  'disbursements',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id, { onDelete: 'cascade' }),
+    incurredOn: date('incurred_on').notNull(),
+    descriptionEncrypted: text('description_encrypted').notNull(),
+    /** Excluding VAT. */
+    amountCents: bigint('amount_cents', { mode: 'number' }).notNull(),
+    /** Court fees and other pass-through costs carry no VAT. */
+    vatable: boolean('vatable').notNull().default(true),
+    /** 'unbilled' | 'billed' | 'written_off' */
+    status: text('status').notNull().default('unbilled'),
+    invoiceId: uuid('invoice_id').references(() => invoices.id, { onDelete: 'set null' }),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    ...updatable,
+  },
+  (t) => [
+    index('disbursements_case_idx').on(t.caseId),
+    tenantPolicy('disbursements'),
+    matterPolicy('disbursements'),
+  ],
+);
+
+/** A payment received against an invoice. */
+export const invoicePayments = pgTable(
+  'invoice_payments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    invoiceId: uuid('invoice_id')
+      .notNull()
+      .references(() => invoices.id, { onDelete: 'cascade' }),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id, { onDelete: 'cascade' }),
+    amountCents: bigint('amount_cents', { mode: 'number' }).notNull(),
+    receivedOn: date('received_on').notNull(),
+    /** 'eft' | 'card' | 'cash' | 'trust_transfer' | 'other' */
+    method: text('method').notNull(),
+    /** Bank or receipt reference (not a person's name). */
+    reference: text('reference').notNull().default(''),
+    recordedBy: uuid('recorded_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('invoice_payments_invoice_idx').on(t.invoiceId),
+    tenantPolicy('invoice_payments'),
+    matterPolicy('invoice_payments'),
+  ],
+);
+
+export type DisbursementRow = typeof disbursements.$inferSelect;
+export type InvoicePaymentRow = typeof invoicePayments.$inferSelect;
 
 // ---------------------------------------------------------------- time recording
 
