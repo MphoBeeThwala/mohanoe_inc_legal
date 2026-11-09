@@ -81,6 +81,8 @@ test('a firm row drives its public branding, with safe fallbacks', () => {
     ssoTenantId: null,
     ssoDomains: [],
     ssoEnforced: false,
+    ficaEnforced: false,
+    billingSettings: {},
     createdAt: new Date(),
     updatedAt: new Date(),
   };

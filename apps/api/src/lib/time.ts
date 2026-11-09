@@ -18,3 +18,16 @@ export function toDateOrNull(value: string | null | undefined): Date | null {
   }
   return parsed;
 }
+
+/** The firm's time zone for calendar dates (South Africa has one, with no DST). */
+export const FIRM_TIME_ZONE = 'Africa/Johannesburg';
+
+/** Today's calendar date (YYYY-MM-DD) in South Africa. */
+export function localDate(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: FIRM_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}

@@ -1,4 +1,4 @@
-// Outgoing email (invites, password resets).
+// Outgoing email (invites, password resets, invoices).
 //
 // SMTP_URL configures a real transport (Azure Communication Services Email
 // exposes SMTP). Without it, mail is not sent: callers fall back to showing
@@ -7,10 +7,17 @@
 // personal information.
 import nodemailer, { type Transporter } from 'nodemailer';
 
+export interface MailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType: string;
+}
+
 export interface MailMessage {
   to: string;
   subject: string;
   text: string;
+  attachments?: MailAttachment[];
 }
 
 const outbox: MailMessage[] = [];
@@ -43,6 +50,7 @@ export async function sendMail(message: MailMessage): Promise<boolean> {
     to: message.to,
     subject: message.subject,
     text: message.text,
+    attachments: message.attachments,
   });
   return true;
 }

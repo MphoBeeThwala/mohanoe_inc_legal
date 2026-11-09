@@ -43,6 +43,34 @@
       "when": 1794231651591,
       "tag": "0005_firm_sso",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794237246965,
+      "tag": "0006_clients_and_conflicts",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794238087516,
+      "tag": "0007_fica",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794238701358,
+      "tag": "0008_time_recording",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794244542650,
+      "tag": "0009_billing",
+      "breakpoints": true
     }
   ]
 }

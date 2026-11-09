@@ -56,8 +56,13 @@ test('a secretary sees documents and calendar, not billing, and can draft docume
 test('a bookkeeper starts on billing and is not offered documents', async () => {
   const fetched = await renderHub('bookkeeper');
   expect(screen.queryByRole('button', { name: 'Documents' })).not.toBeInTheDocument();
-  expect(await screen.findByRole('button', { name: 'Issue invoice' })).toBeInTheDocument();
-  expect(fetched).toContain('/billing/invoices');
+  expect(
+    await screen.findByRole('button', { name: 'Draft from unbilled work' }),
+  ).toBeInTheDocument();
+  // The billing panel loads its own lists once it is shown.
+  const later = vi.mocked(api.get).mock.calls.map(([path]) => path);
+  expect(later).toContain('/billing/invoices');
+  expect(later).toContain('/billing/aging');
   expect(fetched).not.toContain('/documents');
 });
 
@@ -75,7 +80,7 @@ test('the case workspace hides its edit forms without matters.write', async () =
         data: { caseId: 'c1', access: 'firm', members: [], exclusions: [], canManage: false },
       };
     }
-    if (path === '/users/directory') {
+    if (path === '/users/directory' || path.endsWith('/parties')) {
       return { data: [] };
     }
     return {
