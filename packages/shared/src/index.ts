@@ -74,6 +74,7 @@ export type Permission =
   | 'calendar.write'
   | 'billing.read'
   | 'billing.write'
+  | 'billing.void'
   | 'reports.read'
   | 'notifications.read'
   | 'notifications.write'
@@ -88,7 +89,11 @@ export type Permission =
   | 'conflicts.waive'
   | 'fica.read'
   | 'fica.write'
-  | 'fica.verify';
+  | 'fica.verify'
+  | 'time.read'
+  | 'time.record'
+  | 'time.manage'
+  | 'rates.manage';
 
 const FEE_EARNER: readonly Permission[] = [
   'clients.read',
@@ -97,6 +102,8 @@ const FEE_EARNER: readonly Permission[] = [
   'fica.read',
   'fica.write',
   'fica.verify',
+  'time.read',
+  'time.record',
   'intake.read',
   'intake.write',
   'matters.read',
@@ -124,6 +131,11 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'audit.read',
     'users.manage',
     'conflicts.waive',
+    // Corrects or writes off other people's time, and sets hourly rates.
+    'time.manage',
+    'rates.manage',
+    // Voids issued invoices (the number stays used).
+    'billing.void',
   ],
   attorney: FEE_EARNER,
   paralegal: FEE_EARNER,
@@ -147,6 +159,8 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'clients.read',
     'fica.read',
     'matters.read',
+    // Sees recorded time and work in progress, to bill it.
+    'time.read',
     'billing.read',
     'billing.write',
     'reports.read',
@@ -157,6 +171,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
   support: [
     'intake.read',
     'matters.read',
+    'time.read',
     'documents.read',
     'calendar.read',
     'billing.read',
@@ -291,6 +306,8 @@ export interface FirmSettings {
   retentionIsDefault: boolean;
   /** New matters only for FICA-verified clients. */
   ficaEnforced: boolean;
+  /** What invoices and statements show. */
+  billing: BillingSettings;
   /** Microsoft 365 staff sign-in. */
   microsoft: {
     /** The platform's Microsoft 365 app is configured, so firms can turn this on. */
@@ -306,9 +323,19 @@ export interface FirmSettings {
   };
 }
 
+export interface BillingSettings {
+  vatRegistered: boolean;
+  vatNumber: string | null;
+  paymentTermsDays: number;
+  address: string;
+  bankDetails: string;
+  invoiceFooter: string;
+}
+
 export interface FirmSettingsUpdate {
   retentionDays?: number | null;
   ficaEnforced?: boolean;
+  billing?: Partial<BillingSettings>;
   microsoft?: { tenantId: string | null; domains: string[]; enforced: boolean };
 }
 
@@ -793,23 +820,167 @@ export interface InvoiceLineItem {
   rate: number;
 }
 
+export const INVOICE_STATUSES = ['draft', 'issued', 'partially_paid', 'paid', 'void'] as const;
+export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
+
+export interface InvoiceLine {
+  kind: 'fee' | 'disbursement' | 'other';
+  description: string;
+  /** Hours for fees; a count otherwise. */
+  quantity: number;
+  /** Rand per hour or per item. */
+  unitPrice: number;
+  amount: number;
+  vatable: boolean;
+  workDate: Nullable<string>;
+  feeEarner: Nullable<string>;
+  timeEntryId: Nullable<string>;
+  disbursementId: Nullable<string>;
+}
+
+export const PAYMENT_METHODS = ['eft', 'card', 'cash', 'trust_transfer', 'other'] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export interface InvoicePayment {
+  id: string;
+  amount: number;
+  receivedOn: string;
+  method: PaymentMethod;
+  reference: string;
+  createdAt: string;
+}
+
 export interface Invoice {
   id: string;
   caseId: Nullable<string>;
   caseNumber: Nullable<string>;
   clientLabel: Nullable<string>;
-  number: string;
+  clientPartyId: Nullable<string>;
+  /** Given when issued; null for drafts. */
+  number: Nullable<string>;
   subject: string;
+  notes: string;
   currency: string;
-  status: string;
+  status: InvoiceStatus | string;
+  lines: InvoiceLine[];
+  /** Same lines, in the pre-epic-7 shape. */
   lineItems: InvoiceLineItem[];
   subtotal: number;
   vat: number;
+  /** e.g. 0.15 */
+  vatRate: number;
   total: number;
+  paid: number;
+  balance: number;
+  payments: InvoicePayment[];
   issuedAt: Nullable<string>;
   dueAt: Nullable<string>;
   paidAt: Nullable<string>;
+  sentAt: Nullable<string>;
+  voidedAt: Nullable<string>;
   createdAt: string;
+}
+
+export interface InvoiceManualLine {
+  description: string;
+  quantity?: number;
+  /** Rand per item. */
+  rate: number;
+  vatable?: boolean;
+}
+
+/** A draft invoice for one matter: its unbilled time and disbursements, plus any manual lines. */
+export interface InvoiceDraftInput {
+  caseRef: string;
+  subject: string;
+  notes?: string;
+  /** Time to bill: 'all' (default) unbilled billable time on the matter, or ids. */
+  timeEntryIds?: 'all' | string[];
+  /** Disbursements to bill: 'all' (default) or ids. */
+  disbursementIds?: 'all' | string[];
+  lines?: InvoiceManualLine[];
+}
+
+export interface InvoiceDraftUpdate {
+  subject?: string;
+  notes?: string;
+  /** Replaces the manual lines (time and disbursement lines stay). */
+  lines?: InvoiceManualLine[];
+}
+
+export interface PaymentInput {
+  amount: number | string;
+  /** YYYY-MM-DD, defaults to today. */
+  receivedOn?: string;
+  method: PaymentMethod;
+  reference?: string;
+}
+
+export interface Disbursement {
+  id: string;
+  caseId: string;
+  caseNumber: string;
+  incurredOn: string;
+  description: string;
+  /** Excluding VAT. */
+  amount: number;
+  vatable: boolean;
+  status: 'unbilled' | 'billed' | 'written_off';
+  invoiceId: Nullable<string>;
+  createdAt: string;
+}
+
+export interface DisbursementInput {
+  caseRef: string;
+  incurredOn?: string;
+  description: string;
+  amount: number | string;
+  vatable?: boolean;
+}
+
+export interface StatementLine {
+  date: string;
+  kind: 'invoice' | 'payment';
+  reference: string;
+  caseNumber: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+
+/** A client's account: issued invoices and payments, with a running balance. */
+export interface ClientStatement {
+  partyId: string;
+  partyNumber: string;
+  clientName: string;
+  from: Nullable<string>;
+  to: string;
+  openingBalance: number;
+  lines: StatementLine[];
+  closingBalance: number;
+  aging: AgingBuckets;
+}
+
+export interface AgingBuckets {
+  current: number;
+  days30: number;
+  days60: number;
+  days90: number;
+  days120: number;
+  total: number;
+}
+
+export interface AgingRow extends AgingBuckets {
+  clientPartyId: Nullable<string>;
+  clientLabel: string;
+  invoices: number;
+}
+
+/** Outstanding issued invoices by days past due. */
+export interface AgingReport {
+  asOf: string;
+  totals: AgingBuckets;
+  clients: AgingRow[];
 }
 
 export interface LedgerEntry {
@@ -828,6 +999,13 @@ export interface LedgerEntry {
 export interface BillingSummary {
   invoices: number;
   outstanding: number;
+  /** Issued invoices past their due date (rand outstanding). */
+  overdue: number;
+  drafts: number;
+  /** Unbilled billable time (rand). */
+  wip: number;
+  /** Unbilled disbursements (rand, excluding VAT). */
+  unbilledDisbursements: number;
   trustBalance: number;
   operatingBalance: number;
   recentInvoices: Invoice[];
@@ -947,4 +1125,148 @@ export interface ComplianceSummary {
   fulfilledRequests: number;
   eligibleForRetention: number;
   latestRequest: ComplianceRequest | null;
+}
+
+// ---------------------------------------------------------------- time recording
+
+/** Minutes in one billing unit: time is recorded in tenths of an hour. */
+export const MINUTES_PER_UNIT = 6;
+
+/** Most time one entry (or one person's day) can hold: 24 hours. */
+export const MAX_UNITS_PER_DAY = 240;
+
+export const TIME_ACTIVITIES = [
+  'consultation',
+  'drafting',
+  'correspondence',
+  'calls',
+  'research',
+  'court',
+  'travel',
+  'admin',
+  'other',
+] as const;
+export type TimeActivity = (typeof TIME_ACTIVITIES)[number];
+
+export const TIME_ACTIVITY_LABELS: Readonly<Record<TimeActivity, string>> = {
+  consultation: 'Consultation',
+  drafting: 'Drafting',
+  correspondence: 'Correspondence',
+  calls: 'Telephone calls',
+  research: 'Research',
+  court: 'Court attendance',
+  travel: 'Travel',
+  admin: 'Administration',
+  other: 'Other',
+};
+
+export type TimeEntryStatus = 'unbilled' | 'billed' | 'written_off';
+
+export interface TimeEntry {
+  id: string;
+  caseId: string;
+  caseNumber: string;
+  userId: string;
+  feeEarnerName: string;
+  /** YYYY-MM-DD */
+  workDate: string;
+  /** 6-minute units. */
+  units: number;
+  minutes: number;
+  billable: boolean;
+  /** Hourly rate in rands, fixed when the time was recorded. */
+  rate: number;
+  /** Value in rands (0 for non-billable time). */
+  amount: number;
+  activity: TimeActivity;
+  description: string;
+  source: 'manual' | 'timer';
+  status: TimeEntryStatus;
+  invoiceId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TimeEntryInput {
+  /** Matter id or number. */
+  caseRef: string;
+  /** Defaults to the signed-in fee earner (another person needs time.manage). */
+  userId?: string;
+  /** YYYY-MM-DD, defaults to today; not in the future. */
+  workDate?: string;
+  /** Give minutes (rounded up to whole 6-minute units) or units. */
+  minutes?: number;
+  units?: number;
+  billable?: boolean;
+  activity?: TimeActivity;
+  description: string;
+}
+
+export type TimeEntryUpdate = Partial<Omit<TimeEntryInput, 'caseRef' | 'userId'>>;
+
+export interface TimerState {
+  caseId: string;
+  caseNumber: string;
+  activity: TimeActivity;
+  billable: boolean;
+  description: string;
+  running: boolean;
+  /** Seconds recorded so far, as of the response. */
+  elapsedSeconds: number;
+  /** Units the time would be recorded as if stopped now. */
+  units: number;
+}
+
+export interface TimerStartInput {
+  caseRef: string;
+  activity?: TimeActivity;
+  billable?: boolean;
+  description?: string;
+}
+
+export interface TimerStopInput {
+  activity?: TimeActivity;
+  billable?: boolean;
+  description?: string;
+  workDate?: string;
+}
+
+export interface StaffRate {
+  userId: string;
+  fullName: string;
+  role: UserRole;
+  /** Rands per hour; null when not set. */
+  hourlyRate: number | null;
+}
+
+export interface MatterRate {
+  /** Null: the rate for everyone on the matter. */
+  userId: string | null;
+  fullName: string | null;
+  hourlyRate: number;
+}
+
+export interface WipMatter {
+  caseId: string;
+  caseNumber: string;
+  title: string | null;
+  units: number;
+  value: number;
+  entries: number;
+  oldestWorkDate: string;
+}
+
+export interface WipFeeEarner {
+  userId: string;
+  fullName: string;
+  units: number;
+  value: number;
+}
+
+/** Unbilled billable time on the matters the caller can see. */
+export interface WipSummary {
+  units: number;
+  value: number;
+  matters: WipMatter[];
+  feeEarners: WipFeeEarner[];
 }

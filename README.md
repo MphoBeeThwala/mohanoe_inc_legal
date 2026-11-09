@@ -123,6 +123,28 @@ When the firms table is empty, the server creates a `default` firm from these va
 - **Verification** (fee earners; secretaries collect documents but can't verify) needs every required document. It sets the next review: 12, 24 or 36 months for high, medium or low risk. Raising the risk, or removing a required document, reopens verification.
 - **Firm switch:** administrators can require verified FICA before any new matter (Account & team → Records). Overdue reviews then block new matters too.
 
+## Time recording
+- **Units:** time is recorded in 6-minute units (0.1 h), rounded up. A fee earner can't record more than 24 hours on one day, across all matters, or time for a future date. Closed matters take no new time.
+- **Recording:** use **Time** to record time manually (minutes, activity, billable or not, narrative), or start a timer on a matter, pause and resume it, and stop it to record the time. Each person has one timer, which survives sign-out.
+- **Rates:** administrators set each fee earner's standard hourly rate, plus agreed rates on a matter for one fee earner or for everyone on it (`PUT /api/time/matters/:caseId/rates`). The order of precedence is the fee earner's matter rate, then the matter rate, then the standard rate. An entry keeps the rate it was recorded at. Billable time needs a rate.
+- **Work in progress:** unbilled billable time, by matter and by fee earner (fee earners, bookkeepers and administrators).
+- **Changes:** people change or delete their own unbilled time. Administrators can also change other people's time and write it off. Billed and written-off time doesn't change.
+- **Encryption and audit:** narratives can name people, so they are encrypted with the firm's key. Audit rows record only hours and amounts.
+
+## Billing
+- **Firm details first:** administrators enter the firm's invoice details under Operations → Billing → Invoice details: VAT vendor or not, VAT number, address, business bank account, payment terms and footer. Invoices can't be issued without an address, and a VAT vendor also needs its VAT number.
+- **Disbursements** (sheriff, counsel, deeds office and similar) are recorded on a matter at cost, with or without VAT.
+- **Invoices:**
+  - **Draft:** a draft for a matter takes its unbilled billable time and disbursements, plus any manual lines. The draft holds them, so other drafts can't take them and the time can't change until the draft is issued or deleted.
+  - **Issue:** issuing gives the next number (`INV-000001`, per firm). The number is taken in the same database transaction, so numbers are sequential with no gaps. Issuing also sets the due date and marks the time and disbursements billed.
+  - **Void:** an administrator can void an unpaid invoice. It keeps its number and its time returns to work in progress.
+- **VAT:** VAT (`VAT_RATE`, default 15%) applies to fees and to vatable disbursements. A VAT vendor's PDF is headed *Tax invoice* and shows the details the VAT Act requires.
+- **Payments:** payments (EFT, card, cash, transfer from trust, other) can be part or full, and can't exceed what is owing. Administrators can reverse a payment recorded in error.
+- **Documents and email:** invoices and client statements are branded PDFs. **Email** sends the invoice PDF to the client's address (`SMTP_URL` must be set).
+- **Statements and aging:** a client statement has a running balance and aging (current, 30, 60, 90 and 120+ days past due). The aging report covers all outstanding invoices, by client.
+- **Encryption:** subjects, notes and line descriptions can name people, so they are encrypted with the firm's key. Amounts, numbers and dates stay readable for reports.
+- **Not covered:** trust accounting under the Legal Practice Act (section 86) is not built yet. The trust/operating ledger is a simple record.
+
 ## Encryption and records
 - **Per-firm envelope encryption.** Each firm has its own random data key (and a separate blind-index key), stored only wrapped by a key-encryption key: Azure Key Vault in production (`KEY_PROVIDER=azure-keyvault`, `AZURE_KEY_VAULT_KEY_ID`, managed identity), or `INTAKE_ENCRYPTION_KEY` locally. Ciphertext (`v2:`) is bound to its firm, so it can't be decrypted in another firm's rows. Data written before this (`v1:`) still reads; move it with `keys reencrypt`.
 - **Key operations** (`npm run ops -w apps/api -- …`, same environment as the server):
