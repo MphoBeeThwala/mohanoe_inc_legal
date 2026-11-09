@@ -10,6 +10,7 @@
 - Every request runs inside a transaction as the `app_tenant` role, with `app.firm_id` set; row-level security is forced on every tenant table, so a missing or wrong firm returns no rows.
 - Migration `0001_multi_tenancy` creates `app_tenant` (NOLOGIN) and grants it to the migrating user. On a shared server where `app_tenant` already exists and the owner cannot be granted it, the migration stops with the exact command to run, e.g. `GRANT app_tenant TO <owner>;` (run once by an administrator, then redeploy).
 - Never point the app at a role with `BYPASSRLS`, and don't grant `app_tenant` extra privileges by hand.
+- Matter-level access is also enforced in the database: migration `0002` adds `app_case_visible()` and restrictive `*_matter_access` policies for `app_tenant`. Requests record the signed-in user in `app.user_id` / `app.user_role`; platform jobs and compliance exports use `app.principal = 'system'`.
 - Upgrading a single-firm database moves all existing rows into a firm with slug `default`; set `DEFAULT_FIRM_SLUG=default` (or give the firm a domain) so the existing URL keeps working.
 
 ## Firm onboarding
@@ -33,10 +34,14 @@
   - compliance export still returns a complete subject bundle
   - `GET /api/audit/verify` (admin) returns `valid: true` for each firm (each firm has its own chain)
 
-## Admin Provisioning
-- **Current demo phase:** `SEED_ADMIN_ON_STARTUP` defaults to `false`. Set `ALLOW_PUBLIC_REGISTRATION=true` to let the first presenter create a staff account from the UI, then disable public registration before go-live.
-- **Later stage:** set `SEED_ADMIN_ON_STARTUP=true` with `DEFAULT_ADMIN_EMAIL` and `DEFAULT_ADMIN_PASSWORD` to auto-provision the initial admin on server boot.
-- Do not leave public registration enabled in production after staff accounts exist.
+## Staff access
+- There is no public registration and no admin seeding. The first administrator of a firm is invited with the CLI (`npm run firm -w apps/api -- invite --slug <slug> --email <email> --name "<name>"`); they invite everyone else from **Account & team**.
+- Every password account uses an authenticator app. Lost phone: the user signs in with a recovery code, or an administrator uses **Reset two-factor** (they set it up again at next sign-in).
+- Locked out (5 failures): wait 15 minutes, or an administrator issues **Reset password** (the link also lifts the lock).
+- Leavers: **Deactivate** signs them out everywhere at once.
+- Set `SMTP_URL` and `MAIL_FROM` (Azure Communication Services Email supports SMTP) so invites and self-service resets are emailed; without it, links are shown to the administrator only.
+- Entra External ID: create an app registration in the External ID tenant, enable MFA in the user flow, add `https://<firm address>/api/auth/oidc/callback` for each firm, then set `OIDC_ISSUER`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET`. Production refuses an `http://` issuer.
+- Existing password accounts from before this release set up an authenticator at their next sign-in.
 
 ## Deploy Smoke Test
 - After Render deploys, run:

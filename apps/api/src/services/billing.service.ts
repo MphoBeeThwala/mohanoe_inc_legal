@@ -80,7 +80,7 @@ export async function createInvoice(input: unknown, actor: Actor = {}): Promise<
   const invoice = parse(invoiceSchema, input);
   const caseRecord = await intakeService.findCaseByRef(invoice.caseRef);
   if (!caseRecord) {
-    throw httpError('caseId, subject, and lineItems are required', 400);
+    throw httpError('Case not found', 404);
   }
 
   const lineItems: StoredLineItem[] = invoice.lineItems.map((item) => ({
@@ -137,7 +137,7 @@ export async function recordLedgerEntry(input: unknown, actor: Actor = {}): Prom
   const entry = parse(ledgerEntrySchema, input);
   const caseRecord = await intakeService.findCaseByRef(entry.caseRef);
   if (!caseRecord) {
-    throw httpError('caseId, entryType, account, and amount are required', 400);
+    throw httpError('Case not found', 404);
   }
 
   const [saved] = await db()

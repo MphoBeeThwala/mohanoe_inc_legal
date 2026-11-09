@@ -35,7 +35,7 @@ async function getSubmission(req: Request, res: Response) {
 
 async function assessSubmission(req: Request, res: Response) {
   try {
-    const assessment = await intakeService.assessSubmission(String(req.params.id));
+    const assessment = await intakeService.assessSubmission(String(req.params.id), req.auth);
     res.status(200).json(assessment);
   } catch (error) {
     sendError(res, error);

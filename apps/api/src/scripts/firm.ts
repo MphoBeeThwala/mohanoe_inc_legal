@@ -6,13 +6,19 @@
 //       [--vat 4123456789] [--plan pilot] [--primary-color #1b7a58] \
 //       [--admin-email partner@nkosilaw.co.za --admin-name "Thandi Nkosi"]
 //
-// Uses DATABASE_URL (or local PGlite) like the server. Run `npm run build` first.
-// With --admin-email, prints a one-time password for the firm's first admin.
+//   npm run firm -w apps/api -- invite --slug nkosi --email it@nkosilaw.co.za \
+//       --name "IT Admin"
+//
+// Uses DATABASE_URL (or local PGlite) like the server, with the same secrets.
+// Run `npm run build` first. --admin-email / invite print an invitation link
+// for an administrator (also emailed when SMTP_URL is set); the admin sets
+// their own password and authenticator app when they accept it.
 
 import '../load-env';
 import { parseArgs } from 'node:util';
 import { closeDb, initDb } from '../db/client';
-import { createFirm, createFirmAdmin, listFirms } from '../services/firm.service';
+import { createFirm, findFirmBySlug, inviteFirmAdmin, listFirms } from '../services/firm.service';
+import type { FirmRow } from '../db/schema';
 import { describeError } from '../lib/http';
 
 async function main(): Promise<void> {
@@ -72,18 +78,45 @@ async function main(): Promise<void> {
     console.log(`Created firm ${firm.slug} (${firm.id}), case prefix ${firm.casePrefix}.`);
 
     if (values['admin-email']) {
-      const admin = await createFirmAdmin(firm, {
-        email: values['admin-email'],
-        fullName: values['admin-name'] || 'Firm Administrator',
-      });
-      console.log(`Admin: ${admin.email}`);
-      console.log(`One-time password: ${admin.password}`);
-      console.log('Share it securely; the admin should change it after first sign-in.');
+      await printInvite(firm, values['admin-email'], values['admin-name']);
     }
     return;
   }
 
-  throw new Error('Usage: firm list | firm create --slug <slug> --name <legal name> [options]');
+  if (command === 'invite') {
+    const { values } = parseArgs({
+      args: rest,
+      options: {
+        slug: { type: 'string' },
+        email: { type: 'string' },
+        name: { type: 'string' },
+      },
+    });
+    if (!values.slug || !values.email) {
+      throw new Error('invite needs --slug and --email');
+    }
+    const firm = await findFirmBySlug(values.slug);
+    if (!firm) {
+      throw new Error(`No firm with slug ${values.slug}`);
+    }
+    await printInvite(firm, values.email, values.name);
+    return;
+  }
+
+  throw new Error(
+    'Usage: firm list | firm create --slug <slug> --name <legal name> [options] | firm invite --slug <slug> --email <email> [--name <name>]',
+  );
+}
+
+async function printInvite(firm: FirmRow, email: string, name?: string): Promise<void> {
+  const invite = await inviteFirmAdmin(firm, {
+    email,
+    fullName: name || 'Firm Administrator',
+  });
+  console.log(`Administrator invited: ${invite.email}`);
+  console.log(`Invitation link (single use${invite.emailed ? ', also emailed' : ''}):`);
+  console.log(invite.url);
+  console.log('Share it securely. The admin sets a password and an authenticator app.');
 }
 
 main()

@@ -10,6 +10,7 @@ import { withTenant } from '../db/tenant';
 import { cases, firms, type FirmRow } from '../db/schema';
 import { clearFirmCache, createFirm } from '../services/firm.service';
 import * as auditService from '../services/audit.service';
+import { createStaff, signInAgain, type TestStaff } from './helpers';
 
 const HOST_A = 'portal.alpha-law.test';
 const HOST_B = 'portal.beta-law.test';
@@ -39,15 +40,7 @@ const asA = (method: 'get' | 'post', path: string) =>
 const asB = (method: 'get' | 'post', path: string) =>
   request(app)[method](path).set('Host', HOST_B).set('authorization', `Bearer ${tokenB}`);
 
-async function registerAdmin(host: string, email: string): Promise<string> {
-  const res = await request(app)
-    .post('/api/auth/register')
-    .set('Host', host)
-    .send({ fullName: 'Managing Partner', email, password: 'CorrectHorse123' });
-  expect(res.status).toBe(201);
-  expect(res.body.user.role).toBe('admin');
-  return res.body.token;
-}
+let staffB: TestStaff;
 
 beforeAll(async () => {
   firmA = await createFirm({
@@ -63,8 +56,10 @@ beforeAll(async () => {
     domains: [HOST_B],
   });
   // The same person may work at both firms: emails are unique per firm.
-  tokenA = await registerAdmin(HOST_A, 'same.person@example.com');
-  tokenB = await registerAdmin(HOST_B, 'same.person@example.com');
+  const email = 'same.person@example.com';
+  tokenA = (await createStaff({ firm: firmA, host: HOST_A, email, role: 'admin' })).token;
+  staffB = await createStaff({ firm: firmB, host: HOST_B, email, role: 'admin' });
+  tokenB = staffB.token;
 
   const created = await asA('post', '/api/intake/submissions').send({
     fullName: 'Client Of Alpha',
@@ -247,17 +242,32 @@ describe('sessions are bound to their firm', () => {
     expect(res.status).toBe(401);
   });
 
-  test('logging in on firm B with the same email gets firm B’s account', async () => {
-    const res = await request(app)
-      .post('/api/auth/login')
+  test('signing in on firm B with the same email gets firm B’s account', async () => {
+    const token = await signInAgain(staffB);
+    const onB = await request(app)
+      .get('/api/auth/me')
       .set('Host', HOST_B)
-      .send({ email: 'same.person@example.com', password: 'CorrectHorse123' });
-    expect(res.status).toBe(200);
-    const me = await request(app)
+      .set('authorization', `Bearer ${token}`);
+    expect(onB.status).toBe(200);
+    const onA = await request(app)
       .get('/api/cases')
       .set('Host', HOST_A)
-      .set('authorization', `Bearer ${res.body.token}`);
-    expect(me.status).toBe(401);
+      .set('authorization', `Bearer ${token}`);
+    expect(onA.status).toBe(401);
+  });
+
+  test('invites and reset links use the firm’s own address, not the request’s Host', async () => {
+    const invite = await request(app)
+      .post('/api/users/invites')
+      .set('Host', HOST_B)
+      .set('authorization', `Bearer ${tokenB}`)
+      .send({ email: 'joiner@example.com', fullName: 'Joiner', role: 'attorney' });
+    expect(invite.body.url).toMatch(new RegExp(`^https://${HOST_B.replace(/\./g, '\\.')}/invite/`));
+    // The invite belongs to firm B only.
+    const token = invite.body.url.split('/invite/')[1];
+    expect((await request(app).get(`/api/auth/invites/${token}`).set('Host', HOST_A)).status).toBe(
+      404,
+    );
   });
 });
 
@@ -295,24 +305,29 @@ describe('the database enforces isolation (row-level security)', () => {
   });
 
   test('a raw query for firm A’s rows from firm B returns nothing', async () => {
-    const rows = await withTenant(firmB, () =>
-      db().select().from(cases).where(eq(cases.firmId, firmA.id)),
+    const rows = await withTenant(
+      firmB,
+      () => db().select().from(cases).where(eq(cases.firmId, firmA.id)),
+      { system: true },
     );
     expect(rows).toHaveLength(0);
   });
 
   test('writing a row into another firm is rejected by the database', async () => {
     await expect(
-      withTenant(firmB, () =>
-        db().insert(cases).values({
-          firmId: firmA.id,
-          intakeSubmissionId: a.submissionId,
-          caseNumber: 'BET-HACK',
-          clientLabel: 'x',
-          practiceArea: 'x',
-          urgency: 'low',
-          nextAction: 'x',
-        }),
+      withTenant(
+        firmB,
+        () =>
+          db().insert(cases).values({
+            firmId: firmA.id,
+            intakeSubmissionId: a.submissionId,
+            caseNumber: 'BET-HACK',
+            clientLabel: 'x',
+            practiceArea: 'x',
+            urgency: 'low',
+            nextAction: 'x',
+          }),
+        { system: true },
       ),
     ).rejects.toSatisfy((error: unknown) => {
       const err = error as { message?: string; cause?: { message?: string } };
@@ -321,8 +336,10 @@ describe('the database enforces isolation (row-level security)', () => {
   });
 
   test('moving a row to another firm is rejected', async () => {
-    const changed = await withTenant(firmB, () =>
-      db().update(cases).set({ firmId: firmA.id }).where(eq(cases.id, a.caseId)).returning(),
+    const changed = await withTenant(
+      firmB,
+      () => db().update(cases).set({ firmId: firmA.id }).where(eq(cases.id, a.caseId)).returning(),
+      { system: true },
     );
     expect(changed).toHaveLength(0);
   });
@@ -335,7 +352,7 @@ describe('the database enforces isolation (row-level security)', () => {
     expect(chainA.count).toBeGreaterThan(chainB.count);
   });
 
-  test('every table except firms has firm_id and forced row-level security', async () => {
+  test('every table except firms has firm_id, forced RLS and, if it belongs to a matter, matter access', async () => {
     const result = (await rootDb().execute(sql`
       select c.relname as name,
              c.relrowsecurity as rls,
@@ -346,7 +363,18 @@ describe('the database enforces isolation (row-level security)', () => {
                  and col.column_name = 'firm_id'
              ) as has_firm_id,
              (select count(*)::int from pg_policies p
-               where p.schemaname = 'public' and p.tablename = c.relname) as policies
+               where p.schemaname = 'public' and p.tablename = c.relname
+                 and p.policyname = c.relname || '_tenant_isolation') as policies,
+             exists (
+               select 1 from information_schema.columns col
+               where col.table_schema = 'public' and col.table_name = c.relname
+                 and col.column_name = 'case_id'
+             ) as has_case_id,
+             exists (
+               select 1 from pg_policies p
+               where p.schemaname = 'public' and p.tablename = c.relname
+                 and p.policyname = c.relname || '_matter_access' and p.permissive = 'RESTRICTIVE'
+             ) as matter_policy
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and c.relkind = 'r'
       order by c.relname`)) as { rows: unknown[] };
@@ -356,6 +384,8 @@ describe('the database enforces isolation (row-level security)', () => {
       forced: boolean;
       has_firm_id: boolean;
       policies: number;
+      has_case_id: boolean;
+      matter_policy: boolean;
     }>;
     expect(tables.length).toBeGreaterThan(10);
     for (const table of tables) {
@@ -368,6 +398,10 @@ describe('the database enforces isolation (row-level security)', () => {
         has_firm_id: true,
         policies: 1,
       });
+      // Rows that belong to a matter are hidden with it (matter-level access).
+      if (table.has_case_id && !['case_members', 'case_exclusions'].includes(table.name)) {
+        expect(table.matter_policy, `${table.name} needs a _matter_access policy`).toBe(true);
+      }
     }
   });
 });

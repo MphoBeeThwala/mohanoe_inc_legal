@@ -13,6 +13,7 @@ import { currentFirm } from '../db/tenant-context';
 import { nextValue } from '../db/sequences';
 import {
   assessments,
+  caseMembers,
   cases,
   submissions,
   type AssessmentRow,
@@ -21,7 +22,7 @@ import {
 } from '../db/schema';
 import { getFirmBrand } from '../config/brand';
 import { httpError } from '../lib/http';
-import { SYSTEM_ACTOR } from '../lib/actor';
+import { SYSTEM_ACTOR, type Actor } from '../lib/actor';
 import { iso } from '../lib/time';
 import { intakeSubmissionSchema, parse, type IntakeSubmission } from '../validation/schemas';
 import { assessMatter, ensureStringArray, type MatterBrief } from './ai.service';
@@ -83,6 +84,7 @@ export function toMatterCase(row: CaseRow): MatterCase {
     urgency: row.urgency,
     status: row.status,
     nextAction: row.nextAction,
+    access: row.access as MatterCase['access'],
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
   };
@@ -211,7 +213,11 @@ export async function findSubmissionsByEmail(email: string): Promise<PublicSubmi
   return rows.map((row) => toPublicSubmission(row.submission, row.assessment, row.matterCase));
 }
 
-export async function assessSubmission(id: string): Promise<PublicSubmission> {
+/**
+ * Assesses an intake and opens (or refreshes) its matter. The user who opens
+ * the matter becomes its lead (matter access, see matter-access.service.ts).
+ */
+export async function assessSubmission(id: string, actor: Actor = {}): Promise<PublicSubmission> {
   const [existing] = await selectSubmissions(eq(submissions.id, id), 1);
   if (!existing) {
     throw httpError('Intake submission not found', 404);
@@ -283,11 +289,22 @@ export async function assessSubmission(id: string): Promise<PublicSubmission> {
           nextAction,
         })
         .returning();
+      if (savedCase && actor.userId) {
+        await tx
+          .insert(caseMembers)
+          .values({
+            caseId: savedCase.id,
+            userId: actor.userId,
+            memberRole: 'lead',
+            addedBy: actor.userId,
+          })
+          .onConflictDoNothing();
+      }
     }
 
     const [savedSubmission] = await tx
       .update(submissions)
-      .set({ status: 'assessed', updatedAt: new Date() })
+      .set({ status: 'assessed', caseId: savedCase?.id ?? null, updatedAt: new Date() })
       .where(eq(submissions.id, id))
       .returning();
 

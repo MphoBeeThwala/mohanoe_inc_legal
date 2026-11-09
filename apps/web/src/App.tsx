@@ -7,18 +7,23 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type {
-  AuthConfig,
-  AuthResult,
-  IntakeSubmissionInput,
+import {
+  ROLE_LABELS,
+  hasPermission,
+  type AuthConfig,
+  type IntakeSubmissionInput,
   IntakeSummary,
-  MatterCase,
-  PublicBranding,
-  PublicSubmission,
-  PublicUser,
+  type MatterCase,
+  type PublicBranding,
+  type PublicSubmission,
+  type PublicUser,
 } from '@ahava88/shared';
-import { api, apiErrorMessage, sessionStore } from './api';
-import Field from './components/Field';
+import { api, apiErrorMessage, apiStatus } from './api';
+import SignIn, { signInErrorMessage } from './auth/SignIn';
+import InviteAccept from './auth/InviteAccept';
+import ResetPassword from './auth/ResetPassword';
+import StaffAdmin from './components/StaffAdmin';
+import AccountPanel from './components/AccountPanel';
 import type { Notice } from './components/DismissibleNotice';
 import IntakeForm from './components/IntakeForm';
 import AssessmentCard from './components/AssessmentCard';
@@ -46,14 +51,28 @@ const sampleMatter: Omit<IntakeSubmissionInput, 'consentToAi' | 'consentToStorag
   preferredLanguage: 'English',
 };
 
-type SectionId = 'overview' | 'intake' | 'cases' | 'operations';
+type SectionId = 'overview' | 'intake' | 'cases' | 'operations' | 'account';
 
 const NAV_SECTIONS: Array<{ id: SectionId; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'intake', label: 'Intake' },
   { id: 'cases', label: 'Cases' },
   { id: 'operations', label: 'Operations' },
+  { id: 'account', label: 'Account & team' },
 ];
+
+/** Links from emails: /invite/<token> and /reset-password/<token>. */
+function linkFromPath(pathname: string) {
+  const invite = /^\/invite\/([^/]+)\/?$/.exec(pathname);
+  if (invite) return { kind: 'invite' as const, token: decodeURIComponent(invite[1]!) };
+  const reset = /^\/reset-password\/([^/]+)\/?$/.exec(pathname);
+  if (reset) return { kind: 'reset' as const, token: decodeURIComponent(reset[1]!) };
+  return null;
+}
+
+function leaveLinkPage() {
+  window.history.replaceState(null, '', '/');
+}
 
 interface StatCardProps {
   label: string;
@@ -111,21 +130,20 @@ function App() {
   const branding = useBranding();
   const [currentUser, setCurrentUser] = useState<PublicUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [authBusy, setAuthBusy] = useState(false);
-  const [authNotice, setAuthNotice] = useState<Notice>({
-    tone: 'info',
-    message: 'Sign in with your staff account to access the practice workspace.',
-  });
+  const [authNotice, setAuthNotice] = useState<Notice>(() =>
+    linkFromPath(window.location.pathname)
+      ? { tone: 'info', message: '' }
+      : {
+          tone: 'info',
+          message: 'Sign in with your staff account to access the practice workspace.',
+        },
+  );
   const [authConfig, setAuthConfig] = useState<AuthConfig>({
-    publicRegistration: false,
-    seedAdminOnStartup: false,
+    passwordLogin: true,
+    oidc: { enabled: false, label: '' },
+    selfServiceReset: false,
   });
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [authForm, setAuthForm] = useState({
-    fullName: '',
-    email: '',
-    password: '',
-  });
+  const [link, setLink] = useState(() => linkFromPath(window.location.pathname));
   const [summary, setSummary] = useState<IntakeSummary | null>(null);
   const [cases, setCases] = useState<MatterCase[]>([]);
   const [selectedMatter, setSelectedMatter] = useState<PublicSubmission | null>(null);
@@ -145,60 +163,97 @@ function App() {
     }
   }, []);
 
-  const loadWorkspace = async () => {
+  const loadWorkspace = async (user: PublicUser | null = currentUser) => {
+    const role = user?.role;
+    const canIntake = hasPermission(role, 'intake.read');
+    const canMatters = hasPermission(role, 'matters.read');
     const [summaryResponse, casesResponse, submissionsResponse] = await Promise.all([
-      api.get<IntakeSummary>('/intake/summary'),
-      api.get<MatterCase[]>('/cases'),
-      api.get<PublicSubmission[]>('/intake/submissions'),
+      canIntake ? api.get<IntakeSummary>('/intake/summary') : null,
+      canMatters ? api.get<MatterCase[]>('/cases') : null,
+      canIntake ? api.get<PublicSubmission[]>('/intake/submissions') : null,
     ]);
 
-    setSummary(summaryResponse.data);
-    setCases(casesResponse.data);
+    setSummary(summaryResponse?.data ?? null);
+    setCases(casesResponse?.data ?? []);
 
-    const latest = submissionsResponse.data[0];
+    const latest = submissionsResponse?.data[0];
     if (latest) {
       setSelectedMatter(latest);
       setSelectedCaseId(latest.matterCase?.id || latest.matterCase?.submissionId || null);
     }
   };
 
-  const loadSession = async () => {
-    const token = sessionStore.get();
-    if (!token) {
-      setAuthReady(true);
-      setLoading(false);
-      return;
-    }
+  const clearWorkspace = () => {
+    setCurrentUser(null);
+    setSummary(null);
+    setCases([]);
+    setSelectedMatter(null);
+    setSelectedCaseId(null);
+  };
 
+  const handleSignedIn = async (user: PublicUser) => {
+    if (link) {
+      leaveLinkPage();
+      setLink(null);
+    }
+    setCurrentUser(user);
+    setAuthNotice({ tone: 'success', message: `Welcome, ${user.fullName || user.email}.` });
+    try {
+      await loadWorkspace(user);
+    } catch (error) {
+      setAuthNotice({
+        tone: 'error',
+        message: apiErrorMessage(error, 'Could not load the workspace.'),
+      });
+    }
+  };
+
+  const loadSession = async () => {
+    // The session is an httpOnly cookie: ask the API who we are.
     try {
       const { data } = await api.get<{ user: PublicUser }>('/auth/me');
       setCurrentUser(data.user);
-      await loadWorkspace();
+      await loadWorkspace(data.user);
     } catch (error) {
-      sessionStore.clear();
-      setAuthNotice({
-        tone: 'warn',
-        message: 'Your session expired. Please sign in again.',
-      });
+      if (apiStatus(error) !== 401) {
+        setAuthNotice({
+          tone: 'warn',
+          message: apiErrorMessage(error, 'Could not reach the server.'),
+        });
+      }
     } finally {
       setAuthReady(true);
       setLoading(false);
     }
   };
 
+  // A session that ends mid-use (expiry, revocation) returns to sign-in.
+  useEffect(() => {
+    const id = api.interceptors.response.use(undefined, (error: unknown) => {
+      const url = (error as { config?: { url?: string } })?.config?.url ?? '';
+      if (apiStatus(error) === 401 && !url.startsWith('/auth/')) {
+        clearWorkspace();
+        setAuthNotice({ tone: 'warn', message: 'Your session has ended. Please sign in again.' });
+      }
+      return Promise.reject(error);
+    });
+    return () => api.interceptors.response.eject(id);
+  }, []);
+
   useEffect(() => {
     const bootstrap = async () => {
       try {
         const { data } = await api.get<AuthConfig>('/auth/config');
         setAuthConfig(data);
-        if (data.publicRegistration) {
-          setAuthNotice({
-            tone: 'info',
-            message: 'Create the first staff account, then sign in to open the workspace.',
-          });
-        }
       } catch (error) {
         // Auth config is optional for rendering the sign-in shell.
+      }
+      // Entra sign-in errors come back as ?signin_error=<code>.
+      const params = new URLSearchParams(window.location.search);
+      const signInError = signInErrorMessage(params.get('signin_error'));
+      if (signInError) {
+        setAuthNotice({ tone: 'error', message: signInError });
+        window.history.replaceState(null, '', window.location.pathname);
       }
 
       await loadSession();
@@ -236,47 +291,13 @@ function App() {
     return () => observer.disconnect();
   }, [workspaceReady]);
 
-  const handleAuthSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setAuthBusy(true);
+  const handleLogout = async () => {
     try {
-      const endpoint = authMode === 'register' ? '/auth/register' : '/auth/login';
-      const payload =
-        authMode === 'register'
-          ? {
-              fullName: authForm.fullName,
-              email: authForm.email,
-              password: authForm.password,
-            }
-          : {
-              email: authForm.email,
-              password: authForm.password,
-            };
-      const { data } = await api.post<AuthResult>(endpoint, payload);
-      sessionStore.set(data.token);
-      setCurrentUser(data.user);
-      setAuthNotice({
-        tone: 'success',
-        message: `Welcome, ${data.user.fullName || data.user.email}.`,
-      });
-      await loadWorkspace();
-    } catch (error) {
-      setAuthNotice({
-        tone: 'error',
-        message: apiErrorMessage(error, 'Authentication failed.'),
-      });
-    } finally {
-      setAuthBusy(false);
+      await api.post('/auth/logout');
+    } catch {
+      // Signing out locally still locks the workspace.
     }
-  };
-
-  const handleLogout = () => {
-    sessionStore.clear();
-    setCurrentUser(null);
-    setSummary(null);
-    setCases([]);
-    setSelectedMatter(null);
-    setSelectedCaseId(null);
+    clearWorkspace();
     setAuthNotice({
       tone: 'info',
       message: 'Signed out. The workspace is now locked.',
@@ -357,84 +378,37 @@ function App() {
           </div>
           <div className="hero-badges">
             <span className="pill pill-strong">Secure workspace</span>
-            <span className="pill">Attorney access only</span>
+            <span className="pill">Two-factor sign-in</span>
             <span className="pill">Case operations</span>
           </div>
         </header>
 
         <section className="auth-grid">
           <div className="panel">
-            <p className="panel-kicker">Authentication</p>
-            <h2>{authMode === 'register' ? 'Create staff account' : 'Sign in'}</h2>
-            <form className="auth-form" onSubmit={handleAuthSubmit}>
-              {authMode === 'register' ? (
-                <Field label="Full name" id="auth-fullName">
-                  <input
-                    id="auth-fullName"
-                    type="text"
-                    value={authForm.fullName}
-                    onChange={(event) =>
-                      setAuthForm((current) => ({
-                        ...current,
-                        fullName: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </Field>
-              ) : null}
-              <Field label="Email" id="auth-email">
-                <input
-                  id="auth-email"
-                  type="email"
-                  autoComplete="email"
-                  value={authForm.email}
-                  onChange={(event) =>
-                    setAuthForm((current) => ({
-                      ...current,
-                      email: event.target.value,
-                    }))
-                  }
-                  required
-                />
-              </Field>
-              <Field label="Password" id="auth-password">
-                <input
-                  id="auth-password"
-                  type="password"
-                  autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
-                  value={authForm.password}
-                  onChange={(event) =>
-                    setAuthForm((current) => ({
-                      ...current,
-                      password: event.target.value,
-                    }))
-                  }
-                  required
-                />
-              </Field>
-              <div className="action-row">
-                <button type="submit" className="primary-button" disabled={authBusy}>
-                  {authBusy ? 'Working...' : authMode === 'register' ? 'Create account' : 'Sign in'}
-                </button>
-                {authConfig.publicRegistration ? (
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() =>
-                      setAuthMode((current) => (current === 'login' ? 'register' : 'login'))
-                    }
-                  >
-                    {authMode === 'login' ? 'Create account' : 'Back to sign in'}
-                  </button>
-                ) : null}
-              </div>
-            </form>
-            <div className="field-hint">
-              {authConfig.publicRegistration
-                ? 'Demo mode: create a staff account with a password of at least 12 characters including upper-case, lower-case, and a number.'
-                : 'Self-registration is disabled. Ask an administrator to provision a staff account.'}
-            </div>
+            <p className="panel-kicker">Staff access</p>
+            {link?.kind === 'invite' ? (
+              <InviteAccept
+                token={link.token}
+                config={authConfig}
+                onSignedIn={handleSignedIn}
+                onNotice={(tone, message) => setAuthNotice({ tone, message })}
+              />
+            ) : link?.kind === 'reset' ? (
+              <ResetPassword
+                token={link.token}
+                onDone={() => {
+                  leaveLinkPage();
+                  setLink(null);
+                }}
+                onNotice={(tone, message) => setAuthNotice({ tone, message })}
+              />
+            ) : (
+              <SignIn
+                config={authConfig}
+                onSignedIn={handleSignedIn}
+                onNotice={(tone, message) => setAuthNotice({ tone, message })}
+              />
+            )}
           </div>
 
           <DismissibleNotice
@@ -466,7 +440,7 @@ function App() {
         <div className="user-strip">
           <div className="user-chip" title={currentUser.email}>
             <span className="user-name">{currentUser.fullName || currentUser.email}</span>
-            <span className="user-role">{currentUser.role || 'staff'}</span>
+            <span className="user-role">{ROLE_LABELS[currentUser.role] ?? currentUser.role}</span>
           </div>
           <button type="button" className="secondary-button sign-out-button" onClick={handleLogout}>
             Sign out
@@ -649,6 +623,22 @@ function App() {
               </ul>
             </div>
           </aside>
+        </section>
+
+        <section
+          id="section-account"
+          className="dashboard-section account-grid"
+          data-section="account"
+          ref={(node) => {
+            sectionRefs.current.account = node;
+          }}
+        >
+          <AccountPanel currentUser={currentUser} />
+          {currentUser.permissions.includes('users.manage') ? (
+            <ErrorBoundary label="Staff administration">
+              <StaffAdmin currentUser={currentUser} />
+            </ErrorBoundary>
+          ) : null}
         </section>
       </main>
     </div>

@@ -43,9 +43,92 @@ export function isHexColor(value: unknown): value is string {
 
 // ---------------------------------------------------------------- auth
 
-export type UserRole = 'admin' | 'attorney' | 'paralegal';
+export type UserRole = 'admin' | 'attorney' | 'paralegal' | 'secretary' | 'bookkeeper';
 
-export const STAFF_ROLES: readonly UserRole[] = ['admin', 'attorney', 'paralegal'];
+export const STAFF_ROLES: readonly UserRole[] = [
+  'admin',
+  'attorney',
+  'paralegal',
+  'secretary',
+  'bookkeeper',
+];
+
+export const ROLE_LABELS: Readonly<Record<UserRole, string>> = {
+  admin: 'Administrator',
+  attorney: 'Attorney',
+  paralegal: 'Paralegal',
+  secretary: 'Secretary',
+  bookkeeper: 'Bookkeeper',
+};
+
+export type Permission =
+  | 'intake.read'
+  | 'intake.write'
+  | 'matters.read'
+  | 'matters.write'
+  | 'documents.read'
+  | 'documents.write'
+  | 'calendar.read'
+  | 'calendar.write'
+  | 'billing.read'
+  | 'billing.write'
+  | 'reports.read'
+  | 'notifications.read'
+  | 'notifications.write'
+  | 'compliance.read'
+  | 'compliance.write'
+  | 'compliance.admin'
+  | 'audit.read'
+  | 'users.manage';
+
+const FEE_EARNER: readonly Permission[] = [
+  'intake.read',
+  'intake.write',
+  'matters.read',
+  'matters.write',
+  'documents.read',
+  'documents.write',
+  'calendar.read',
+  'calendar.write',
+  'billing.read',
+  'billing.write',
+  'reports.read',
+  'notifications.read',
+  'notifications.write',
+  'compliance.read',
+  'compliance.write',
+];
+
+/** What each role may do within its firm. Matter-level access narrows this further. */
+export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> = {
+  admin: [...FEE_EARNER, 'compliance.admin', 'audit.read', 'users.manage'],
+  attorney: FEE_EARNER,
+  paralegal: FEE_EARNER,
+  secretary: [
+    'intake.read',
+    'intake.write',
+    'matters.read',
+    'documents.read',
+    'documents.write',
+    'calendar.read',
+    'calendar.write',
+    'notifications.read',
+  ],
+  bookkeeper: [
+    'matters.read',
+    'billing.read',
+    'billing.write',
+    'reports.read',
+    'notifications.read',
+  ],
+};
+
+export function hasPermission(
+  role: UserRole | string | undefined,
+  permission: Permission,
+): boolean {
+  return Boolean(role && ROLE_PERMISSIONS[role as UserRole]?.includes(permission));
+}
 
 export interface PublicUser {
   id: string;
@@ -54,16 +137,134 @@ export interface PublicUser {
   role: UserRole;
   createdAt: string;
   lastLoginAt: string | null;
+  /** Permissions granted by the role (for the UI; the API enforces them). */
+  permissions: Permission[];
+  mfaEnabled: boolean;
+  signInMethods: SignInMethod[];
 }
+
+export type SignInMethod = 'password' | 'oidc';
 
 export interface AuthConfig {
-  publicRegistration: boolean;
-  seedAdminOnStartup: boolean;
+  /** Email + password (with authenticator-app MFA). */
+  passwordLogin: boolean;
+  /** Entra External ID sign-in, when configured. */
+  oidc: { enabled: boolean; label: string };
+  /** Self-service password reset needs outgoing email. */
+  selfServiceReset: boolean;
 }
 
-export interface AuthResult {
+/**
+ * The result of a sign-in step. Password sign-in never yields a session
+ * directly: it always passes through MFA verification or enrolment.
+ */
+export type SignInResult =
+  | { status: 'signed_in'; user: PublicUser }
+  | { status: 'mfa_required'; challengeToken: string }
+  | { status: 'mfa_enrollment_required'; challengeToken: string };
+
+export interface MfaEnrollment {
+  /** Base32 secret for manual entry. */
+  secret: string;
+  otpauthUrl: string;
+  /** QR code as an SVG data URL. */
+  qrCodeDataUrl: string;
+}
+
+export interface MfaEnrollmentResult {
   user: PublicUser;
-  token: string;
+  /** Shown once; each code signs in once if the authenticator is lost. */
+  recoveryCodes: string[];
+}
+
+export interface SessionInfo {
+  id: string;
+  method: SignInMethod;
+  userAgent: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  current: boolean;
+}
+
+// ---------------------------------------------------------------- staff
+
+export interface StaffUser extends PublicUser {
+  isActive: boolean;
+  lockedUntil: string | null;
+}
+
+/** Minimal staff entry for pickers (matter members, assignees). */
+export interface StaffDirectoryEntry {
+  id: string;
+  fullName: string;
+  role: UserRole;
+}
+
+export interface InviteInput {
+  email: string;
+  fullName: string;
+  role: UserRole;
+}
+
+export interface Invite {
+  id: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  expiresAt: string;
+  createdAt: string;
+}
+
+/** Returned once when an invite or reset link is created. */
+export interface LinkIssued<T> {
+  item: T;
+  /** The link to share. Only returned at creation; only its hash is stored. */
+  url: string;
+  /** Whether the link was also emailed. */
+  emailed: boolean;
+}
+
+export interface InvitePreview {
+  email: string;
+  fullName: string;
+  role: UserRole;
+  firmName: string;
+  expiresAt: string;
+}
+
+export interface UserUpdateInput {
+  role?: UserRole;
+  isActive?: boolean;
+}
+
+// ---------------------------------------------------------------- matter access
+
+export type MatterAccessLevel = 'firm' | 'restricted';
+
+export interface MatterMember {
+  userId: string;
+  fullName: string;
+  role: UserRole;
+  memberRole: 'lead' | 'member';
+  addedAt: string;
+}
+
+export interface MatterExclusion {
+  userId: string;
+  fullName: string;
+  role: UserRole;
+  reason: string;
+  createdAt: string;
+}
+
+export interface MatterAccess {
+  caseId: string;
+  access: MatterAccessLevel;
+  members: MatterMember[];
+  exclusions: MatterExclusion[];
+  /** Whether the current user may change access, members and walls. */
+  canManage: boolean;
 }
 
 // ---------------------------------------------------------------- intake
@@ -192,6 +393,7 @@ export interface MatterCase {
   urgency: string;
   status: string;
   nextAction: Nullable<string>;
+  access: MatterAccessLevel;
   createdAt: string;
   updatedAt: Nullable<string>;
 }

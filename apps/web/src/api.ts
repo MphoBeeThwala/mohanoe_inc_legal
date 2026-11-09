@@ -1,47 +1,14 @@
 import axios, { type AxiosInstance } from 'axios';
 import type { ApiErrorBody } from '@ahava88/shared';
 
-const TOKEN_KEY = 'pms_session_token';
-
-// Browser storage can be missing or throw (private mode, locked-down
-// browsers, test environments). Never let that crash the workspace.
-export const sessionStore = {
-  get(): string | null {
-    try {
-      return window.localStorage?.getItem(TOKEN_KEY) ?? null;
-    } catch {
-      return null;
-    }
-  },
-  set(value: string): void {
-    try {
-      window.localStorage?.setItem(TOKEN_KEY, value);
-    } catch {
-      // ignore: the session simply won't survive a reload
-    }
-  },
-  clear(): void {
-    try {
-      window.localStorage?.removeItem(TOKEN_KEY);
-    } catch {
-      // ignore
-    }
-  },
-};
-
 export type ApiClient = AxiosInstance;
 
+// The session lives in an httpOnly cookie set by the API: scripts never see
+// it, so there is nothing to store in the browser.
 export const api: ApiClient = axios.create({
   baseURL: '/api',
   timeout: 35000,
-});
-
-api.interceptors.request.use((config) => {
-  const token = sessionStore.get();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
+  withCredentials: true,
 });
 
 /** The best human-readable message for a failed API call. */
@@ -53,4 +20,8 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
     return error.message;
   }
   return fallback;
+}
+
+export function apiStatus(error: unknown): number | undefined {
+  return axios.isAxiosError(error) ? error.response?.status : undefined;
 }

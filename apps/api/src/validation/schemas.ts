@@ -42,22 +42,83 @@ export const email = z.string().trim().toLowerCase().pipe(z.email().max(254));
 
 // ---------------------------------------------------------------- auth
 
-export const registerSchema = z.object({
-  fullName: requiredText(200),
-  email,
-  password: z
-    .string()
-    .min(12, 'Password must be at least 12 characters long')
-    .max(200)
-    .refine(
-      (value) => /[A-Z]/.test(value) && /[a-z]/.test(value) && /\d/.test(value),
-      'Password must include upper-case, lower-case, and a number',
-    ),
-});
+export const passwordSchema = z
+  .string()
+  .min(12, 'Password must be at least 12 characters long')
+  .max(200)
+  .refine(
+    (value) => /[A-Z]/.test(value) && /[a-z]/.test(value) && /\d/.test(value),
+    'Password must include upper-case, lower-case, and a number',
+  );
 
 export const loginSchema = z.object({
   email,
   password: z.string().min(1).max(200),
+});
+
+const challengeToken = z.string().min(20).max(4_000);
+
+export const challengeSchema = z.object({ challengeToken });
+
+/** A 6-digit authenticator code, or a recovery code (xxxxx-xxxxx). */
+export const mfaVerifySchema = z.object({
+  challengeToken,
+  code: z.string().trim().min(6).max(20),
+});
+
+export const mfaConfirmSchema = z.object({
+  challengeToken,
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, 'Enter the 6-digit code from your authenticator app'),
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(200),
+  newPassword: passwordSchema,
+});
+
+export const forgotPasswordSchema = z.object({ email });
+
+export const resetPasswordSchema = z.object({ password: passwordSchema });
+
+const staffRole = z.enum(['admin', 'attorney', 'paralegal', 'secretary', 'bookkeeper']);
+
+export const inviteSchema = z.object({
+  email,
+  fullName: requiredText(200),
+  role: staffRole,
+});
+
+export const acceptInviteSchema = z.object({
+  fullName: optionalText(200),
+  password: passwordSchema,
+});
+
+export const userUpdateSchema = z
+  .object({
+    role: staffRole.optional(),
+    isActive: z.boolean().optional(),
+  })
+  .refine((value) => value.role !== undefined || value.isActive !== undefined, {
+    message: 'Nothing to update',
+  });
+
+export const uuidSchema = z.string().uuid();
+
+// ---------------------------------------------------------------- matter access
+
+export const matterAccessSchema = z.object({ access: z.enum(['firm', 'restricted']) });
+
+export const matterMemberSchema = z.object({
+  userId: z.string().uuid(),
+  memberRole: z.enum(['lead', 'member']).default('member'),
+});
+
+export const matterExclusionSchema = z.object({
+  userId: z.string().uuid(),
+  reason: requiredText(500),
 });
 
 // ---------------------------------------------------------------- intake

@@ -128,12 +128,12 @@ Environment setup:
 - [x] Isolation tests across every endpoint (`tenancy.test.ts`, plus a schema guard that fails if a table lacks `firm_id` or RLS)
 
 ### 5.3 Identity and access
-- [ ] Entra External ID, mandatory staff MFA, reset, lockout, revocation
-- [ ] httpOnly secure SameSite cookies
-- [ ] Invite-only users per firm; remove public registration and `/auth/seed-admin`
-- [ ] Per-firm roles, matter-level access, ethical walls
+- [x] Entra External ID, mandatory staff MFA, reset, lockout, revocation
+- [x] httpOnly secure SameSite cookies
+- [x] Invite-only users per firm; remove public registration and `/auth/seed-admin`
+- [x] Per-firm roles, matter-level access, ethical walls (enforced by RLS)
 - [ ] Platform super-admin with audited, firm-approved support access
-- [ ] CSP, HSTS, helmet-style headers
+- [x] CSP, HSTS, helmet-style headers
 
 ### 5.4 Encryption and records
 - [ ] Key Vault envelope encryption per firm + re-encryption migration + rotation
@@ -206,7 +206,7 @@ Trust accounting and AI research ship behind feature flags to pilots first.
 2. **TypeScript monorepo** — done on `chore/typescript-monorepo-vite`.
 3. **Data layer** — done on `feat/data-layer-drizzle`: Drizzle + PostgreSQL, one migration history, PGlite for dev/tests, zod validation, linked audit chain, race-free numbering, money in cents, email blind index.
 4. **Multi-tenancy** — done on `feat/multi-tenancy`: `firms` table, `firm_id` and forced RLS on every table, `app_tenant` role, host-name resolver, per-firm numbering and audit chains, firm CLI, isolation tests; branding from `firms`.
-5. **Identity** — Entra External ID (+ Entra ID), MFA, cookies, invites, per-firm roles, matter access, super-admin.
+5. **Identity** — done on `feat/identity` (except super-admin): invite-only staff, mandatory TOTP MFA with recovery codes, Entra External ID (OIDC + PKCE), lockout, resets, revocable server-side cookie sessions, CSRF origin check, five roles with permissions, matter access and ethical walls in RLS, CSP/HSTS. Still open: platform super-admin with firm-approved support access; Entra ID (workforce) sign-in per firm.
 6. **Encryption** — Key Vault envelope encryption, re-encryption migration, per-firm audit chain.
 7. **Practice core** — clients/matters, conflicts, FICA, time, invoicing, calendar.
 8. **White-label and onboarding** — firm settings, theming, custom domains, wizard.

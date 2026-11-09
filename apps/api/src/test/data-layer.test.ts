@@ -3,7 +3,7 @@ import request from 'supertest';
 import { eq, sql } from 'drizzle-orm';
 import app from '../server';
 import { db } from '../db/client';
-import { inDefaultFirm as asFirm } from './helpers';
+import { createStaff, inDefaultFirm as asFirm } from './helpers';
 import { nextValue } from '../db/sequences';
 import { auditEvents, cases, documents, invoices, submissions } from '../db/schema';
 import * as auditService from '../services/audit.service';
@@ -33,12 +33,7 @@ async function createMatter(fullName: string, email: string) {
 }
 
 beforeAll(async () => {
-  const admin = await request(app).post('/api/auth/register').send({
-    fullName: 'Founding Partner',
-    email: 'partner@example.com',
-    password: 'CorrectHorse123',
-  });
-  adminToken = admin.body.token;
+  adminToken = (await createStaff({ email: 'partner@example.com', role: 'admin' })).token;
 });
 
 describe('audit chain', () => {
