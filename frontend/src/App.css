@@ -1,6 +1,7 @@
 :root {
   --brand-dark: #0d1f19;
   --brand-green: #1b7a58;
+  --brand-accent: #0f5d43;
   --text-primary: #0f241c;
   --text-secondary: #4a5c54;
   --text-muted: #5d6e67;
@@ -207,7 +208,7 @@
 }
 
 .nav-link-active {
-  background: linear-gradient(135deg, #1b7a58, #0d5f43);
+  background: linear-gradient(135deg, var(--brand-green), var(--brand-accent));
   color: #f8fbf8;
   border-color: transparent;
 }
@@ -317,7 +318,7 @@
 }
 
 .panel-kicker {
-  color: #1b7a58;
+  color: var(--brand-green);
   margin-bottom: 8px;
 }
 
@@ -340,7 +341,7 @@
 .secondary-button,
 .link-button {
   background: transparent;
-  color: #1b7a58;
+  color: var(--brand-green);
 }
 
 .secondary-button {
@@ -355,7 +356,7 @@
   border-radius: 16px;
   color: #f8fff9;
   font-weight: 700;
-  background: linear-gradient(135deg, #1b7a58, #0f5d43);
+  background: linear-gradient(135deg, var(--brand-green), var(--brand-accent));
   box-shadow: 0 16px 34px rgba(21, 121, 86, 0.28);
 }
 
@@ -798,14 +799,14 @@
 .tab-button {
   border: 1px solid rgba(27, 122, 88, 0.18);
   background: rgba(27, 122, 88, 0.05);
-  color: #1b7a58;
+  color: var(--brand-green);
   border-radius: 999px;
   padding: 8px 14px;
   cursor: pointer;
 }
 
 .tab-active {
-  background: linear-gradient(135deg, #1b7a58, #0d5f43);
+  background: linear-gradient(135deg, var(--brand-green), var(--brand-accent));
   color: #f8fbf8;
 }
 
@@ -933,4 +934,10 @@
     flex: 1 1 calc(50% - 4px);
     text-align: center;
   }
+}
+
+.brand-logo {
+  object-fit: contain;
+  background: #ffffff;
+  padding: 6px;
 }

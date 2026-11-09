@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: mohanoe-inc-legal
+    name: mohanoe-inc-legal  # legacy Render service ID; kept until the Azure migration (renaming creates a new service)
     runtime: node
     plan: starter
     rootDir: .
@@ -26,6 +26,14 @@ services:
         value: "true"
       - key: DEFAULT_ADMIN_NAME
         value: Practice Admin
+      - key: JWT_ISSUER
+        value: ahava88-legal-pms
+      - key: FIRM_NAME
+        sync: false
+      - key: FIRM_SHORT_NAME
+        sync: false
+      - key: FIRM_CASE_PREFIX
+        sync: false
       - key: JWT_SECRET
         sync: false
       - key: INTAKE_ENCRYPTION_KEY

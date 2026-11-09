@@ -2,6 +2,7 @@ const express = require('express');
 const authController = require('../controllers/auth.controller');
 const {
   authenticateRequest,
+  requireRoles,
 } = require('../services/auth.service');
 
 const router = express.Router();
@@ -10,6 +11,6 @@ router.get('/config', authController.config);
 router.post('/register', authController.register);
 router.post('/login', authController.login);
 router.get('/me', authenticateRequest, authController.me);
-router.post('/seed-admin', authenticateRequest, authController.seedAdmin);
+router.post('/seed-admin', authenticateRequest, requireRoles('admin'), authController.seedAdmin);
 
 module.exports = router;
