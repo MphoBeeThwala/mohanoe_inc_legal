@@ -1,35 +1,17 @@
+// Encryption of client personal information, and redaction for AI briefs.
+//
+// Ciphertext format:
+//   v2:<key version>:<iv>:<tag>:<ciphertext>  AES-256-GCM with the firm's data
+//       key (keys.service.ts), authenticated with the firm id, so a value
+//       copied into another firm's rows does not decrypt.
+//   v1:<iv>:<tag>:<ciphertext>  legacy, one global INTAKE_ENCRYPTION_KEY.
+//       Still readable; `ops keys reencrypt` moves it to v2.
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'crypto';
+import { currentFirm } from '../db/tenant-context';
+import { activeKey, keyVersion, legacyKey } from './keys.service';
 
-import { devSecretsAllowed } from '../config/env';
-
-const FALLBACK_KEY = createHash('sha256').update('local-development-intake-key').digest();
-
-function getEncryptionKey(): Buffer {
-  const keySource = process.env.INTAKE_ENCRYPTION_KEY || process.env.PII_ENCRYPTION_KEY;
-
-  if (!keySource) {
-    if (!devSecretsAllowed()) {
-      throw new Error(
-        'INTAKE_ENCRYPTION_KEY must be set in production and whenever DATABASE_URL is set',
-      );
-    }
-    return FALLBACK_KEY;
-  }
-
-  if (/^[0-9a-fA-F]{64}$/.test(keySource)) {
-    return Buffer.from(keySource, 'hex');
-  }
-
-  try {
-    const decoded = Buffer.from(keySource, 'base64');
-    if (decoded.length === 32) {
-      return decoded;
-    }
-  } catch (error) {
-    // fall through to hashing
-  }
-
-  return createHash('sha256').update(keySource).digest();
+function firmAad(): Buffer {
+  return Buffer.from(`firm:${currentFirm().id}`);
 }
 
 export interface RedactionHints {
@@ -117,53 +99,108 @@ function redactMatterForAi(payload: MatterNarrative): RedactedBrief {
   };
 }
 
-/**
- * Deterministic keyed hash of an identifier (e.g. an email address), so
- * records can be found by it without storing it in plaintext. Uses a key
- * derived from the encryption key, so it cannot be reversed or recomputed
- * without that key.
- */
-function blindIndex(value: string): string {
-  const lookupKey = createHash('sha256')
-    .update(Buffer.concat([Buffer.from('blind-index:v1:'), getEncryptionKey()]))
-    .digest();
-  return createHmac('sha256', lookupKey).update(value.trim().toLowerCase()).digest('hex');
+function hmacHex(key: Buffer, value: string): string {
+  return createHmac('sha256', key).update(value.trim().toLowerCase()).digest('hex');
 }
 
-function encryptJson(value: unknown): string {
-  const key = getEncryptionKey();
+/**
+ * Deterministic keyed hash of an identifier (e.g. an email address), so
+ * records can be found by it without storing it in plaintext. Keyed with the
+ * firm's index key, so the same email gives different values in different
+ * firms.
+ */
+async function blindIndex(value: string): Promise<string> {
+  const { key } = await activeKey('index');
+  return hmacHex(key, value);
+}
+
+/** Legacy (pre-firm-key) blind index, for rows not yet re-encrypted. */
+function legacyBlindIndex(value: string): string | null {
+  const key = legacyKey();
+  if (!key) {
+    return null;
+  }
+  const lookupKey = createHash('sha256')
+    .update(Buffer.concat([Buffer.from('blind-index:v1:'), key]))
+    .digest();
+  return hmacHex(lookupKey, value);
+}
+
+/** Every blind-index value a stored row might carry for this identifier. */
+async function blindIndexCandidates(value: string): Promise<string[]> {
+  const current = await blindIndex(value);
+  const legacy = legacyBlindIndex(value);
+  return legacy && legacy !== current ? [current, legacy] : [current];
+}
+
+async function encryptJson(value: unknown): Promise<string> {
+  const { version, key } = await activeKey('data');
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const plaintext = Buffer.from(JSON.stringify(value), 'utf8');
-  const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-  const tag = cipher.getAuthTag();
+  cipher.setAAD(firmAad());
+  const encrypted = Buffer.concat([
+    cipher.update(Buffer.from(JSON.stringify(value), 'utf8')),
+    cipher.final(),
+  ]);
+  return [
+    'v2',
+    String(version),
+    iv.toString('base64'),
+    cipher.getAuthTag().toString('base64'),
+    encrypted.toString('base64'),
+  ].join(':');
+}
 
-  return ['v1', iv.toString('base64'), tag.toString('base64'), encrypted.toString('base64')].join(
-    ':',
-  );
+/** The data-key version a v2 payload uses (null for legacy v1). */
+function payloadKeyVersion(payload: string): number | null {
+  const [format, version] = payload.split(':');
+  return format === 'v2' ? Number(version) : null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function decryptJson<T = any>(payload: string | null | undefined): T | null {
+async function decryptJson<T = any>(payload: string | null | undefined): Promise<T | null> {
   if (!payload) {
     return null;
   }
-
-  const [version, ivBase64, tagBase64, encryptedBase64] = String(payload).split(':');
-
-  if (version !== 'v1') {
+  const parts = String(payload).split(':');
+  let key: Buffer;
+  let ivBase64: string | undefined;
+  let tagBase64: string | undefined;
+  let bodyBase64: string | undefined;
+  let aad: Buffer | null = null;
+  if (parts[0] === 'v2') {
+    key = await keyVersion('data', Number(parts[1]));
+    [, , ivBase64, tagBase64, bodyBase64] = parts;
+    aad = firmAad();
+  } else if (parts[0] === 'v1') {
+    const legacy = legacyKey();
+    if (!legacy) {
+      throw new Error('INTAKE_ENCRYPTION_KEY is needed to read data written before per-firm keys');
+    }
+    key = legacy;
+    [, ivBase64, tagBase64, bodyBase64] = parts;
+  } else {
     throw new Error('Unsupported encrypted payload version');
   }
-
-  const key = getEncryptionKey();
-  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivBase64, 'base64'));
-  decipher.setAuthTag(Buffer.from(tagBase64, 'base64'));
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivBase64 ?? '', 'base64'));
+  if (aad) {
+    decipher.setAAD(aad);
+  }
+  decipher.setAuthTag(Buffer.from(tagBase64 ?? '', 'base64'));
   const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(encryptedBase64, 'base64')),
+    decipher.update(Buffer.from(bodyBase64 ?? '', 'base64')),
     decipher.final(),
   ]);
-
-  return JSON.parse(decrypted.toString('utf8'));
+  return JSON.parse(decrypted.toString('utf8')) as T;
 }
 
-export { decryptJson, encryptJson, redactMatterForAi, redactText, blindIndex };
+export {
+  blindIndex,
+  blindIndexCandidates,
+  decryptJson,
+  encryptJson,
+  legacyBlindIndex,
+  payloadKeyVersion,
+  redactMatterForAi,
+  redactText,
+};

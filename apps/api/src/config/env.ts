@@ -54,6 +54,23 @@ function validateConfig(env: NodeJS.ProcessEnv = process.env): string[] {
       problems.push('OIDC_ISSUER must be an https:// URL');
     }
   }
+  if (env.KEY_PROVIDER === 'azure-keyvault' && !String(env.AZURE_KEY_VAULT_KEY_ID || '').trim()) {
+    problems.push('AZURE_KEY_VAULT_KEY_ID must be set when KEY_PROVIDER=azure-keyvault');
+  }
+  if (env.KEY_PROVIDER && !['local', 'azure-keyvault'].includes(env.KEY_PROVIDER)) {
+    problems.push('KEY_PROVIDER must be local or azure-keyvault');
+  }
+  if (
+    env.OBJECT_STORE === 'azure-blob' &&
+    !String(env.AZURE_STORAGE_ACCOUNT_URL || env.AZURE_STORAGE_CONNECTION_STRING || '').trim()
+  ) {
+    problems.push(
+      'OBJECT_STORE=azure-blob needs AZURE_STORAGE_ACCOUNT_URL or AZURE_STORAGE_CONNECTION_STRING',
+    );
+  }
+  if (env.OBJECT_STORE && !['filesystem', 'azure-blob'].includes(env.OBJECT_STORE)) {
+    problems.push('OBJECT_STORE must be filesystem or azure-blob');
+  }
   if (String(env.SESSION_COOKIE_SECURE || '').toLowerCase() === 'false') {
     problems.push('SESSION_COOKIE_SECURE cannot be false in production');
   }
@@ -69,6 +86,20 @@ function configWarnings(env: NodeJS.ProcessEnv = process.env): string[] {
   if (!String(env.SMTP_URL || '').trim()) {
     warnings.push(
       'SMTP_URL is not set: invite and reset links are shown to administrators but not emailed',
+    );
+  }
+  if ((env.KEY_PROVIDER || 'local') === 'local') {
+    warnings.push(
+      'KEY_PROVIDER is local: firm keys are wrapped with INTAKE_ENCRYPTION_KEY, not Azure Key Vault',
+    );
+  }
+  if (!env.OBJECT_STORE) {
+    warnings.push(
+      'OBJECT_STORE is not set: documents stay in the database and audit anchors have no immutable copy',
+    );
+  } else if (env.OBJECT_STORE === 'filesystem') {
+    warnings.push(
+      'OBJECT_STORE=filesystem in production: make sure OBJECT_STORE_DIR is persistent',
     );
   }
   ['ALLOW_PUBLIC_REGISTRATION', 'SEED_ADMIN_ON_STARTUP', 'DEFAULT_ADMIN_PASSWORD'].forEach(

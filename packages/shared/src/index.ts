@@ -95,13 +95,20 @@ const FEE_EARNER: readonly Permission[] = [
   'reports.read',
   'notifications.read',
   'notifications.write',
-  'compliance.read',
-  'compliance.write',
 ];
 
 /** What each role may do within its firm. Matter-level access narrows this further. */
 export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> = {
-  admin: [...FEE_EARNER, 'compliance.admin', 'audit.read', 'users.manage'],
+  // POPIA data-subject requests are handled by administrators (the firm's
+  // information officer), not by every fee earner.
+  admin: [
+    ...FEE_EARNER,
+    'compliance.read',
+    'compliance.write',
+    'compliance.admin',
+    'audit.read',
+    'users.manage',
+  ],
   attorney: FEE_EARNER,
   paralegal: FEE_EARNER,
   secretary: [
@@ -231,6 +238,14 @@ export interface InvitePreview {
   role: UserRole;
   firmName: string;
   expiresAt: string;
+}
+
+/** Firm settings administrators can change (GET/PATCH /api/firm/settings). */
+export interface FirmSettings {
+  /** Days a closed matter is kept before the retention sweep removes it. */
+  retentionDays: number;
+  /** Whether retentionDays is the platform default (not set for this firm). */
+  retentionIsDefault: boolean;
 }
 
 export interface UserUpdateInput {
@@ -551,6 +566,21 @@ export interface AuditEventRecord {
 export type AuditChainResult =
   | { valid: true; count: number }
   | { valid: false; brokenAt: string; action: string; count: number };
+
+/** Checks of the daily anchors (copies of the chain head in immutable storage). */
+export interface AuditAnchorCheck {
+  checked: number;
+  lastAnchoredAt: string | null;
+  /** Human-readable problems; empty when every anchor matches. */
+  problems: string[];
+}
+
+/** GET /api/audit/verify: the hash chain plus its anchors. */
+export type AuditTrailVerification = AuditChainResult & {
+  anchors: AuditAnchorCheck;
+  /** Chain valid and every anchor matches. */
+  trustworthy: boolean;
+};
 
 export interface ReportSnapshot {
   id: string;

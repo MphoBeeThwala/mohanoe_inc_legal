@@ -77,6 +77,7 @@ test('a firm row drives its public branding, with safe fallbacks', () => {
     vatNumber: null,
     plan: 'pilot',
     status: 'active',
+    retentionDays: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

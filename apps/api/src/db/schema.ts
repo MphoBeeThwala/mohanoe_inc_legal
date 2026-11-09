@@ -51,26 +51,49 @@ export interface FirmBranding {
 }
 
 /** A law firm licensed to use the platform (a tenant). Platform-level table. */
-export const firms = pgTable('firms', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  /** URL-safe identifier; also the subdomain under PLATFORM_BASE_DOMAIN. */
-  slug: text('slug').notNull().unique(),
-  legalName: text('legal_name').notNull(),
-  tradingName: text('trading_name').notNull(),
-  productName: text('product_name'),
-  branding: jsonb('branding').$type<FirmBranding>().notNull().default({}),
-  casePrefix: text('case_prefix').notNull().default('MAT'),
-  /** Custom domains (lower-case host names) that resolve to this firm. */
-  domains: text('domains')
-    .array()
-    .notNull()
-    .default(sql`'{}'::text[]`),
-  vatNumber: text('vat_number'),
-  plan: text('plan').notNull().default('pilot'),
-  status: text('status').notNull().default('active'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const firms = pgTable(
+  'firms',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** URL-safe identifier; also the subdomain under PLATFORM_BASE_DOMAIN. */
+    slug: text('slug').notNull().unique(),
+    legalName: text('legal_name').notNull(),
+    tradingName: text('trading_name').notNull(),
+    productName: text('product_name'),
+    branding: jsonb('branding').$type<FirmBranding>().notNull().default({}),
+    casePrefix: text('case_prefix').notNull().default('MAT'),
+    /** Custom domains (lower-case host names) that resolve to this firm. */
+    domains: text('domains')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    vatNumber: text('vat_number'),
+    plan: text('plan').notNull().default('pilot'),
+    status: text('status').notNull().default('active'),
+    /** Days a closed matter is kept; null = CLIENT_DATA_RETENTION_DAYS. */
+    retentionDays: integer('retention_days'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [
+    // Requests (app_tenant) can read firms, and update only their own firm's
+    // row; the migration grants UPDATE on just the settings columns. Platform
+    // code (rootDb, the table owner) is not affected: RLS is not forced here.
+    pgPolicy('firms_tenant_read', {
+      as: 'permissive',
+      for: 'select',
+      to: 'app_tenant',
+      using: sql`true`,
+    }),
+    pgPolicy('firms_tenant_update_own', {
+      as: 'permissive',
+      for: 'update',
+      to: 'app_tenant',
+      using: sql`id = nullif(current_setting('app.firm_id', true), '')::uuid`,
+      withCheck: sql`id = nullif(current_setting('app.firm_id', true), '')::uuid`,
+    }),
+  ],
+);
 
 /** The firm of the current request, from the transaction-local setting. */
 const CURRENT_FIRM = sql`nullif(current_setting('app.firm_id', true), '')::uuid`;
@@ -104,6 +127,36 @@ const matterPolicy = (table: string) =>
     using: sql.raw(`exists (select 1 from cases c where c.id = ${table}.case_id)`),
     withCheck: sql.raw(`exists (select 1 from cases c where c.id = ${table}.case_id)`),
   });
+
+// ---------------------------------------------------------------- keys
+
+/**
+ * Per-firm data-encryption keys (envelope encryption). Each key is stored
+ * only wrapped by a key-encryption key: Azure Key Vault in production, or the
+ * local INTAKE_ENCRYPTION_KEY. purpose 'data' encrypts records (rotatable);
+ * 'index' keys blind indexes (stable, so lookups keep working).
+ */
+export const firmKeys = pgTable(
+  'firm_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    purpose: text('purpose').notNull(),
+    version: integer('version').notNull(),
+    wrappedKey: text('wrapped_key').notNull(),
+    /** 'local' or 'azure-keyvault'. */
+    kekProvider: text('kek_provider').notNull(),
+    /** Key-encryption key id (Key Vault key URL with version, or local fingerprint). */
+    kekId: text('kek_id').notNull(),
+    status: text('status').notNull().default('active'),
+    retiredAt: timestamp('retired_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('firm_keys_firm_purpose_version_idx').on(t.firmId, t.purpose, t.version),
+    tenantPolicy('firm_keys'),
+  ],
+);
 
 // ---------------------------------------------------------------- identity
 
@@ -452,7 +505,12 @@ export const documents = pgTable(
     documentType: text('document_type').notNull().default('correspondence'),
     tags: jsonb('tags').$type<string[]>().notNull().default([]),
     status: text('status').notNull().default('draft'),
-    encryptedContent: text('encrypted_content').notNull(),
+    /** Encrypted body, when no object store is configured (and legacy rows). */
+    encryptedContent: text('encrypted_content'),
+    /** Object-store key of the encrypted body, when OBJECT_STORE is set. */
+    storageKey: text('storage_key'),
+    /** Data-key version the stored object is encrypted with (re-encryption). */
+    contentKeyVersion: integer('content_key_version'),
     contentPreview: text('content_preview').notNull().default(''),
     createdBy: text('created_by').notNull(),
     signedAt: timestamp('signed_at', { withTimezone: true }),
@@ -611,6 +669,26 @@ export const auditEvents = pgTable(
   ],
 );
 
+/**
+ * Daily anchors of each firm's audit chain head. A copy is written to
+ * immutable object storage, so history before an anchor can't be rewritten
+ * without detection, even by someone holding AUDIT_CHAIN_SECRET.
+ */
+export const auditAnchors = pgTable(
+  'audit_anchors',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    lastSeq: bigint('last_seq', { mode: 'number' }).notNull(),
+    lastHash: text('last_hash').notNull(),
+    eventCount: integer('event_count').notNull(),
+    /** Where the immutable copy lives; null when no object store is configured. */
+    objectKey: text('object_key'),
+    ...timestamps,
+  },
+  (t) => [index('audit_anchors_last_seq_idx').on(t.lastSeq), tenantPolicy('audit_anchors')],
+);
+
 export const reportSnapshots = pgTable(
   'report_snapshots',
   {
@@ -651,6 +729,8 @@ export type SessionRow = typeof sessions.$inferSelect;
 export type InviteRow = typeof invites.$inferSelect;
 export type CaseMemberRow = typeof caseMembers.$inferSelect;
 export type CaseExclusionRow = typeof caseExclusions.$inferSelect;
+export type FirmKeyRow = typeof firmKeys.$inferSelect;
+export type AuditAnchorRow = typeof auditAnchors.$inferSelect;
 export type FirmRow = typeof firms.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type SubmissionRow = typeof submissions.$inferSelect;

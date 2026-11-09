@@ -87,13 +87,26 @@ When the firms table is empty, the server creates a `default` firm from these va
 
 ## Production
 - Required, or the server will not start: `JWT_SECRET` (32+ chars), `INTAKE_ENCRYPTION_KEY` (32-byte base64 or 64-char hex), `AUDIT_CHAIN_SECRET` (32+ chars), `DATABASE_URL`.
-- **Keep `INTAKE_ENCRYPTION_KEY` and `AUDIT_CHAIN_SECRET` safe and unchanged.** Losing the first makes stored client data unreadable; changing the second makes the audit chain fail verification.
+- **Keep `INTAKE_ENCRYPTION_KEY` and `AUDIT_CHAIN_SECRET` safe.** With `KEY_PROVIDER=local` the first wraps every firm's keys: losing it makes stored client data unreadable. Changing the second makes the audit chain fail verification. See *Encryption and records* for rotating keys.
 - The server applies pending migrations on start (`DB_MIGRATE_ON_START=false` to run `npm run db:migrate -w apps/api` as a separate release step instead).
 - `/ready` returns 503 until the database answers.
 - `ANTHROPIC_API_KEY` enables live AI triage; without it the backend uses rules-based triage.
 - Interim hosting is Render (`render.yaml`: `npm ci --include=dev && npm run build`, then `npm start`). The target is Microsoft Azure, South Africa North — see the roadmap.
 - After a deploy: `node scripts/smoke-test.js https://<your-host>`.
 - Backup, restore and smoke tests: [`PROD_OPERATIONS.md`](PROD_OPERATIONS.md).
+
+## Encryption and records
+- **Per-firm envelope encryption.** Each firm has its own random data key (and a separate blind-index key), stored only wrapped by a key-encryption key: Azure Key Vault in production (`KEY_PROVIDER=azure-keyvault`, `AZURE_KEY_VAULT_KEY_ID`, managed identity), or `INTAKE_ENCRYPTION_KEY` locally. Ciphertext (`v2:`) is bound to its firm, so it can't be decrypted in another firm's rows. Data written before this (`v1:`) still reads; move it with `keys reencrypt`.
+- **Key operations** (`npm run ops -w apps/api -- …`, same environment as the server):
+  - `keys status` — keys per firm and how much data is not yet on the active key
+  - `keys rotate --slug <firm>` then `keys reencrypt --slug <firm>` then `keys prune` — rotate a firm's data key
+  - `keys rewrap` — after rotating the Key Vault key or `INTAKE_ENCRYPTION_KEY` (set `INTAKE_ENCRYPTION_KEY_PREVIOUS`), or moving from local to Key Vault
+  - `anchor` — anchor every firm's audit chain (run daily)
+- **Documents** go to `OBJECT_STORE` (`azure-blob` in production, one container per firm, encrypted before upload). Unset, they stay encrypted in PostgreSQL. Deleting a matter removes its blobs only after the database change commits.
+- **Audit anchors**: the head of each firm's chain is recorded daily, with a write-once copy in an immutable container. Administrators use **Verify audit trail** (Account & team), which checks the chain and every anchor, so rewriting history is detected even by someone holding `AUDIT_CHAIN_SECRET`.
+- **POPIA requests** (data-subject access, export, erasure) are for administrators (the information officer).
+- **Retention**: administrators set their firm's retention period (at least a year); `CLIENT_DATA_RETENTION_DAYS` is the default.
+- **Firm exit**: `npm run firm -w apps/api -- export --slug <firm> --out <file>` writes all of a firm's data, decrypted, without credentials or keys.
 
 ## Install as a PWA
 1. Build (`npm run build`) and serve it over HTTPS.

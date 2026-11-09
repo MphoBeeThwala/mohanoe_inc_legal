@@ -268,7 +268,7 @@ async function consumeRecoveryCode(user: UserRow, code: string): Promise<boolean
   return Boolean(used);
 }
 
-function mfaSecret(user: UserRow): string | null {
+async function mfaSecret(user: UserRow): Promise<string | null> {
   return user.mfaSecretEncrypted ? decryptJson<string>(user.mfaSecretEncrypted) : null;
 }
 
@@ -276,7 +276,7 @@ function mfaSecret(user: UserRow): string | null {
 export async function verifyMfa(input: unknown): Promise<UserRow> {
   const { challengeToken, code } = parse(mfaVerifySchema, input);
   const user = await readChallenge(challengeToken, 'mfa');
-  const secret = mfaSecret(user);
+  const secret = await mfaSecret(user);
   if (!secret || !user.mfaEnabledAt) {
     throw httpError('Set up your authenticator app first', 409);
   }
@@ -315,7 +315,7 @@ export async function startMfaEnrollment(input: unknown): Promise<MfaEnrollment>
   const secret = totp.generateSecret();
   await db()
     .update(users)
-    .set({ mfaSecretEncrypted: encryptJson(secret), mfaLastStep: null })
+    .set({ mfaSecretEncrypted: await encryptJson(secret), mfaLastStep: null })
     .where(eq(users.id, user.id));
 
   const issuer = getFirmBrand(currentFirm()).firmName;
@@ -339,7 +339,7 @@ export async function confirmMfaEnrollment(
 ): Promise<{ user: UserRow; recoveryCodes: string[] }> {
   const { challengeToken, code } = parse(mfaConfirmSchema, input);
   const user = await readChallenge(challengeToken, 'mfa_enroll');
-  const secret = mfaSecret(user);
+  const secret = await mfaSecret(user);
   if (user.mfaEnabledAt) {
     throw httpError('Two-factor sign-in is already set up', 409);
   }

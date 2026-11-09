@@ -24,6 +24,7 @@ import InviteAccept from './auth/InviteAccept';
 import ResetPassword from './auth/ResetPassword';
 import StaffAdmin from './components/StaffAdmin';
 import AccountPanel from './components/AccountPanel';
+import RecordsPanel from './components/RecordsPanel';
 import type { Notice } from './components/DismissibleNotice';
 import IntakeForm from './components/IntakeForm';
 import AssessmentCard from './components/AssessmentCard';
@@ -635,9 +636,14 @@ function App() {
         >
           <AccountPanel currentUser={currentUser} />
           {currentUser.permissions.includes('users.manage') ? (
-            <ErrorBoundary label="Staff administration">
-              <StaffAdmin currentUser={currentUser} />
-            </ErrorBoundary>
+            <>
+              <ErrorBoundary label="Staff administration">
+                <StaffAdmin currentUser={currentUser} />
+              </ErrorBoundary>
+              <ErrorBoundary label="Records">
+                <RecordsPanel />
+              </ErrorBoundary>
+            </>
           ) : null}
         </section>
       </main>

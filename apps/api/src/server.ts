@@ -10,6 +10,7 @@ import { getPublicBranding } from './config/brand';
 import { closeDb, dbDriver, initDb, pingDb } from './db/client';
 import { tenantContext } from './middleware/tenant';
 import { ensureDefaultFirm } from './services/firm.service';
+import { scheduleAnchoring } from './services/audit-anchor.service';
 import { createRateLimiter, requestLogger, securityHeaders } from './middleware/security';
 
 const app = express();
@@ -142,6 +143,7 @@ if (require.main === module) {
         console.log(`Default firm: ${defaultFirm.slug} (${defaultFirm.legalName})`);
       }
 
+      scheduleAnchoring();
       const server = app.listen(port, () => {
         console.log(`Legal practice API listening at http://localhost:${port}`);
       });
