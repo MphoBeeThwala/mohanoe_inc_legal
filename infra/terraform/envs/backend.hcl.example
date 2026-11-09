@@ -1,0 +1,5 @@
+# terraform init -backend-config=envs/<env>.backend.hcl
+resource_group_name  = "rg-ahava88-tfstate"
+storage_account_name = "stahava88tfstate"
+container_name       = "tfstate"
+key                  = "legal-platform/<env>.tfstate"

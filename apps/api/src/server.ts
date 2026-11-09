@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 import { describeError, errorMessage, errorStatus } from './lib/http';
+import { flushMonitoring, initMonitoring, reportError } from './lib/monitoring';
 import routes from './routes';
 import { assertConfig, configWarnings } from './config/env';
 import { getPublicBranding } from './config/brand';
@@ -17,6 +18,7 @@ import { scheduleCourtRollSync } from './services/court-roll.service';
 import { domainCheckValue, readAsset } from './services/white-label.service';
 import * as supportService from './services/support.service';
 import { createRateLimiter, requestLogger, securityHeaders } from './middleware/security';
+import { frontDoorGuard } from './middleware/front-door';
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -29,7 +31,9 @@ const allowedOrigins = new Set(
 );
 
 app.disable('x-powered-by');
-app.set('trust proxy', 1);
+// Proxies in front of the app: 1 by default (Container Apps ingress); 2
+// behind Azure Front Door, so rate limits see the client's address.
+app.set('trust proxy', Math.max(0, Number(process.env.TRUST_PROXY_HOPS ?? 1) || 0));
 
 // Middleware
 app.use(securityHeaders);
@@ -95,6 +99,12 @@ app.get('/ready', async (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Behind Azure Front Door (FRONT_DOOR_ID set), only requests that came through
+// our Front Door profile are served, so its firewall can't be bypassed by
+// calling the container app's own address. Health probes come from the
+// platform directly and stay open.
+app.use(frontDoorGuard());
 
 // Platform support sign-in checks the operator outside any firm's transaction,
 // then the firm's grant inside it (support.service.ts).
@@ -167,10 +177,11 @@ if (frontendBuildPath) {
 app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
   const statusCode = errorStatus(error);
   if (statusCode >= 500) {
+    reportError(error, { requestId: req.requestId, path: req.originalUrl });
     console.error(
       JSON.stringify({
         requestId: req.requestId,
-        message: errorMessage(error),
+        error: describeError(error),
         stack: error instanceof Error ? error.stack : undefined,
       }),
     );
@@ -186,6 +197,7 @@ app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
 });
 
 if (require.main === module) {
+  initMonitoring();
   try {
     assertConfig();
   } catch (error) {
@@ -212,7 +224,7 @@ if (require.main === module) {
       const shutdown = (signal: string) => {
         console.log(`${signal} received: closing connections.`);
         server.close(() => {
-          closeDb().finally(() => process.exit(0));
+          Promise.allSettled([closeDb(), flushMonitoring()]).finally(() => process.exit(0));
         });
       };
       process.on('SIGTERM', () => shutdown('SIGTERM'));

@@ -21,6 +21,7 @@ Owner: Ahava on 88 (Pty) Ltd. The product is licensed to individual law firms. T
 - **White label:** firm-visible names, colours, logo, prefixes and domains come from the `firms` row and `firm_assets`; never hard-code them. A custom domain is used (email links, `firmOrigin`) only once `white-label.service` has verified its TXT record and HTTPS routing. No SVG uploads.
 - **Time** is whole 6-minute units with the rate fixed when recorded (`time.service.ts`); narratives are encrypted; billed or written-off time never changes.
 - **Production fails fast:** `apps/api/src/config/env.ts` refuses to boot without real secrets. Don't add silent fallbacks that run in production.
+- **Infrastructure** lives in `infra/terraform` (format with `terraform fmt`); a new env var for production goes in `containerapps.tf` (`app_env`, or a Key Vault secret for secrets). A new scheduled task is an `ops` command plus a scheduled job there. Errors sent to Sentry go through `lib/monitoring.ts`, which strips personal information.
 - Schema changes: edit `apps/api/src/db/schema.ts`, then `npm run db:generate -w apps/api`; commit the migration. Never edit an applied migration; no manual SQL in production.
 - Audit: use `auditService.logEvent` (or `logEventSafely` for best-effort events). Never put personal information in audit summaries/details: audit rows are not encrypted.
 

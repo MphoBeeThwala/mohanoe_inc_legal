@@ -56,3 +56,60 @@ jobs:
         run: npm run test:postgres --workspace apps/api
         env:
           TEST_DATABASE_URL: postgres://app:app@localhost:5432/app_test
+
+  image:
+    # The production image builds, starts against PostgreSQL and answers /ready.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app_smoke
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U app" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build --build-arg APP_RELEASE=${{ github.sha }} -t legal-platform:ci .
+      - name: Migrate and start
+        run: |
+          common=(--network host
+            -e DATABASE_URL=postgres://app:app@localhost:5432/app_smoke
+            -e DATABASE_SSL=false
+            -e JWT_SECRET=ci-jwt-secret-0123456789abcdef0123456789abcdef
+            -e AUDIT_CHAIN_SECRET=ci-audit-secret-0123456789abcdef0123456789abcdef
+            -e INTAKE_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000001
+            -e APP_ORIGIN=http://localhost:3000)
+          docker run --rm "${common[@]}" legal-platform:ci node apps/api/dist/db/migrate.js
+          docker run -d --name api "${common[@]}" legal-platform:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000/ready; then exit 0; fi
+            sleep 2
+          done
+          docker logs api
+          exit 1
+      - name: Restore check runs in the image
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL=postgres://app:app@localhost:5432/app_smoke -e DATABASE_SSL=false \
+            -e JWT_SECRET=ci-jwt-secret-0123456789abcdef0123456789abcdef \
+            -e AUDIT_CHAIN_SECRET=ci-audit-secret-0123456789abcdef0123456789abcdef \
+            -e INTAKE_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000001 \
+            legal-platform:ci node apps/api/dist/scripts/ops.js restore-check
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - run: terraform fmt -check -recursive -diff
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate

@@ -100,7 +100,9 @@ When the firms table is empty, the server creates a `default` firm from these va
 - The server applies pending migrations on start (`DB_MIGRATE_ON_START=false` to run `npm run db:migrate -w apps/api` as a separate release step instead).
 - `/ready` returns 503 until the database answers.
 - `ANTHROPIC_API_KEY` enables live AI triage; without it the backend uses rules-based triage.
-- Interim hosting is Render (`render.yaml`: `npm ci --include=dev && npm run build`, then `npm start`). The target is Microsoft Azure, South Africa North — see the roadmap.
+- Interim hosting is Render (`render.yaml`: `npm ci --include=dev && npm run build`, then `npm start`).
+- **Azure** (South Africa North, DR South Africa West): Terraform in `infra/terraform`, the container image from `Dockerfile`, GitHub Actions for CI (`ci.yml`, including an image smoke test and `terraform validate`), infrastructure (`infra.yml`) and releases (`deploy.yml`). See [`docs/runbooks/deployment.md`](docs/runbooks/deployment.md).
+- Monitoring: `SENTRY_DSN` (optional) sends 5xx errors to Sentry with personal information removed; `APP_RELEASE` and `DEPLOY_ENVIRONMENT` tag them. Behind Azure Front Door set `FRONT_DOOR_ID` (requests without its `X-Azure-FDID` header get 403) and `TRUST_PROXY_HOPS` (2 behind Front Door and Container Apps; default 1).
 - After a deploy: `node scripts/smoke-test.js https://<your-host>`.
 - Backup, restore and smoke tests: [`PROD_OPERATIONS.md`](PROD_OPERATIONS.md).
 

@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.data
+**/coverage
+.git
+.github
+.idx
+.env
+.env.*
+!.env.example
+infra
+docs
+*.md
+render.yaml

@@ -155,8 +155,8 @@ Environment setup:
 - [x] Firm onboarding wizard (practice details, brand, invoicing, numbering, team); firm settings, uploaded logo and icon, colour contrast check, custom domains verified by DNS and HTTPS, emails in the firm's name
 - [ ] ZAR subscriptions via Paystack or PayFast (plans, seats, trial, dunning, suspension)
 - [ ] AI usage metering
-- [ ] IaC, staging/prod, CI/CD, tested restores, Sentry, uptime alerts, status page
-- [ ] Support desk, help centre, incident runbook
+- [x] IaC, staging/prod, CI/CD, tested restores, Sentry, uptime alerts (`infra/terraform`, GitHub Actions, `ops restore-check`, `docs/runbooks`). Next: choose and set up the hosted status page; run the first restore test.
+- [ ] Support desk, help centre (incident runbook done: `docs/runbooks/incident-response.md`)
 
 ## 6. P1 (by GA) and P2 (after GA)
 
@@ -211,7 +211,7 @@ Trust accounting and AI research ship behind feature flags to pilots first.
 6. **Encryption and records** — done on `feat/encryption-records`: per-firm data and index keys wrapped by Azure Key Vault (or a local KEK), rotation, re-encryption and rewrap via `npm run ops`, documents in Blob Storage, daily audit anchors with immutable copies and anchor-aware verification, admin-only POPIA requests, per-firm retention, firm exit export.
 7. **Practice core** — clients/matters, conflicts, FICA, time, invoicing, calendar.
 8. **White-label and onboarding** — done on `feat/white-label-onboarding`: firm settings, theming, logo and icon, custom domains (DNS + HTTPS verification), emails in the firm's name, onboarding wizard.
-9. **Infrastructure** — Terraform for staging/prod in South Africa North, DR to South Africa West, pipeline, monitoring.
+9. **Infrastructure** — done on `feat/infrastructure`: Terraform for staging/prod in South Africa North (private VNet, PostgreSQL HA + geo-backups, RA-GZRS storage, HSM Key Vault, Container Apps + scheduled jobs, Front Door Premium + WAF, ACS Email), DR to South Africa West, CI/CD with OIDC and approval, Sentry with PII scrubbing, alerts and budgets, restore check and runbooks.
 10. **Subscriptions** — Paystack or PayFast.
 11. **AI research** — corpus ingestion, retrieval, citation verification, evaluation harness.
 12. **Trust accounting, court roll, client portal.**
