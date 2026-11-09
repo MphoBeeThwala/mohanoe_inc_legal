@@ -16,6 +16,7 @@ import type {
   ReportSnapshot,
   UpcomingItem,
 } from '@ahava88/shared';
+import { ROLE_LABELS, STAFF_ROLES } from '@ahava88/shared';
 import type { Notice } from './DismissibleNotice';
 import DismissibleNotice from './DismissibleNotice';
 
@@ -880,9 +881,11 @@ function OperationsHub({
                 }))
               }
             >
-              <option value="attorney">Attorney</option>
-              <option value="paralegal">Paralegal</option>
-              <option value="admin">Admin</option>
+              {STAFF_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {ROLE_LABELS[role]}
+                </option>
+              ))}
             </select>
             <button className="secondary-button" disabled={busy}>
               Send notification
@@ -1062,7 +1065,7 @@ function OperationsHub({
             </button>
           </form>
 
-          {currentUser?.role === 'admin' ? (
+          {currentUser?.permissions.includes('compliance.admin') ? (
             <button
               type="button"
               className="secondary-button"

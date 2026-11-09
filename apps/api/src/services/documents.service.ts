@@ -58,7 +58,7 @@ export async function createDocument(input: unknown, actor: Actor = {}): Promise
   const document = parse(documentSchema, input);
   const caseRecord = await intakeService.findCaseByRef(document.caseRef);
   if (!caseRecord) {
-    throw httpError('title, body, and caseId are required', 400);
+    throw httpError('Case not found', 404);
   }
 
   const [saved] = await db()

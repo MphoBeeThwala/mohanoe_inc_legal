@@ -23,7 +23,11 @@ if (testDatabaseUrl) {
   delete process.env.DATABASE_URL;
   process.env.PGLITE_DATA_DIR = 'memory://';
 }
-process.env.ALLOW_PUBLIC_REGISTRATION = 'true';
+// Many sign-ins come from one address in tests.
+process.env.AUTH_RATE_LIMIT_MAX = '10000';
+process.env.RATE_LIMIT_MAX = '100000';
+delete process.env.OIDC_ISSUER;
+delete process.env.SMTP_URL;
 process.env.LOG_HTTP = 'false';
 process.env.FIRM_NAME = 'Nkosi & Partners Inc.';
 process.env.FIRM_SHORT_NAME = 'Nkosi';

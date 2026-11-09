@@ -13,6 +13,8 @@ declare global {
         email: string;
         role: UserRole;
         fullName: string;
+        sessionId: string;
+        method: 'password' | 'oidc';
       };
     }
   }

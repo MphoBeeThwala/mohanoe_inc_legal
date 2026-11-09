@@ -1,15 +1,18 @@
 import express from 'express';
 import * as notificationsController from '../controllers/notifications.controller';
-import { authenticateRequest, requireRoles } from '../services/auth.service';
+import { authenticateRequest, requirePermission } from '../services/auth.service';
 
 const router = express.Router();
 
 router.use(authenticateRequest);
-router.use(requireRoles('admin', 'attorney', 'paralegal'));
 
-router.get('/', notificationsController.index);
-router.get('/unread', notificationsController.unread);
-router.post('/', notificationsController.create);
-router.post('/:notificationId/read', notificationsController.markRead);
+router.get('/', requirePermission('notifications.read'), notificationsController.index);
+router.get('/unread', requirePermission('notifications.read'), notificationsController.unread);
+router.post('/', requirePermission('notifications.write'), notificationsController.create);
+router.post(
+  '/:notificationId/read',
+  requirePermission('notifications.read'),
+  notificationsController.markRead,
+);
 
 export default router;

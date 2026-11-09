@@ -35,10 +35,26 @@ test('production refuses placeholder and short secrets', () => {
   assert.ok(problems.some((p) => p.startsWith('AUDIT_CHAIN_SECRET must be at least')));
 });
 
-test('public registration in production is a warning, not a blocker', () => {
+test('retired sign-up settings and missing SMTP are warnings, not blockers', () => {
   const env = { ...goodProduction, ALLOW_PUBLIC_REGISTRATION: 'true' };
   assert.deepEqual(validateConfig(env), []);
-  assert.equal(configWarnings(env).length, 1);
+  const warnings = configWarnings(env);
+  assert.ok(
+    warnings.some((warning) => /ALLOW_PUBLIC_REGISTRATION is no longer used/.test(warning)),
+  );
+  assert.ok(warnings.some((warning) => /SMTP_URL is not set/.test(warning)));
+  assert.deepEqual(configWarnings({ ...goodProduction, SMTP_URL: 'smtp://mail' }), []);
+});
+
+test('production refuses insecure identity settings', () => {
+  const problems = validateConfig({
+    ...goodProduction,
+    OIDC_ISSUER: 'http://login.example/v2.0',
+    SESSION_COOKIE_SECURE: 'false',
+  });
+  assert.ok(problems.includes('OIDC_CLIENT_ID must be set when OIDC_ISSUER is set'));
+  assert.ok(problems.includes('OIDC_ISSUER must be an https:// URL'));
+  assert.ok(problems.includes('SESSION_COOKIE_SECURE cannot be false in production'));
 });
 
 test('development fallback secrets are refused against a real database', () => {
