@@ -1,205 +1,116 @@
-import type { DbRow, RequestBody, Actor } from '../types/db';
+// Matter documents. Bodies are encrypted at rest; lists return only a short
+// preview, and the decrypted content only for a single document.
+// (Real file storage in Azure Blob Storage arrives in roadmap epic 6.)
+
+import { desc, eq } from 'drizzle-orm';
+import type { DocumentContent, DocumentRecord } from '@ahava88/shared';
+import { db } from '../db/client';
+import { documents, type DocumentRow } from '../db/schema';
 import { httpError } from '../lib/http';
-import { randomUUID } from 'crypto';
-import { getSupabaseClient } from '../config/supabase';
-import * as intakeService from './intake.service';
+import { actorName, type Actor } from '../lib/actor';
+import { iso, isoOrNull } from '../lib/time';
+import { documentSchema, parse } from '../validation/schemas';
 import { decryptJson, encryptJson } from './privacy.service';
+import * as intakeService from './intake.service';
 import * as auditService from './audit.service';
 
-const memory: Record<string, DbRow[]> = {
-  documents: [],
-};
+const PREVIEW_LENGTH = 180;
 
-function toIso(value = new Date()) {
-  return new Date(value).toISOString();
-}
-
-async function resolveCase(caseRef: string) {
-  if (!caseRef) {
-    return null;
-  }
-
-  const cases = await intakeService.listCases();
-  return (
-    cases.find(
-      (item) => item.id === caseRef || item.caseNumber === caseRef || item.submissionId === caseRef,
-    ) || null
-  );
-}
-
-async function listRows() {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db
-      .from('documents')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) {
-      throw error;
+function toPublicDocument(row: DocumentRow, includeContent: boolean): DocumentRecord {
+  let content: DocumentContent | null = null;
+  if (includeContent) {
+    try {
+      content = decryptJson<DocumentContent>(row.encryptedContent);
+    } catch {
+      content = null;
     }
-
-    return data || [];
-  }
-
-  return [...memory.documents].sort((a, b) =>
-    String(b.created_at).localeCompare(String(a.created_at)),
-  );
-}
-
-async function saveRow(record: DbRow) {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db.from('documents').insert(record).select().single();
-    if (error) {
-      throw error;
-    }
-
-    return data;
-  }
-
-  memory.documents.unshift(record);
-  return record;
-}
-
-function toPublicDocument(row: DbRow, caseRecord?: DbRow | null) {
-  if (!row) {
-    return null;
-  }
-
-  let content = null;
-  try {
-    content = row.encrypted_content ? decryptJson(row.encrypted_content) : null;
-  } catch (error) {
-    content = null;
   }
 
   return {
     id: row.id,
-    caseId: row.case_id,
-    caseNumber: caseRecord?.caseNumber || row.case_number || null,
-    clientLabel: row.client_label,
+    caseId: row.caseId,
+    caseNumber: row.caseNumber,
+    clientLabel: row.clientLabel,
     title: row.title,
-    documentType: row.document_type,
+    documentType: row.documentType,
     status: row.status,
-    tags: row.tags || [],
-    contentPreview: content?.body ? String(content.body).slice(0, 180) : row.content_preview || '',
-    createdBy: row.created_by,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    signedAt: row.signed_at,
+    tags: row.tags,
+    contentPreview: row.contentPreview,
+    createdBy: row.createdBy,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+    signedAt: isoOrNull(row.signedAt),
     content,
   };
 }
 
-async function listDocuments() {
-  const rows = await listRows();
-  const cases = await intakeService.listCases();
-
-  return rows.map((row) =>
-    toPublicDocument(
-      row,
-      cases.find((item) => item.id === row.case_id || item.caseNumber === row.case_number),
-    ),
-  );
+export async function listDocuments(limit = 200): Promise<DocumentRecord[]> {
+  const rows = await db().select().from(documents).orderBy(desc(documents.createdAt)).limit(limit);
+  return rows.map((row) => toPublicDocument(row, false));
 }
 
-async function getDocument(documentId: string) {
-  const rows = await listRows();
-  const row = rows.find((item) => item.id === documentId);
-  if (!row) {
-    return null;
-  }
-
-  const cases = await intakeService.listCases();
-  return toPublicDocument(
-    row,
-    cases.find((item) => item.id === row.case_id || item.caseNumber === row.case_number),
-  );
+export async function getDocument(documentId: string): Promise<DocumentRecord | null> {
+  const [row] = await db().select().from(documents).where(eq(documents.id, documentId)).limit(1);
+  return row ? toPublicDocument(row, true) : null;
 }
 
-async function createDocument(input: RequestBody = {}, actor: Actor = {}) {
-  const title = String(input.title || '').trim();
-  const body = String(input.body || '').trim();
-  const documentType = String(input.documentType || 'correspondence').trim();
-  const caseRef = String(input.caseId || input.caseRef || '').trim();
-  const caseRecord = await resolveCase(caseRef);
-
-  if (!title || !body || !caseRecord) {
+export async function createDocument(input: unknown, actor: Actor = {}): Promise<DocumentRecord> {
+  const document = parse(documentSchema, input);
+  const caseRecord = await intakeService.findCaseByRef(document.caseRef);
+  if (!caseRecord) {
     throw httpError('title, body, and caseId are required', 400);
   }
 
-  const now = toIso();
-  const record = {
-    id: randomUUID(),
-    case_id: caseRecord.id,
-    case_number: caseRecord.caseNumber,
-    client_label: caseRecord.clientLabel,
-    title,
-    document_type: documentType,
-    tags: Array.isArray(input.tags) ? input.tags : [],
-    status: String(input.status || 'draft').trim(),
-    encrypted_content: encryptJson({
-      title,
-      body,
-      metadata: input.metadata || {},
-    }),
-    content_preview: body.slice(0, 180),
-    created_by: actor?.fullName || actor?.email || 'system',
-    created_at: now,
-    updated_at: now,
-    signed_at: input.signedAt || null,
-  };
+  const [saved] = await db()
+    .insert(documents)
+    .values({
+      caseId: caseRecord.id,
+      caseNumber: caseRecord.caseNumber,
+      clientLabel: caseRecord.clientLabel,
+      title: document.title,
+      documentType: document.documentType,
+      tags: document.tags,
+      status: document.status,
+      encryptedContent: encryptJson({
+        title: document.title,
+        body: document.body,
+        metadata: document.metadata,
+      } satisfies DocumentContent),
+      contentPreview: document.body.slice(0, PREVIEW_LENGTH),
+      createdBy: actorName(actor),
+    })
+    .returning();
+  if (!saved) {
+    throw new Error('Document was not stored');
+  }
 
-  const saved = await saveRow(record);
   await auditService.logEvent(
     {
       entityType: 'document',
       entityId: saved.id,
       action: 'document_created',
-      summary: `Document created: ${title}`,
-      details: {
-        caseId: caseRecord.id,
-        documentType,
-      },
+      summary: `Document created: ${saved.title}`,
+      details: { caseId: caseRecord.id, documentType: saved.documentType },
     },
     actor,
   );
 
-  return toPublicDocument(saved, caseRecord);
+  return toPublicDocument(saved, true);
 }
 
-async function signDocument(documentId: string, actor: Actor = {}) {
-  const rows = await listRows();
-  const row = rows.find((item) => item.id === documentId);
-  if (!row) {
+/**
+ * Marks a document as signed. NOTE: this records an attorney's approval; it
+ * is not an electronic signature (a signature provider comes in a later epic).
+ */
+export async function signDocument(documentId: string, actor: Actor = {}): Promise<DocumentRecord> {
+  const now = new Date();
+  const [updated] = await db()
+    .update(documents)
+    .set({ status: 'signed', signedAt: now, updatedAt: now })
+    .where(eq(documents.id, documentId))
+    .returning();
+  if (!updated) {
     throw httpError('Document not found', 404);
-  }
-
-  const updated = {
-    ...row,
-    status: 'signed',
-    signed_at: toIso(),
-    updated_at: toIso(),
-  };
-
-  const db = getSupabaseClient();
-  if (db) {
-    const { error } = await db
-      .from('documents')
-      .update({
-        status: updated.status,
-        signed_at: updated.signed_at,
-        updated_at: updated.updated_at,
-      })
-      .eq('id', documentId);
-    if (error) {
-      throw error;
-    }
-  } else {
-    const index = memory.documents.findIndex((item) => item.id === documentId);
-    if (index >= 0) {
-      memory.documents[index] = updated;
-    }
   }
 
   await auditService.logEvent(
@@ -207,34 +118,10 @@ async function signDocument(documentId: string, actor: Actor = {}) {
       entityType: 'document',
       entityId: documentId,
       action: 'document_signed',
-      summary: `Document signed: ${row.title}`,
+      summary: `Document signed: ${updated.title}`,
     },
     actor,
   );
 
-  return getDocument(documentId);
+  return toPublicDocument(updated, true);
 }
-
-async function deleteByCaseIds(caseIds: DbRow[] = []) {
-  if (!caseIds.length) {
-    return 0;
-  }
-
-  const normalized = new Set(caseIds.map((value) => String(value)));
-  const db = getSupabaseClient();
-  if (db) {
-    const { error } = await db
-      .from('documents')
-      .delete()
-      .in('case_id', [...normalized]);
-    if (error) {
-      throw error;
-    }
-  } else {
-    memory.documents = memory.documents.filter((doc) => !normalized.has(String(doc.case_id)));
-  }
-
-  return normalized.size;
-}
-
-export { createDocument, deleteByCaseIds, getDocument, listDocuments, signDocument };

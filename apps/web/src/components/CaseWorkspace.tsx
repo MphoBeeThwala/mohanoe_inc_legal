@@ -274,7 +274,7 @@ function CaseWorkspace({ api, selectedCaseId, onSelectCase, onChanged }: CaseWor
                 <div key={entry.id} className="timeline-item">
                   <div className="timeline-dot" />
                   <div>
-                    <strong>{entry.event_type}</strong>
+                    <strong>{entry.eventType}</strong>
                     <div className="muted">{entry.message}</div>
                   </div>
                 </div>

@@ -14,7 +14,8 @@ An npm workspaces monorepo, all TypeScript (strict):
   - `src/config/env.ts` — startup checks; production refuses to boot without real secrets
   - `src/lib/http.ts` — `HttpError` and the shared error-response helpers
   - `src/test/` — Vitest unit and HTTP tests (Supertest)
-  - `database.sql`, `migrations/` — Postgres schema (to be replaced by one versioned migration history, roadmap epic 3)
+  - `src/db/schema.ts` — the database schema (Drizzle ORM); `drizzle/` — generated SQL migrations
+  - `src/validation/schemas.ts` — zod schemas for every request body and query
 - `apps/web/` — React + Vite workspace; loads branding from `GET /api/tenant/branding`
 - `packages/shared/` — types shared by the API and the web app (branding, users, API response shapes)
 - `scripts/check-legacy-brand.js` — CI guard against hard-coded brand names; `scripts/smoke-test.js` — post-deploy check
@@ -22,7 +23,7 @@ An npm workspaces monorepo, all TypeScript (strict):
 ## Local development
 Requires Node 22+.
 
-1. Copy `.env.example` to `.env` at the repo root. Without Supabase settings the API runs in memory (development only; production refuses to start).
+1. Copy `.env.example` to `.env` at the repo root. Leave `DATABASE_URL` empty to use an embedded Postgres (PGlite) stored in `.data/pglite` — no database install needed. Delete that folder to start fresh.
 2. `npm install` at the repo root (installs every workspace).
 3. `npm run build --workspace packages/shared` once (the API imports the compiled shared types).
 4. For the first login, set `ALLOW_PUBLIC_REGISTRATION=true`, then use **Create account** on the sign-in screen. Turn it off afterwards.
@@ -36,6 +37,14 @@ Requires Node 22+.
 | `npm start` | Runs the compiled API, which also serves the built web app |
 | `npm run format` / `format:check` | Prettier |
 | `npm run check:brand` | Brand guard |
+| `npm run db:generate -w apps/api` | Generate a migration after changing `src/db/schema.ts` |
+| `npm run db:migrate -w apps/api` | Apply migrations (after `npm run build`) |
+| `TEST_DATABASE_URL=… npm run test:postgres -w apps/api` | Run the API tests against a disposable real PostgreSQL database |
+
+### Database changes
+1. Edit `apps/api/src/db/schema.ts`.
+2. `npm run db:generate -w apps/api -- --name short_description` and commit the new file in `apps/api/drizzle/`.
+3. Never edit a migration that has been applied anywhere, and never change a shared database by hand.
 
 ## Branding a deployment (one firm per deployment, until multi-tenancy)
 Set these environment variables; anything missing falls back to a neutral default:
@@ -51,11 +60,13 @@ Set these environment variables; anything missing falls back to a neutral defaul
 | `PLATFORM_SUPPORT_EMAIL` | `support@…` | Platform support contact |
 
 ## Production
-- Required, or the server will not start: `JWT_SECRET` (32+ chars), `INTAKE_ENCRYPTION_KEY` (32-byte base64 or 64-char hex), `AUDIT_CHAIN_SECRET` (32+ chars), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+- Required, or the server will not start: `JWT_SECRET` (32+ chars), `INTAKE_ENCRYPTION_KEY` (32-byte base64 or 64-char hex), `AUDIT_CHAIN_SECRET` (32+ chars), `DATABASE_URL`.
+- **Keep `INTAKE_ENCRYPTION_KEY` and `AUDIT_CHAIN_SECRET` safe and unchanged.** Losing the first makes stored client data unreadable; changing the second makes the audit chain fail verification.
+- The server applies pending migrations on start (`DB_MIGRATE_ON_START=false` to run `npm run db:migrate -w apps/api` as a separate release step instead).
+- `/ready` returns 503 until the database answers.
 - `ANTHROPIC_API_KEY` enables live AI triage; without it the backend uses rules-based triage.
 - Interim hosting is Render (`render.yaml`: `npm ci --include=dev && npm run build`, then `npm start`). The target is Microsoft Azure, South Africa North — see the roadmap.
 - After a deploy: `node scripts/smoke-test.js https://<your-host>`.
-- If API calls fail with missing tables, see [`SUPABASE_FIX.md`](SUPABASE_FIX.md).
 - Backup, restore and smoke tests: [`PROD_OPERATIONS.md`](PROD_OPERATIONS.md).
 
 ## Install as a PWA

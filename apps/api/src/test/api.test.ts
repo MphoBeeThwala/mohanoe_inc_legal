@@ -1,13 +1,23 @@
-import './memory-env';
 import { beforeAll, describe, expect, test } from 'vitest';
 import request from 'supertest';
 
 import app from '../server';
 
 // HTTP-level tests against the real Express app (in-memory datastore).
+let adminToken: string;
 let token: string;
 
 beforeAll(async () => {
+  // The first account becomes the admin; the second is an ordinary attorney.
+  const admin = await request(app).post('/api/auth/register').send({
+    fullName: 'Founding Partner',
+    email: 'partner@example.com',
+    password: 'CorrectHorse123',
+  });
+  expect(admin.status).toBe(201);
+  expect(admin.body.user.role).toBe('admin');
+  adminToken = admin.body.token;
+
   const res = await request(app).post('/api/auth/register').send({
     fullName: 'Test Attorney',
     email: 'attorney@example.com',
@@ -18,6 +28,12 @@ beforeAll(async () => {
 });
 
 describe('public endpoints', () => {
+  test('readiness reports the database', async () => {
+    const res = await request(app).get('/ready');
+    expect(res.status).toBe(200);
+    expect(res.body.database).toBe(true);
+  });
+
   test('health check', async () => {
     const res = await request(app).get('/health');
     expect(res.status).toBe(200);
@@ -63,6 +79,16 @@ describe('authentication and roles', () => {
     const auth = { authorization: `Bearer ${token}` };
     expect((await request(app).post('/api/auth/seed-admin').set(auth)).status).toBe(403);
     expect((await request(app).get('/api/compliance/export').set(auth)).status).toBe(403);
+    expect((await request(app).get('/api/audit/verify').set(auth)).status).toBe(403);
+  });
+
+  test('admins can verify the audit chain', async () => {
+    const res = await request(app)
+      .get('/api/audit/verify')
+      .set('authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.valid).toBe(true);
+    expect(res.body.count).toBeGreaterThan(0);
   });
 });
 

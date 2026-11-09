@@ -1,343 +1,279 @@
-import type { DbRow, RequestBody, Actor } from '../types/db';
+// Matter workspace: tasks, status changes and the case timeline.
+
+import { and, asc, count, desc, eq, ne, sql } from 'drizzle-orm';
+import type { CaseDetail, CaseIndexEntry, CaseTask, CaseTimelineEntry } from '@ahava88/shared';
+import { db } from '../db/client';
+import {
+  cases,
+  caseTasks,
+  caseTimeline,
+  type CaseTaskRow,
+  type CaseTimelineRow,
+} from '../db/schema';
 import { httpError } from '../lib/http';
-import { randomUUID } from 'crypto';
-import { getSupabaseClient } from '../config/supabase';
+import { actorName, type Actor } from '../lib/actor';
+import { iso, isoOrNull } from '../lib/time';
+import {
+  caseStatusSchema,
+  caseTaskSchema,
+  parse,
+  timelineNoteSchema,
+  type TimelineNoteInput,
+} from '../validation/schemas';
 import * as intakeService from './intake.service';
 import * as auditService from './audit.service';
 
-const memory: Record<string, DbRow[]> = {
-  tasks: [],
-  timeline: [],
-};
-
-function toIso(value = new Date()) {
-  return new Date(value).toISOString();
-}
-
-async function writeRow(table: string, memoryKey: string, record: DbRow) {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db.from(table).insert(record).select().single();
-    if (error) {
-      throw error;
-    }
-
-    return data;
-  }
-
-  memory[memoryKey].push(record);
-  return record;
-}
-
-async function updateCaseRecord(caseId: string, patch: RequestBody) {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db.from('cases').update(patch).eq('id', caseId).select().single();
-
-    if (error) {
-      throw error;
-    }
-
-    return data;
-  }
-
-  const cases = await intakeService.listCases();
-  const current = cases.find((item) => item.id === caseId || item.caseNumber === caseId);
-  if (!current) {
-    return null;
-  }
-
-  const updated = { ...current, ...patch };
-  return updated;
-}
-
-async function getCasesIndex() {
-  const cases = await intakeService.listCases();
-  const tasks = await listTasks();
-  const timeline = await listTimeline();
-
-  return cases.map((item) => ({
-    ...item,
-    taskCount: tasks.filter((task) => task.case_id === item.id).length,
-    openTaskCount: tasks.filter((task) => task.case_id === item.id && task.status !== 'done')
-      .length,
-    timelineCount: timeline.filter((entry) => entry.case_id === item.id).length,
-  }));
-}
-
-async function getCase(caseId: string) {
-  const cases = await intakeService.listCases();
-  const current = cases.find(
-    (item) => item.id === caseId || item.caseNumber === caseId || item.submissionId === caseId,
-  );
-  if (!current) {
-    return null;
-  }
-
+function toTask(row: CaseTaskRow): CaseTask {
   return {
-    ...current,
-    tasks: (await listTasks()).filter((task) => task.case_id === current.id),
-    timeline: (await listTimeline()).filter((entry) => entry.case_id === current.id),
+    id: row.id,
+    caseId: row.caseId,
+    title: row.title,
+    description: row.description,
+    status: row.status,
+    dueDate: row.dueDate,
+    assigneeName: row.assigneeName,
+    createdBy: row.createdBy,
+    createdAt: iso(row.createdAt),
+    completedAt: isoOrNull(row.completedAt),
   };
 }
 
-async function listTasks() {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db.from('case_tasks').select('*').order('created_at', {
-      ascending: false,
-    });
-    if (error) {
-      throw error;
-    }
-
-    return data || [];
-  }
-
-  return [...memory.tasks].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+function toTimelineEntry(row: CaseTimelineRow): CaseTimelineEntry {
+  return {
+    id: row.id,
+    caseId: row.caseId,
+    eventType: row.eventType,
+    message: row.message,
+    metadata: row.metadata,
+    actorName: row.actorName,
+    createdAt: iso(row.createdAt),
+  };
 }
 
-async function listTimeline() {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db
-      .from('case_timeline')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) {
-      throw error;
-    }
-
-    return data || [];
-  }
-
-  return [...memory.timeline].sort((a, b) =>
-    String(b.created_at).localeCompare(String(a.created_at)),
-  );
-}
-
-async function addTask(caseId: string, input: RequestBody, actor: Actor = {}) {
-  const caseRecord = await getCase(caseId);
+async function requireCase(caseRef: string) {
+  const caseRecord = await intakeService.findCaseByRef(caseRef);
   if (!caseRecord) {
     throw httpError('Case not found', 404);
   }
+  return caseRecord;
+}
 
-  const title = String(input.title || '').trim();
-  if (!title) {
-    throw httpError('Task title is required', 400);
+export async function getCasesIndex(limit = 500): Promise<CaseIndexEntry[]> {
+  const rows = await db()
+    .select({
+      matterCase: cases,
+      taskCount: sql<number>`(select count(*)::int from ${caseTasks} where ${caseTasks.caseId} = ${cases.id})`,
+      openTaskCount: sql<number>`(select count(*)::int from ${caseTasks} where ${caseTasks.caseId} = ${cases.id} and ${caseTasks.status} <> 'done')`,
+      timelineCount: sql<number>`(select count(*)::int from ${caseTimeline} where ${caseTimeline.caseId} = ${cases.id})`,
+    })
+    .from(cases)
+    .orderBy(desc(cases.createdAt))
+    .limit(limit);
+
+  return rows.map((row) => ({
+    ...intakeService.toMatterCase(row.matterCase),
+    taskCount: row.taskCount,
+    openTaskCount: row.openTaskCount,
+    timelineCount: row.timelineCount,
+  }));
+}
+
+export async function getCase(caseRef: string): Promise<CaseDetail | null> {
+  const caseRecord = await intakeService.findCaseByRef(caseRef);
+  if (!caseRecord) {
+    return null;
   }
 
-  const task = {
-    id: randomUUID(),
-    case_id: caseRecord.id,
-    title,
-    description: String(input.description || '').trim(),
-    status: 'open',
-    due_date: input.dueDate || null,
-    assignee_name: input.assigneeName || null,
-    created_by: actor?.fullName || actor?.email || 'system',
-    created_at: toIso(),
-    completed_at: null,
-  };
+  const [tasks, timeline] = await Promise.all([
+    db()
+      .select()
+      .from(caseTasks)
+      .where(eq(caseTasks.caseId, caseRecord.id))
+      .orderBy(desc(caseTasks.createdAt)),
+    db()
+      .select()
+      .from(caseTimeline)
+      .where(eq(caseTimeline.caseId, caseRecord.id))
+      .orderBy(desc(caseTimeline.createdAt)),
+  ]);
 
-  const saved = await writeRow('case_tasks', 'tasks', task);
-  await auditService
-    .logEvent(
-      {
-        entityType: 'case_task',
-        entityId: saved.id,
-        action: 'task_created',
-        summary: `Task created: ${task.title}`,
-        details: { caseId: caseRecord.id },
-      },
-      actor,
-    )
-    .catch(() => {});
-  await addTimeline(
+  return {
+    ...intakeService.toMatterCase(caseRecord),
+    tasks: tasks.map(toTask),
+    timeline: timeline.map(toTimelineEntry),
+  };
+}
+
+/** Open tasks that have a due date, soonest first (for the calendar). */
+export async function listDueTasks(limit = 50): Promise<CaseTask[]> {
+  const rows = await db()
+    .select()
+    .from(caseTasks)
+    .where(and(ne(caseTasks.status, 'done'), sql`${caseTasks.dueDate} is not null`))
+    .orderBy(asc(caseTasks.dueDate))
+    .limit(limit);
+  return rows.map(toTask);
+}
+
+export async function countOpenTasks(): Promise<number> {
+  const [row] = await db()
+    .select({ value: count() })
+    .from(caseTasks)
+    .where(ne(caseTasks.status, 'done'));
+  return row?.value ?? 0;
+}
+
+export async function addTask(
+  caseRef: string,
+  input: unknown,
+  actor: Actor = {},
+): Promise<CaseTask> {
+  const caseRecord = await requireCase(caseRef);
+  const task = parse(caseTaskSchema, input);
+
+  const [saved] = await db()
+    .insert(caseTasks)
+    .values({
+      caseId: caseRecord.id,
+      title: task.title,
+      description: task.description,
+      dueDate: task.dueDate ?? null,
+      assigneeName: task.assigneeName ?? null,
+      createdBy: actorName(actor),
+    })
+    .returning();
+  if (!saved) {
+    throw new Error('Task was not stored');
+  }
+
+  await auditService.logEventSafely(
+    {
+      entityType: 'case_task',
+      entityId: saved.id,
+      action: 'task_created',
+      summary: `Task created: ${saved.title}`,
+      details: { caseId: caseRecord.id },
+    },
+    actor,
+  );
+  await recordTimeline(
     caseRecord.id,
     {
       eventType: 'task_created',
-      message: `Task created: ${task.title}`,
-      metadata: { taskId: task.id },
+      message: `Task created: ${saved.title}`,
+      metadata: { taskId: saved.id },
     },
     actor,
   );
 
-  return saved;
+  return toTask(saved);
 }
 
-async function completeTask(caseId: string, taskId: string, actor: Actor = {}) {
-  const caseRecord = await getCase(caseId);
-  if (!caseRecord) {
-    throw httpError('Case not found', 404);
-  }
-
-  const tasks = await listTasks();
-  const existing = tasks.find((task) => task.id === taskId && task.case_id === caseRecord.id);
-  if (!existing) {
+export async function completeTask(
+  caseRef: string,
+  taskId: string,
+  actor: Actor = {},
+): Promise<CaseTask> {
+  const caseRecord = await requireCase(caseRef);
+  const [updated] = await db()
+    .update(caseTasks)
+    .set({ status: 'done', completedAt: new Date() })
+    .where(and(eq(caseTasks.id, taskId), eq(caseTasks.caseId, caseRecord.id)))
+    .returning();
+  if (!updated) {
     throw httpError('Task not found', 404);
   }
 
-  const patch = {
-    ...existing,
-    status: 'done',
-    completed_at: toIso(),
-  };
-
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db
-      .from('case_tasks')
-      .update({ status: 'done', completed_at: patch.completed_at })
-      .eq('id', taskId)
-      .select()
-      .single();
-    if (error) {
-      throw error;
-    }
-  } else {
-    const index = memory.tasks.findIndex((task) => task.id === taskId);
-    if (index >= 0) {
-      memory.tasks[index] = patch;
-    }
-  }
-
-  await addTimeline(
-    caseId,
+  await recordTimeline(
+    caseRecord.id,
     {
       eventType: 'task_completed',
-      message: `Task completed: ${existing.title}`,
+      message: `Task completed: ${updated.title}`,
       metadata: { taskId },
     },
     actor,
   );
-  await auditService
-    .logEvent(
-      {
-        entityType: 'case_task',
-        entityId: existing.id,
-        action: 'task_completed',
-        summary: `Task completed: ${existing.title}`,
-        details: { caseId: caseRecord.id },
-      },
-      actor,
-    )
-    .catch(() => {});
-
-  return patch;
-}
-
-async function updateCaseStatus(caseId: string, input: RequestBody, actor: Actor = {}) {
-  const caseRecord = await getCase(caseId);
-  if (!caseRecord) {
-    throw httpError('Case not found', 404);
-  }
-
-  const status = String(input.status || '').trim();
-  if (!status) {
-    throw httpError('status is required', 400);
-  }
-
-  const updated = await updateCaseRecord(caseRecord.id, {
-    status,
-    updated_at: toIso(),
-    next_action: input.nextAction || caseRecord.nextAction,
-  });
-
-  await addTimeline(
-    caseRecord.id,
+  await auditService.logEventSafely(
     {
-      eventType: 'status_changed',
-      message: `Case status changed to ${status}`,
-      metadata: { previousStatus: caseRecord.status, newStatus: status },
+      entityType: 'case_task',
+      entityId: updated.id,
+      action: 'task_completed',
+      summary: `Task completed: ${updated.title}`,
+      details: { caseId: caseRecord.id },
     },
     actor,
   );
-  await auditService
-    .logEvent(
-      {
-        entityType: 'case',
-        entityId: caseRecord.id,
-        action: 'case_status_changed',
-        summary: `Case status changed to ${status}`,
-        details: { previousStatus: caseRecord.status, newStatus: status },
-      },
-      actor,
-    )
-    .catch(() => {});
 
-  return updated;
+  return toTask(updated);
 }
 
-async function addTimeline(caseId: string, input: RequestBody, actor: Actor = {}) {
-  const entry = {
-    id: randomUUID(),
-    case_id: caseId,
-    event_type: input.eventType || 'note',
-    message: String(input.message || '').trim(),
-    metadata: input.metadata || {},
-    actor_name: actor?.fullName || actor?.email || 'system',
-    created_at: toIso(),
-  };
+export async function updateCaseStatus(caseRef: string, input: unknown, actor: Actor = {}) {
+  const caseRecord = await requireCase(caseRef);
+  const { status, nextAction } = parse(caseStatusSchema, input);
 
-  const saved = await writeRow('case_timeline', 'timeline', entry);
-  await auditService
-    .logEvent(
-      {
-        entityType: 'case_timeline',
-        entityId: saved.id,
-        action: 'timeline_note_added',
-        summary: entry.message,
-        details: {
-          caseId,
-          eventType: entry.event_type,
-        },
-      },
-      actor,
-    )
-    .catch(() => {});
-  return saved;
-}
-
-async function deleteByCaseIds(caseIds: DbRow[] = []) {
-  if (!caseIds.length) {
-    return 0;
+  const [updated] = await db()
+    .update(cases)
+    .set({ status, nextAction: nextAction || caseRecord.nextAction, updatedAt: new Date() })
+    .where(eq(cases.id, caseRecord.id))
+    .returning();
+  if (!updated) {
+    throw httpError('Case not found', 404);
   }
 
-  const normalized = new Set(caseIds.map((value) => String(value)));
-  const db = getSupabaseClient();
-  if (db) {
-    const { error } = await db
-      .from('case_tasks')
-      .delete()
-      .in('case_id', [...normalized]);
-    if (error) {
-      throw error;
-    }
+  const details = { previousStatus: caseRecord.status, newStatus: status };
+  await recordTimeline(
+    caseRecord.id,
+    { eventType: 'status_changed', message: `Case status changed to ${status}`, metadata: details },
+    actor,
+  );
+  await auditService.logEventSafely(
+    {
+      entityType: 'case',
+      entityId: caseRecord.id,
+      action: 'case_status_changed',
+      summary: `Case status changed to ${status}`,
+      details,
+    },
+    actor,
+  );
 
-    const { error: timelineError } = await db
-      .from('case_timeline')
-      .delete()
-      .in('case_id', [...normalized]);
-    if (timelineError) {
-      throw timelineError;
-    }
-  } else {
-    memory.tasks = memory.tasks.filter((task) => !normalized.has(String(task.case_id)));
-    memory.timeline = memory.timeline.filter((entry) => !normalized.has(String(entry.case_id)));
-  }
-
-  return normalized.size;
+  return intakeService.toMatterCase(updated);
 }
 
-export {
-  addTask,
-  addTimeline,
-  completeTask,
-  getCase,
-  getCasesIndex,
-  listTasks,
-  listTimeline,
-  deleteByCaseIds,
-  updateCaseStatus,
-};
+/** Endpoint: POST /cases/:caseId/timeline (a note written by staff). */
+export async function addTimeline(caseRef: string, input: unknown, actor: Actor = {}) {
+  const caseRecord = await requireCase(caseRef);
+  return recordTimeline(caseRecord.id, parse(timelineNoteSchema, input), actor);
+}
+
+async function recordTimeline(
+  caseId: string,
+  entry: TimelineNoteInput,
+  actor: Actor = {},
+): Promise<CaseTimelineEntry> {
+  const [saved] = await db()
+    .insert(caseTimeline)
+    .values({
+      caseId,
+      eventType: entry.eventType,
+      message: entry.message,
+      metadata: entry.metadata,
+      actorName: actorName(actor),
+    })
+    .returning();
+  if (!saved) {
+    throw new Error('Timeline entry was not stored');
+  }
+
+  await auditService.logEventSafely(
+    {
+      entityType: 'case_timeline',
+      entityId: saved.id,
+      action: 'timeline_note_added',
+      summary: saved.message,
+      details: { caseId, eventType: saved.eventType },
+    },
+    actor,
+  );
+  return toTimelineEntry(saved);
+}

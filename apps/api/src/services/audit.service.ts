@@ -1,23 +1,34 @@
-import type { DbRow, RequestBody, Actor } from '../types/db';
-import { createHmac, randomUUID } from 'crypto';
-import { getSupabaseClient } from '../config/supabase';
+// Tamper-evident audit trail.
+//
+// Every event stores an HMAC (AUDIT_CHAIN_SECRET) over its own contents and
+// the previous event's hash. Appends are serialised with a transaction-scoped
+// advisory lock, so each event links to the true latest event even under
+// concurrent requests, and `seq` gives the chain a strict order.
+// verifyEventChain() recomputes every hash; any edited, inserted or deleted
+// row breaks the chain from that point on.
+
+import { createHmac } from 'crypto';
+import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
+import type { AuditChainResult, AuditEventRecord } from '@ahava88/shared';
+import { db } from '../db/client';
+import { auditEvents, type AuditEventRow } from '../db/schema';
 import { requireSecret } from '../config/env';
+import { actorName, type Actor } from '../lib/actor';
+import { iso } from '../lib/time';
 
-const memory: { events: DbRow[]; lastHash: string } = {
-  events: [],
-  lastHash: 'genesis',
-};
+/** Arbitrary constant identifying the audit-chain advisory lock. */
+const AUDIT_CHAIN_LOCK = 0x41756469; // "Audi"
 
-function toIso(value = new Date()) {
-  return new Date(value).toISOString();
+export interface AuditInput {
+  entityType?: string;
+  entityId?: string | null;
+  action?: string;
+  summary?: string;
+  details?: Record<string, unknown>;
 }
 
-function normalizeActor(actor: Actor = {}) {
-  return {
-    actor_id: actor.userId || actor.id || null,
-    actor_name: actor.fullName || actor.email || 'system',
-    actor_role: actor.role || 'system',
-  };
+function chainSeed(): string {
+  return process.env.AUDIT_CHAIN_SEED || 'genesis';
 }
 
 function canonicalize(value: unknown): string {
@@ -37,18 +48,31 @@ function canonicalize(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function hashEvent(record: DbRow, previousHash: string) {
+interface HashableEvent {
+  actorId: string | null;
+  actorName: string;
+  actorRole: string;
+  action: string;
+  createdAt: string;
+  details: Record<string, unknown>;
+  entityId: string | null;
+  entityType: string;
+  summary: string;
+}
+
+function hashEvent(event: HashableEvent, previousHash: string): string {
+  // Key names match the original snake_case formula so the algorithm is stable.
   const payload = canonicalize({
-    actor_id: record.actor_id,
-    actor_name: record.actor_name,
-    actor_role: record.actor_role,
-    action: record.action,
-    created_at: record.created_at,
-    details: record.details,
-    entity_id: record.entity_id,
-    entity_type: record.entity_type,
+    actor_id: event.actorId,
+    actor_name: event.actorName,
+    actor_role: event.actorRole,
+    action: event.action,
+    created_at: event.createdAt,
+    details: event.details,
+    entity_id: event.entityId,
+    entity_type: event.entityType,
     previous_hash: previousHash,
-    summary: record.summary,
+    summary: event.summary,
   });
 
   return createHmac('sha256', requireSecret('AUDIT_CHAIN_SECRET', 'local-development-audit-secret'))
@@ -56,111 +80,172 @@ function hashEvent(record: DbRow, previousHash: string) {
     .digest('hex');
 }
 
-async function insertEvent(record: DbRow) {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db.from('audit_events').insert(record).select().single();
-    if (error) {
-      throw error;
-    }
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-    return data;
-  }
-
-  memory.events.unshift(record);
-  memory.lastHash = record.entry_hash;
-  return record;
-}
-
-async function logEvent(input: RequestBody = {}, actor: Actor = {}) {
-  const previousHash = memory.events[0]?.entry_hash || process.env.AUDIT_CHAIN_SEED || 'genesis';
-  const record: DbRow = {
-    id: randomUUID(),
-    entity_type: input.entityType || 'system',
-    entity_id: input.entityId || null,
-    action: input.action || 'event',
-    summary: String(input.summary || '').trim(),
-    details: input.details || {},
-    ...normalizeActor(actor),
-    created_at: toIso(),
-    previous_hash: previousHash,
+function toRecord(row: AuditEventRow): AuditEventRecord {
+  return {
+    id: row.id,
+    seq: row.seq,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    action: row.action,
+    summary: row.summary,
+    details: row.details,
+    actorId: row.actorId,
+    actorName: row.actorName,
+    actorRole: row.actorRole,
+    createdAt: iso(row.createdAt),
+    previousHash: row.previousHash,
+    entryHash: row.entryHash,
   };
-  record.entry_hash = hashEvent(record, previousHash);
-
-  return insertEvent(record);
 }
 
-async function listEvents(filters: RequestBody = {}) {
-  const db = getSupabaseClient();
-  if (db) {
-    let query = db.from('audit_events').select('*').order('created_at', {
-      ascending: false,
-    });
+export async function logEvent(
+  input: AuditInput = {},
+  actor: Actor = {},
+): Promise<AuditEventRecord> {
+  // Round-trip details through JSON so the hashed form equals what jsonb
+  // stores (undefined values dropped, dates as strings).
+  const details = JSON.parse(JSON.stringify(input.details ?? {})) as Record<string, unknown>;
+  const userId = actor.userId && UUID.test(actor.userId) ? actor.userId : null;
 
-    if (filters.entityType) {
-      query = query.eq('entity_type', filters.entityType);
+  return db().transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(${AUDIT_CHAIN_LOCK})`);
+    const [last] = await tx
+      .select({ entryHash: auditEvents.entryHash })
+      .from(auditEvents)
+      .orderBy(desc(auditEvents.seq))
+      .limit(1);
+    const previousHash = last?.entryHash ?? chainSeed();
+
+    // JS dates have millisecond precision, which timestamptz stores exactly.
+    const createdAt = new Date();
+    const event: HashableEvent = {
+      actorId: userId,
+      actorName: actorName(actor),
+      actorRole: actor.role || 'system',
+      action: input.action || 'event',
+      createdAt: createdAt.toISOString(),
+      details,
+      entityId: input.entityId ?? null,
+      entityType: input.entityType || 'system',
+      summary: String(input.summary || '').trim(),
+    };
+
+    const [saved] = await tx
+      .insert(auditEvents)
+      .values({
+        actorId: event.actorId,
+        actorName: event.actorName,
+        actorRole: event.actorRole,
+        entityType: event.entityType,
+        entityId: event.entityId,
+        action: event.action,
+        summary: event.summary,
+        details: event.details,
+        previousHash,
+        entryHash: hashEvent(event, previousHash),
+        createdAt,
+      })
+      .returning();
+    if (!saved) {
+      throw new Error('Audit event was not stored');
     }
-
-    if (filters.entityId) {
-      query = query.eq('entity_id', filters.entityId);
-    }
-
-    const { data, error } = await query;
-    if (error) {
-      throw error;
-    }
-
-    return data || [];
-  }
-
-  return memory.events.filter((entry) => {
-    if (filters.entityType && entry.entity_type !== filters.entityType) {
-      return false;
-    }
-
-    if (filters.entityId && String(entry.entity_id) !== String(filters.entityId)) {
-      return false;
-    }
-
-    return true;
+    return toRecord(saved);
   });
 }
 
-async function verifyEventChain() {
-  const events = await listEvents();
-  let previousHash = process.env.AUDIT_CHAIN_SEED || 'genesis';
-
-  for (const event of events.slice().reverse()) {
-    const expected = hashEvent(
-      {
-        actor_id: event.actor_id,
-        actor_name: event.actor_name,
-        actor_role: event.actor_role,
-        action: event.action,
-        created_at: event.created_at,
-        details: event.details,
-        entity_id: event.entity_id,
-        entity_type: event.entity_type,
-        summary: event.summary,
-      },
-      previousHash,
+/**
+ * Records an audit event without failing the caller's request if the audit
+ * write itself fails (logged instead). Use for best-effort events only.
+ */
+export async function logEventSafely(input: AuditInput, actor: Actor = {}): Promise<void> {
+  try {
+    await logEvent(input, actor);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        message: 'audit_event_failed',
+        action: input.action,
+        error: error instanceof Error ? error.message : String(error),
+      }),
     );
-
-    if (event.previous_hash !== previousHash || event.entry_hash !== expected) {
-      return {
-        valid: false,
-        brokenAt: event.id,
-        action: event.action,
-      };
-    }
-
-    previousHash = event.entry_hash;
   }
-
-  return {
-    valid: true,
-    count: events.length,
-  };
 }
 
-export { listEvents, logEvent, verifyEventChain };
+export interface AuditFilters {
+  entityType?: string;
+  entityId?: string;
+  limit?: number;
+}
+
+export async function listEvents(filters: AuditFilters = {}): Promise<AuditEventRecord[]> {
+  const conditions: SQL[] = [];
+  if (filters.entityType) {
+    conditions.push(eq(auditEvents.entityType, filters.entityType));
+  }
+  if (filters.entityId) {
+    conditions.push(eq(auditEvents.entityId, filters.entityId));
+  }
+
+  const rows = await db()
+    .select()
+    .from(auditEvents)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(auditEvents.seq))
+    .limit(Math.min(filters.limit ?? 500, 2_000));
+  return rows.map(toRecord);
+}
+
+export async function countEvents(): Promise<number> {
+  const [row] = await db()
+    .select({ count: sql<number>`count(*)::int` })
+    .from(auditEvents);
+  return row?.count ?? 0;
+}
+
+/** Recomputes the whole chain in order, in pages of 1,000 events. */
+export async function verifyEventChain(): Promise<AuditChainResult> {
+  const pageSize = 1_000;
+  let previousHash = chainSeed();
+  let afterSeq = 0;
+  let count = 0;
+
+  for (;;) {
+    const page = await db()
+      .select()
+      .from(auditEvents)
+      .where(sql`${auditEvents.seq} > ${afterSeq}`)
+      .orderBy(asc(auditEvents.seq))
+      .limit(pageSize);
+    if (!page.length) {
+      break;
+    }
+
+    for (const row of page) {
+      const expected = hashEvent(
+        {
+          actorId: row.actorId,
+          actorName: row.actorName,
+          actorRole: row.actorRole,
+          action: row.action,
+          createdAt: iso(row.createdAt),
+          details: row.details,
+          entityId: row.entityId,
+          entityType: row.entityType,
+          summary: row.summary,
+        },
+        previousHash,
+      );
+      if (row.previousHash !== previousHash || row.entryHash !== expected) {
+        return { valid: false, brokenAt: row.id, action: row.action, count };
+      }
+      previousHash = row.entryHash;
+      afterSeq = row.seq;
+      count += 1;
+    }
+  }
+
+  return { valid: true, count };
+}

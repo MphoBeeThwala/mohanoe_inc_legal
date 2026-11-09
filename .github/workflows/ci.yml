@@ -30,3 +30,29 @@ jobs:
         run: npm run build
       - name: Security audit (production dependencies)
         run: npm audit --omit=dev --audit-level=high
+
+  postgres:
+    # The same API tests against a real PostgreSQL server and the production driver.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U app" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build --workspace packages/shared
+      - name: API tests on PostgreSQL 16
+        run: npm run test:postgres --workspace apps/api
+        env:
+          TEST_DATABASE_URL: postgres://app:app@localhost:5432/app_test

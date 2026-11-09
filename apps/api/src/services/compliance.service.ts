@@ -1,90 +1,137 @@
-import type { DbRow, RequestBody, Actor } from '../types/db';
+// POPIA data-subject requests, subject data export, and retention.
+
+import { and, desc, eq, inArray, lt, sql, type SQL } from 'drizzle-orm';
+import type {
+  CalendarEvent,
+  ComplianceExport,
+  ComplianceRequest,
+  ComplianceSummary,
+  DocumentRecord,
+  Invoice,
+  LedgerEntry,
+  MatterCaseSummary,
+  RetentionSweepResult,
+} from '@ahava88/shared';
+import { db } from '../db/client';
+import {
+  calendarEvents,
+  cases,
+  complianceRequests,
+  documents,
+  invoices,
+  ledgerEntries,
+  type AssessmentRow,
+  type CaseRow,
+  type ComplianceRequestRow,
+} from '../db/schema';
 import { httpError } from '../lib/http';
-import { randomUUID } from 'crypto';
-import { getSupabaseClient } from '../config/supabase';
+import { actorName, type Actor } from '../lib/actor';
+import { fromCents } from '../lib/money';
+import { iso, isoOrNull, toDateOrNull } from '../lib/time';
+import {
+  complianceFulfilSchema,
+  complianceRequestSchema,
+  dataExportQuerySchema,
+  parse,
+} from '../validation/schemas';
 import { ensureStringArray } from './ai.service';
 import * as intakeService from './intake.service';
-import * as caseService from './case.service';
-import * as documentsService from './documents.service';
-import * as billingService from './billing.service';
-import * as calendarService from './calendar.service';
 import * as notificationsService from './notifications.service';
 import * as auditService from './audit.service';
 
-const memory: Record<string, DbRow[]> = {
-  requests: [],
-};
-
-function toIso(value = new Date()) {
-  return new Date(value).toISOString();
-}
+/** Statuses that mean a matter is finished and its retention clock runs. */
+const CLOSED_STATUSES = ['closed', 'resolved', 'completed'];
 
 function toDays(value: unknown, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function getRetentionDays() {
+export function getRetentionDays(): number {
   return toDays(process.env.CLIENT_DATA_RETENTION_DAYS, 3650);
 }
 
-function formatAssessmentExport(assessment: DbRow) {
+function retentionThreshold(): Date {
+  return new Date(Date.now() - getRetentionDays() * 24 * 60 * 60 * 1000);
+}
+
+/**
+ * Closed matters whose last change (the closing, for a closed matter) is
+ * older than the retention window.
+ */
+function retentionEligible(): SQL {
+  return and(
+    inArray(sql`lower(${cases.status})`, CLOSED_STATUSES),
+    lt(cases.updatedAt, retentionThreshold()),
+  ) as SQL;
+}
+
+function formatRequest(row: ComplianceRequestRow): ComplianceRequest {
+  return {
+    id: row.id,
+    requestType: row.requestType,
+    subjectName: row.subjectName,
+    subjectEmail: row.subjectEmail,
+    caseRef: row.caseRef,
+    description: row.description,
+    status: row.status,
+    responseSummary: row.responseSummary,
+    responsePayload: row.responsePayload,
+    dueAt: isoOrNull(row.dueAt),
+    fulfilledAt: isoOrNull(row.fulfilledAt),
+    createdBy: row.createdBy,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+  };
+}
+
+function formatAssessmentExport(assessment: AssessmentRow | null) {
   if (!assessment) {
     return null;
   }
-
   return {
     id: assessment.id,
-    matterType: assessment.matter_type,
+    matterType: assessment.matterType,
     urgency: assessment.urgency,
     summary: assessment.summary,
-    keyFacts: ensureStringArray(assessment.key_facts),
-    attorneyQuestions: ensureStringArray(assessment.attorney_questions),
-    recommendedDocuments: ensureStringArray(assessment.recommended_documents),
-    complianceFlags: ensureStringArray(assessment.compliance_flags),
-    nextActions: ensureStringArray(assessment.next_actions),
+    keyFacts: ensureStringArray(assessment.keyFacts),
+    attorneyQuestions: ensureStringArray(assessment.attorneyQuestions),
+    recommendedDocuments: ensureStringArray(assessment.recommendedDocuments),
+    complianceFlags: ensureStringArray(assessment.complianceFlags),
+    nextActions: ensureStringArray(assessment.nextActions),
     confidence: assessment.confidence,
-    model: assessment.model_name,
+    model: assessment.modelName,
     provider: assessment.provider,
-    popiaNotes: ensureStringArray(assessment.popia_notes),
-    createdAt: assessment.created_at,
+    popiaNotes: ensureStringArray(assessment.popiaNotes),
+    createdAt: iso(assessment.createdAt),
   };
 }
 
-function formatCaseExport(caseRecord?: DbRow | null) {
-  if (!caseRecord) {
-    return null;
-  }
-
+function formatCaseExport(caseRecord: CaseRow): MatterCaseSummary & { updatedAt: string } {
   return {
     id: caseRecord.id,
-    submissionId: caseRecord.intake_submission_id,
-    caseNumber: caseRecord.case_number,
+    submissionId: caseRecord.intakeSubmissionId,
+    caseNumber: caseRecord.caseNumber,
     status: caseRecord.status,
     urgency: caseRecord.urgency,
-    practiceArea: caseRecord.practice_area,
-    nextAction: caseRecord.next_action,
-    createdAt: caseRecord.created_at,
-    updatedAt: caseRecord.updated_at,
+    practiceArea: caseRecord.practiceArea,
+    nextAction: caseRecord.nextAction,
+    createdAt: iso(caseRecord.createdAt),
+    updatedAt: iso(caseRecord.updatedAt),
   };
 }
 
-function formatSubmissionExport(privateSubmission: DbRow) {
-  if (!privateSubmission) {
-    return null;
-  }
-
-  const { submission, raw, assessment, caseRecord } = privateSubmission;
-
+function formatSubmissionExport(item: intakeService.PrivateSubmission) {
+  const { submission, raw } = item;
   return {
     id: submission.id,
-    clientLabel: submission.client_label,
-    practiceArea: submission.practice_area,
+    clientLabel: submission.clientLabel,
+    practiceArea: submission.practiceArea,
     jurisdiction: submission.jurisdiction,
-    urgencyHint: submission.urgency_hint,
+    urgencyHint: submission.urgencyHint,
     status: submission.status,
-    summary: submission.summary_redacted,
-    createdAt: submission.created_at,
+    summary: submission.summaryRedacted,
+    createdAt: iso(submission.createdAt),
     personalData: {
       fullName: raw?.fullName || '',
       email: raw?.email || '',
@@ -99,261 +146,223 @@ function formatSubmissionExport(privateSubmission: DbRow) {
       consentToAi: Boolean(raw?.consentToAi),
       consentToStorage: Boolean(raw?.consentToStorage),
     },
-    assessment: formatAssessmentExport(assessment),
-    matterCase: formatCaseExport(caseRecord),
+    assessment: formatAssessmentExport(item.assessment),
+    matterCase: item.caseRecord ? formatCaseExport(item.caseRecord) : null,
   };
 }
 
-async function listRows() {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db
-      .from('compliance_requests')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) {
-      throw error;
-    }
+export interface RequestFilters {
+  status?: string;
+  requestType?: string;
+}
 
-    return data || [];
+export async function listRequests(filters: RequestFilters = {}, limit = 200) {
+  const conditions: SQL[] = [];
+  if (filters.status) {
+    conditions.push(eq(complianceRequests.status, filters.status));
   }
-
-  return [...memory.requests].sort((a, b) =>
-    String(b.created_at).localeCompare(String(a.created_at)),
-  );
-}
-
-async function saveRow(record: DbRow) {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db.from('compliance_requests').insert(record).select().single();
-    if (error) {
-      throw error;
-    }
-
-    return data;
+  if (filters.requestType) {
+    conditions.push(eq(complianceRequests.requestType, filters.requestType));
   }
-
-  memory.requests.unshift(record);
-  return record;
+  const rows = await db()
+    .select()
+    .from(complianceRequests)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(complianceRequests.createdAt))
+    .limit(limit);
+  return rows.map(formatRequest);
 }
 
-function formatRequest(row: DbRow) {
-  return {
-    id: row.id,
-    requestType: row.request_type,
-    subjectName: row.subject_name,
-    subjectEmail: row.subject_email,
-    caseRef: row.case_ref,
-    description: row.description,
-    status: row.status,
-    responseSummary: row.response_summary,
-    responsePayload: row.response_payload,
-    dueAt: row.due_at,
-    fulfilledAt: row.fulfilled_at,
-    createdBy: row.created_by,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
-
-async function listRequests(filters: RequestBody = {}) {
-  const rows = await listRows();
-  return rows
-    .filter((row) => {
-      if (filters.status && row.status !== filters.status) {
-        return false;
-      }
-
-      if (filters.requestType && row.request_type !== filters.requestType) {
-        return false;
-      }
-
-      return true;
+export async function createRequest(input: unknown, actor: Actor = {}): Promise<ComplianceRequest> {
+  const request = parse(complianceRequestSchema, input);
+  const [saved] = await db()
+    .insert(complianceRequests)
+    .values({
+      requestType: request.requestType,
+      subjectName: request.subjectName,
+      subjectEmail: request.subjectEmail,
+      caseRef: request.caseRef ?? null,
+      description: request.description,
+      dueAt: toDateOrNull(request.dueAt),
+      createdBy: actorName(actor),
     })
-    .map(formatRequest);
-}
-
-async function createRequest(input: RequestBody = {}, actor: Actor = {}) {
-  const requestType = String(input.requestType || 'access').trim();
-  const subjectName = String(input.subjectName || '').trim();
-  const subjectEmail = String(input.subjectEmail || '')
-    .trim()
-    .toLowerCase();
-  const caseRef = String(input.caseRef || '').trim();
-  const description = String(input.description || '').trim();
-
-  if (!subjectName || !subjectEmail || !description) {
-    throw httpError('subjectName, subjectEmail, and description are required', 400);
+    .returning();
+  if (!saved) {
+    throw new Error('Compliance request was not stored');
   }
 
-  const now = toIso();
-  const record = {
-    id: randomUUID(),
-    request_type: requestType,
-    subject_name: subjectName,
-    subject_email: subjectEmail,
-    case_ref: caseRef || null,
-    description,
-    status: 'open',
-    response_summary: '',
-    response_payload: {},
-    due_at: input.dueAt || null,
-    fulfilled_at: null,
-    created_by: actor?.fullName || actor?.email || 'system',
-    created_at: now,
-    updated_at: now,
-  };
-
-  const saved = await saveRow(record);
-  await auditService
-    .logEvent(
-      {
-        entityType: 'compliance_request',
-        entityId: saved.id,
-        action: 'compliance_request_created',
-        summary: `${requestType} request submitted`,
-        details: {
-          subjectEmail,
-          caseRef,
-        },
-      },
-      actor,
-    )
-    .catch(() => {});
+  await auditService.logEventSafely(
+    {
+      entityType: 'compliance_request',
+      entityId: saved.id,
+      action: 'compliance_request_created',
+      summary: `${saved.requestType} request submitted`,
+      // The subject's email is personal information: keep it out of the
+      // (unencrypted) audit trail; the request id links to it.
+      details: { caseRef: saved.caseRef },
+    },
+    actor,
+  );
 
   return formatRequest(saved);
 }
 
-async function fulfillRequest(requestId: string, input: RequestBody = {}, actor: Actor = {}) {
-  const rows = await listRows();
-  const row = rows.find((item) => item.id === requestId);
-  if (!row) {
+export async function fulfillRequest(
+  requestId: string,
+  input: unknown,
+  actor: Actor = {},
+): Promise<ComplianceRequest> {
+  const fulfilment = parse(complianceFulfilSchema, input);
+  const [existing] = await db()
+    .select()
+    .from(complianceRequests)
+    .where(eq(complianceRequests.id, requestId))
+    .limit(1);
+  if (!existing) {
     throw httpError('Compliance request not found', 404);
   }
 
-  const updated = {
-    ...row,
-    status: String(input.status || 'fulfilled').trim(),
-    response_summary: String(input.responseSummary || row.response_summary || '').trim(),
-    response_payload: input.responsePayload || row.response_payload || {},
-    fulfilled_at: input.fulfilledAt || toIso(),
-    updated_at: toIso(),
-  };
-
-  const db = getSupabaseClient();
-  if (db) {
-    const { error } = await db
-      .from('compliance_requests')
-      .update({
-        status: updated.status,
-        response_summary: updated.response_summary,
-        response_payload: updated.response_payload,
-        fulfilled_at: updated.fulfilled_at,
-        updated_at: updated.updated_at,
-      })
-      .eq('id', requestId);
-    if (error) {
-      throw error;
-    }
-  } else {
-    const index = memory.requests.findIndex((item) => item.id === requestId);
-    if (index >= 0) {
-      memory.requests[index] = updated;
-    }
+  const now = new Date();
+  const [updated] = await db()
+    .update(complianceRequests)
+    .set({
+      status: fulfilment.status,
+      responseSummary: fulfilment.responseSummary ?? existing.responseSummary,
+      responsePayload: fulfilment.responsePayload ?? existing.responsePayload,
+      fulfilledAt: now,
+      updatedAt: now,
+    })
+    .where(eq(complianceRequests.id, requestId))
+    .returning();
+  if (!updated) {
+    throw httpError('Compliance request not found', 404);
   }
 
-  await auditService
-    .logEvent(
-      {
-        entityType: 'compliance_request',
-        entityId: requestId,
-        action: 'compliance_request_fulfilled',
-        summary: updated.response_summary || updated.status,
-      },
-      actor,
-    )
-    .catch(() => {});
+  await auditService.logEventSafely(
+    {
+      entityType: 'compliance_request',
+      entityId: requestId,
+      action: 'compliance_request_fulfilled',
+      summary: updated.responseSummary || updated.status,
+    },
+    actor,
+  );
 
   return formatRequest(updated);
 }
 
-async function buildDataExport(input: RequestBody = {}) {
-  const email = String(input.subjectEmail || '')
-    .trim()
-    .toLowerCase();
-  const caseRef = String(input.caseRef || '').trim();
+/** Everything held about a data subject (by email) or a matter (by reference). */
+export async function buildDataExport(query: unknown): Promise<ComplianceExport> {
+  const { subjectEmail, caseRef } = parse(dataExportQuerySchema, query);
 
-  if (!email && !caseRef) {
-    throw httpError('subjectEmail or caseRef is required', 400);
+  const submissionIds = new Set<string>();
+  if (subjectEmail) {
+    for (const match of await intakeService.findSubmissionsByEmail(subjectEmail)) {
+      submissionIds.add(match.id);
+    }
+  }
+  if (caseRef) {
+    const matched = await intakeService.findCaseByRef(caseRef);
+    if (matched) {
+      submissionIds.add(matched.intakeSubmissionId);
+    }
   }
 
-  const cases = await intakeService.listCases();
-  const caseMatches = cases.filter((item) => {
-    if (!caseRef) {
-      return false;
-    }
+  const resolved = (
+    await Promise.all([...submissionIds].map((id) => intakeService.getPrivateSubmission(id)))
+  ).filter((item): item is intakeService.PrivateSubmission => Boolean(item));
+  const caseRows = resolved
+    .map((item) => item.caseRecord)
+    .filter((row): row is CaseRow => Boolean(row));
+  const caseIds = caseRows.map((row) => row.id);
 
-    return [item.id, item.caseNumber, item.submissionId].includes(caseRef);
-  });
+  const [documentRows, invoiceRows, ledgerRows, calendarRows] = caseIds.length
+    ? await Promise.all([
+        db().select().from(documents).where(inArray(documents.caseId, caseIds)),
+        db().select().from(invoices).where(inArray(invoices.caseId, caseIds)),
+        db().select().from(ledgerEntries).where(inArray(ledgerEntries.caseId, caseIds)),
+        db().select().from(calendarEvents).where(inArray(calendarEvents.caseId, caseIds)),
+      ])
+    : [[], [], [], []];
 
-  const emailMatches = email ? await intakeService.findSubmissionsByEmail(email) : [];
-  const emailSubmissionIds = new Set(emailMatches.map((item) => item.id));
-
-  const targetCases = cases.filter((item) => {
-    if (caseMatches.some((match) => match.id === item.id)) {
-      return true;
-    }
-
-    if (email && emailSubmissionIds.has(item.submissionId)) {
-      return true;
-    }
-
-    return false;
-  });
-
-  const targetSubmissionIds = new Set([
-    ...caseMatches.map((item) => item.submissionId).filter(Boolean),
-    ...targetCases.map((item) => item.submissionId).filter(Boolean),
-    ...emailMatches.map((item) => item.id),
-  ]);
-
-  const privateLookups = await Promise.all(
-    [...targetSubmissionIds].map((submissionId) =>
-      intakeService.getPrivateSubmission(submissionId).catch(() => null),
-    ),
-  );
-  const resolvedSubmissions = privateLookups.filter((item): item is NonNullable<typeof item> =>
-    Boolean(item),
-  );
-  const targetCaseIds = new Set(targetCases.map((item) => item.id));
-  resolvedSubmissions.forEach((item) => {
-    if (item?.caseRecord?.id) {
-      targetCaseIds.add(item.caseRecord.id);
-    }
-  });
-
-  const documents = await documentsService.listDocuments();
-  const invoices = await billingService.listInvoices();
-  const ledger = await billingService.listLedgerEntries();
-  const calendar = await calendarService.listEvents();
-  const notifications = await notificationsService.listNotifications();
+  const exportDocuments: DocumentRecord[] = documentRows.map((row) => ({
+    id: row.id,
+    caseId: row.caseId,
+    caseNumber: row.caseNumber,
+    clientLabel: row.clientLabel,
+    title: row.title,
+    documentType: row.documentType,
+    status: row.status,
+    tags: row.tags,
+    contentPreview: row.contentPreview,
+    createdBy: row.createdBy,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+    signedAt: isoOrNull(row.signedAt),
+    content: null,
+  }));
+  const exportInvoices: Invoice[] = invoiceRows.map((row) => ({
+    id: row.id,
+    caseId: row.caseId,
+    caseNumber: row.caseNumber,
+    clientLabel: row.clientLabel,
+    number: row.invoiceNumber,
+    subject: row.subject,
+    currency: row.currency,
+    status: row.status,
+    lineItems: row.lineItems.map((item) => ({
+      description: item.description,
+      quantity: item.quantity,
+      rate: fromCents(item.rateCents),
+    })),
+    subtotal: fromCents(row.subtotalCents),
+    vat: fromCents(row.vatCents),
+    total: fromCents(row.totalCents),
+    issuedAt: isoOrNull(row.issuedAt),
+    dueAt: isoOrNull(row.dueAt),
+    paidAt: isoOrNull(row.paidAt),
+    createdAt: iso(row.createdAt),
+  }));
+  const exportLedger: LedgerEntry[] = ledgerRows.map((row) => ({
+    id: row.id,
+    caseId: row.caseId,
+    caseNumber: row.caseNumber,
+    entryType: row.entryType,
+    account: row.account,
+    amount: fromCents(row.amountCents),
+    reference: row.reference,
+    notes: row.notes,
+    createdBy: row.createdBy,
+    createdAt: iso(row.createdAt),
+  }));
+  const exportCalendar: CalendarEvent[] = calendarRows.map((row) => ({
+    id: row.id,
+    caseId: row.caseId,
+    caseNumber: row.caseNumber,
+    title: row.title,
+    eventType: row.eventType,
+    startsAt: iso(row.startsAt),
+    endsAt: isoOrNull(row.endsAt),
+    location: row.location,
+    notes: row.notes,
+    createdBy: row.createdBy,
+    createdAt: iso(row.createdAt),
+  }));
 
   return {
-    generatedAt: toIso(),
+    generatedAt: new Date().toISOString(),
     retentionDays: getRetentionDays(),
-    subjectEmail: email || null,
-    caseRef: caseRef || null,
-    submissions: resolvedSubmissions.map(formatSubmissionExport),
-    assessments: resolvedSubmissions
+    subjectEmail: subjectEmail ?? null,
+    caseRef: caseRef ?? null,
+    submissions: resolved.map(formatSubmissionExport),
+    assessments: resolved
       .map((item) => formatAssessmentExport(item.assessment))
-      .filter(Boolean),
-    cases: targetCases.map(formatCaseExport),
-    documents: documents.filter((item) => item && targetCaseIds.has(item.caseId)),
-    invoices: invoices.filter((item) => item && targetCaseIds.has(item.caseId)),
-    ledger: ledger.filter((item) => item && targetCaseIds.has(item.caseId)),
-    calendar: calendar.filter((item) => targetCaseIds.has(item.caseId)),
-    notifications: notifications.filter((item) => targetCaseIds.has(item.relatedEntityId)),
+      .filter((item) => item !== null),
+    cases: caseRows.map(formatCaseExport),
+    documents: exportDocuments,
+    invoices: exportInvoices,
+    ledger: exportLedger,
+    calendar: exportCalendar,
     notices: [
       'Internal audit records are retained separately for compliance and supervision.',
       'This export intentionally excludes password hashes and secret keys.',
@@ -362,60 +371,41 @@ async function buildDataExport(input: RequestBody = {}) {
   };
 }
 
-async function getComplianceSummary() {
-  const requests = await listRequests();
-  const cases = await intakeService.listCases();
-  const retentionDays = getRetentionDays();
-  const threshold = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
-
-  const eligibleForRetention = cases.filter((item) => {
-    const closed = ['closed', 'resolved', 'completed'].includes(
-      String(item.status || '').toLowerCase(),
-    );
-    // NOTE: eligibility uses createdAt first; it should probably use the closing
-    // date. Kept as-is in the TypeScript migration (behaviour-preserving).
-    const updatedAt = Date.parse(item.createdAt || item.updatedAt || new Date(0).toISOString());
-    return closed && Number.isFinite(updatedAt) && updatedAt < threshold;
-  }).length;
+export async function getComplianceSummary(): Promise<ComplianceSummary> {
+  const [counts] = await db()
+    .select({
+      total: sql<number>`count(*)::int`,
+      open: sql<number>`count(*) filter (where ${complianceRequests.status} = 'open')::int`,
+      fulfilled: sql<number>`count(*) filter (where ${complianceRequests.status} = 'fulfilled')::int`,
+    })
+    .from(complianceRequests);
+  const [eligible] = await db()
+    .select({ value: sql<number>`count(*)::int` })
+    .from(cases)
+    .where(retentionEligible());
+  const [latest] = await listRequests({}, 1);
 
   return {
-    retentionDays,
-    totalRequests: requests.length,
-    openRequests: requests.filter((item) => item.status === 'open').length,
-    fulfilledRequests: requests.filter((item) => item.status === 'fulfilled').length,
-    eligibleForRetention,
-    latestRequest: requests[0] || null,
+    retentionDays: getRetentionDays(),
+    totalRequests: counts?.total ?? 0,
+    openRequests: counts?.open ?? 0,
+    fulfilledRequests: counts?.fulfilled ?? 0,
+    eligibleForRetention: eligible?.value ?? 0,
+    latestRequest: latest ?? null,
   };
 }
 
-async function runRetentionSweep(actor: Actor = {}) {
-  const retentionDays = getRetentionDays();
-  const threshold = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
-  const cases = await intakeService.listCases();
-  const eligibleCases = cases.filter((item) => {
-    const closed = ['closed', 'resolved', 'completed'].includes(
-      String(item.status || '').toLowerCase(),
-    );
-    const updatedAt = Date.parse(item.createdAt || new Date(0).toISOString());
-    return closed && Number.isFinite(updatedAt) && updatedAt < threshold;
-  });
+/** Deletes closed matters past the retention window (and all their records). */
+export async function runRetentionSweep(actor: Actor = {}): Promise<RetentionSweepResult> {
+  const [scanned] = await db()
+    .select({ value: sql<number>`count(*)::int` })
+    .from(cases);
+  const eligible = await db().select().from(cases).where(retentionEligible());
+  const removedCaseIds = await intakeService.deleteSubmissions(
+    eligible.map((row) => row.intakeSubmissionId),
+  );
 
-  let removedSubmissions = 0;
-  let removedCases = 0;
-  let removedTasks = 0;
-  let removedDocuments = 0;
-  let removedInvoices = 0;
-  let removedLedger = 0;
-  let removedCalendar = 0;
-
-  for (const item of eligibleCases) {
-    const result = await intakeService.deleteSubmission(item.submissionId);
-    removedSubmissions += 1;
-    removedCases += result.caseIds.length || 0;
-    removedTasks += await caseService.deleteByCaseIds(result.caseIds);
-    removedDocuments += await documentsService.deleteByCaseIds(result.caseIds);
-    removedInvoices += await billingService.deleteByCaseIds(result.caseIds);
-    removedCalendar += await calendarService.deleteByCaseIds(result.caseIds);
+  for (const item of eligible) {
     await notificationsService
       .createNotification(
         {
@@ -430,41 +420,24 @@ async function runRetentionSweep(actor: Actor = {}) {
       .catch(() => {});
   }
 
-  const summary = {
-    retentionDays,
-    scannedCases: cases.length,
-    eligibleCases: eligibleCases.length,
-    removedSubmissions,
-    removedCases,
-    removedTasks,
-    removedDocuments,
-    removedInvoices,
-    removedLedger,
-    removedCalendar,
+  const summary: RetentionSweepResult = {
+    retentionDays: getRetentionDays(),
+    scannedCases: scanned?.value ?? 0,
+    eligibleCases: eligible.length,
+    removedSubmissions: eligible.length,
+    removedCases: removedCaseIds.length,
   };
 
-  await auditService
-    .logEvent(
-      {
-        entityType: 'compliance',
-        entityId: 'retention-sweep',
-        action: 'retention_sweep_completed',
-        summary: `Retention sweep completed: ${removedCases} cases removed`,
-        details: summary,
-      },
-      actor,
-    )
-    .catch(() => {});
+  await auditService.logEvent(
+    {
+      entityType: 'compliance',
+      entityId: 'retention-sweep',
+      action: 'retention_sweep_completed',
+      summary: `Retention sweep completed: ${summary.removedCases} cases removed`,
+      details: { ...summary, caseNumbers: eligible.map((row) => row.caseNumber) },
+    },
+    actor,
+  );
 
   return summary;
 }
-
-export {
-  buildDataExport,
-  createRequest,
-  fulfillRequest,
-  getComplianceSummary,
-  getRetentionDays,
-  listRequests,
-  runRetentionSweep,
-};

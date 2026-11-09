@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'crypto';
 
 import { isProduction } from '../config/env';
 
@@ -115,6 +115,19 @@ function redactMatterForAi(payload: MatterNarrative): RedactedBrief {
   };
 }
 
+/**
+ * Deterministic keyed hash of an identifier (e.g. an email address), so
+ * records can be found by it without storing it in plaintext. Uses a key
+ * derived from the encryption key, so it cannot be reversed or recomputed
+ * without that key.
+ */
+function blindIndex(value: string): string {
+  const lookupKey = createHash('sha256')
+    .update(Buffer.concat([Buffer.from('blind-index:v1:'), getEncryptionKey()]))
+    .digest();
+  return createHmac('sha256', lookupKey).update(value.trim().toLowerCase()).digest('hex');
+}
+
 function encryptJson(value: unknown): string {
   const key = getEncryptionKey();
   const iv = randomBytes(12);
@@ -151,4 +164,4 @@ function decryptJson<T = any>(payload: string | null | undefined): T | null {
   return JSON.parse(decrypted.toString('utf8'));
 }
 
-export { decryptJson, encryptJson, redactMatterForAi, redactText };
+export { decryptJson, encryptJson, redactMatterForAi, redactText, blindIndex };

@@ -8,6 +8,7 @@ import routes from './routes';
 import { assertConfig, configWarnings } from './config/env';
 import { getPublicBranding } from './config/brand';
 import { seedDefaultUsers } from './services/auth.service';
+import { closeDb, dbDriver, initDb, pingDb } from './db/client';
 import { createRateLimiter, requestLogger, securityHeaders } from './middleware/security';
 
 const app = express();
@@ -58,16 +59,17 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.get('/ready', (req, res) => {
+// Readiness: 503 until the database answers, so load balancers and
+// deploys wait for a working instance.
+app.get('/ready', async (req, res) => {
+  const database = await pingDb();
   const configured = Boolean(
-    process.env.JWT_SECRET &&
-    (process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL) &&
-    process.env.SUPABASE_URL &&
-    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    process.env.JWT_SECRET && (process.env.APP_ORIGIN || process.env.RENDER_EXTERNAL_URL),
   );
 
-  res.json({
-    status: configured ? 'ready' : 'degraded',
+  res.status(database ? 200 : 503).json({
+    status: database && configured ? 'ready' : database ? 'degraded' : 'unavailable',
+    database,
     configured,
     retentionDays: Number(process.env.CLIENT_DATA_RETENTION_DAYS || 3650),
     timestamp: new Date().toISOString(),
@@ -128,15 +130,32 @@ if (require.main === module) {
   }
   configWarnings().forEach((warning) => console.warn(`WARNING: ${warning}`));
 
-  if (String(process.env.SEED_ADMIN_ON_STARTUP || '').toLowerCase() === 'true') {
-    seedDefaultUsers().catch((error) => {
-      console.error('Admin seed on startup failed:', error.message);
-    });
-  }
+  initDb()
+    .then(async () => {
+      console.log(`Database connected (${dbDriver()}); migrations applied.`);
+      if (String(process.env.SEED_ADMIN_ON_STARTUP || '').toLowerCase() === 'true') {
+        await seedDefaultUsers().catch((error: unknown) => {
+          console.error('Admin seed on startup failed:', errorMessage(error));
+        });
+      }
 
-  app.listen(port, () => {
-    console.log(`Legal practice API listening at http://localhost:${port}`);
-  });
+      const server = app.listen(port, () => {
+        console.log(`Legal practice API listening at http://localhost:${port}`);
+      });
+
+      const shutdown = (signal: string) => {
+        console.log(`${signal} received: closing connections.`);
+        server.close(() => {
+          closeDb().finally(() => process.exit(0));
+        });
+      };
+      process.on('SIGTERM', () => shutdown('SIGTERM'));
+      process.on('SIGINT', () => shutdown('SIGINT'));
+    })
+    .catch((error: unknown) => {
+      console.error(`Refusing to start: database unavailable: ${errorMessage(error)}`);
+      process.exit(1);
+    });
 }
 
 export default app;

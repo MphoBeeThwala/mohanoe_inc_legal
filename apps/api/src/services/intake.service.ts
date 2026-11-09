@@ -1,74 +1,41 @@
-import type { PublicSubmission } from '@ahava88/shared';
-import type { DbRow, RequestBody } from '../types/db';
-import { httpError } from '../lib/http';
-import { randomUUID } from 'crypto';
-import { getSupabaseClient } from '../config/supabase';
-import { assessMatter, ensureStringArray } from './ai.service';
-import { decryptJson, encryptJson, redactMatterForAi, redactText } from './privacy.service';
-import * as auditService from './audit.service';
+// Client intake: encrypted submissions, de-identified AI triage, and the
+// matter (case) each assessed intake becomes.
+
+import { count, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import type {
+  IntakeSummary,
+  MatterCase,
+  MatterCaseSummary,
+  PublicSubmission,
+} from '@ahava88/shared';
+import { db } from '../db/client';
+import { nextValue } from '../db/sequences';
+import {
+  assessments,
+  cases,
+  submissions,
+  type AssessmentRow,
+  type CaseRow,
+  type SubmissionRow,
+} from '../db/schema';
 import { getFirmBrand } from '../config/brand';
+import { httpError } from '../lib/http';
+import { SYSTEM_ACTOR } from '../lib/actor';
+import { iso } from '../lib/time';
+import { intakeSubmissionSchema, parse, type IntakeSubmission } from '../validation/schemas';
+import { assessMatter, ensureStringArray, type MatterBrief } from './ai.service';
+import {
+  blindIndex,
+  decryptJson,
+  encryptJson,
+  redactMatterForAi,
+  redactText,
+} from './privacy.service';
+import * as auditService from './audit.service';
 
-const memory: Record<string, DbRow[]> = {
-  clients: [],
-  submissions: [],
-  assessments: [],
-  cases: [],
-};
-
-function toIso(value = new Date()) {
-  return new Date(value).toISOString();
-}
-
-function normalizeSubmission(input: RequestBody = {}) {
-  const fullName = String(input.fullName || '').trim();
-  const email = String(input.email || '').trim();
-  const phone = String(input.phone || '').trim();
-  const practiceArea = String(input.practiceArea || '').trim();
-  const jurisdiction = String(input.jurisdiction || 'South Africa').trim();
-  const matterSummary = String(input.matterSummary || '').trim();
-  const requestedOutcome = String(input.requestedOutcome || '').trim();
-  const documentsMentioned = String(input.documentsMentioned || '').trim();
-  const urgencyHint = String(input.urgencyHint || 'unspecified').trim();
-  const preferredLanguage = String(input.preferredLanguage || 'English').trim();
-  const consentToAi = Boolean(input.consentToAi);
-  const consentToStorage = Boolean(input.consentToStorage);
-
-  if (!fullName || !email || !phone || !practiceArea || !matterSummary) {
-    throw httpError('fullName, email, phone, practiceArea, and matterSummary are required', 400);
-  }
-
-  if (!consentToAi || !consentToStorage) {
-    throw httpError('Consent for storage and AI assessment is required before submission', 400);
-  }
-
-  return {
-    fullName,
-    email,
-    phone,
-    practiceArea,
-    jurisdiction,
-    matterSummary,
-    requestedOutcome,
-    documentsMentioned,
-    urgencyHint,
-    preferredLanguage,
-    consentToAi,
-    consentToStorage,
-  };
-}
-
-function normalizeAssessmentSubmission(submission: DbRow) {
-  const redacted = redactMatterForAi({
-    fullName: submission.fullName,
-    practiceArea: submission.practiceArea,
-    jurisdiction: submission.jurisdiction,
-    urgencyHint: submission.urgencyHint,
-    matterSummary: submission.matterSummary,
-    requestedOutcome: submission.requestedOutcome,
-    documentsMentioned: submission.documentsMentioned,
-    contextNotes: submission.contextNotes,
-  });
-
+/** The de-identified brief sent for AI triage. Never contains raw PII. */
+function toMatterBrief(submission: IntakeSubmission): MatterBrief {
+  const redacted = redactMatterForAi(submission);
   return {
     clientLabel: redacted.clientLabel,
     practiceArea: redacted.practiceArea,
@@ -81,414 +48,350 @@ function normalizeAssessmentSubmission(submission: DbRow) {
   };
 }
 
-function createCaseNumber(existingCount: number) {
+async function nextCaseNumber(): Promise<string> {
   const year = new Date().getFullYear();
-  const sequence = String(existingCount + 1).padStart(4, '0');
-  return `${getFirmBrand().casePrefix}-${year}-${sequence}`;
+  const sequence = await nextValue(`case_number:${year}`);
+  return `${getFirmBrand().casePrefix}-${year}-${String(sequence).padStart(4, '0')}`;
 }
 
-async function insertRow(table: string, record: DbRow) {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db.from(table).insert(record).select().single();
-
-    if (error) {
-      throw error;
-    }
-
-    return data;
-  }
-
-  memory[table].push(record);
-  return record;
+async function nextClientLabel(): Promise<string> {
+  const sequence = await nextValue('client_label');
+  return `Client ${String(sequence).padStart(3, '0')}`;
 }
 
-async function upsertRow(table: string, record: DbRow, matchKey: string = 'id') {
-  const db = getSupabaseClient();
-  if (db) {
-    const existing = await db.from(table).select('*').eq(matchKey, record[matchKey]).maybeSingle();
-
-    if (existing.data) {
-      const { data, error } = await db
-        .from(table)
-        .update(record)
-        .eq(matchKey, record[matchKey])
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      return data;
-    }
-
-    return insertRow(table, record);
-  }
-
-  const index = memory[table].findIndex((entry) => entry[matchKey] === record[matchKey]);
-
-  if (index >= 0) {
-    memory[table][index] = record;
-  } else {
-    memory[table].push(record);
-  }
-
-  return record;
+function toCaseSummary(row: CaseRow): MatterCaseSummary {
+  return {
+    id: row.id,
+    submissionId: row.intakeSubmissionId,
+    caseNumber: row.caseNumber,
+    status: row.status,
+    urgency: row.urgency,
+    practiceArea: row.practiceArea,
+    nextAction: row.nextAction,
+    createdAt: iso(row.createdAt),
+  };
 }
 
-async function listRows(table: string) {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db
-      .from(table)
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      throw error;
-    }
-
-    return data || [];
-  }
-
-  return [...memory[table]].sort((a, b) =>
-    String(b.created_at).localeCompare(String(a.created_at)),
-  );
-}
-
-async function findRow(table: string, id: string) {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db.from(table).select('*').eq('id', id).maybeSingle();
-
-    if (error) {
-      throw error;
-    }
-
-    return data || null;
-  }
-
-  return memory[table].find((entry) => entry.id === id) || null;
+export function toMatterCase(row: CaseRow): MatterCase {
+  return {
+    id: row.id,
+    submissionId: row.intakeSubmissionId,
+    caseNumber: row.caseNumber,
+    clientLabel: row.clientLabel,
+    practiceArea: row.practiceArea,
+    urgency: row.urgency,
+    status: row.status,
+    nextAction: row.nextAction,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+  };
 }
 
 function toPublicSubmission(
-  submission: DbRow,
-  assessment: DbRow | null = null,
-  caseRecord: DbRow | null = null,
+  submission: SubmissionRow,
+  assessment: AssessmentRow | null = null,
+  caseRecord: CaseRow | null = null,
 ): PublicSubmission {
   return {
     id: submission.id,
-    clientLabel: submission.client_label,
-    practiceArea: submission.practice_area,
+    clientLabel: submission.clientLabel,
+    practiceArea: submission.practiceArea,
     jurisdiction: submission.jurisdiction,
-    urgencyHint: submission.urgency_hint,
+    urgencyHint: submission.urgencyHint,
     status: submission.status,
-    summary: submission.summary_redacted,
-    createdAt: submission.created_at,
+    summary: submission.summaryRedacted,
+    createdAt: iso(submission.createdAt),
     assessment: assessment && {
       id: assessment.id,
-      matterType: assessment.matter_type,
+      matterType: assessment.matterType,
       urgency: assessment.urgency,
       summary: assessment.summary,
-      keyFacts: ensureStringArray(assessment.key_facts),
-      attorneyQuestions: ensureStringArray(assessment.attorney_questions),
-      recommendedDocuments: ensureStringArray(assessment.recommended_documents),
-      complianceFlags: ensureStringArray(assessment.compliance_flags),
-      nextActions: ensureStringArray(assessment.next_actions),
+      keyFacts: ensureStringArray(assessment.keyFacts),
+      attorneyQuestions: ensureStringArray(assessment.attorneyQuestions),
+      recommendedDocuments: ensureStringArray(assessment.recommendedDocuments),
+      complianceFlags: ensureStringArray(assessment.complianceFlags),
+      nextActions: ensureStringArray(assessment.nextActions),
       confidence: assessment.confidence,
-      model: assessment.model_name,
+      model: assessment.modelName,
       provider: assessment.provider,
-      popiaNotes: ensureStringArray(assessment.popia_notes),
-      createdAt: assessment.created_at,
+      popiaNotes: ensureStringArray(assessment.popiaNotes),
+      createdAt: iso(assessment.createdAt),
     },
-    matterCase: caseRecord && {
-      id: caseRecord.id,
-      submissionId: caseRecord.intake_submission_id,
-      caseNumber: caseRecord.case_number,
-      status: caseRecord.status,
-      urgency: caseRecord.urgency,
-      practiceArea: caseRecord.practice_area,
-      nextAction: caseRecord.next_action,
-      createdAt: caseRecord.created_at,
-    },
+    matterCase: caseRecord && toCaseSummary(caseRecord),
   };
 }
 
-async function createSubmission(input: RequestBody) {
-  const normalized = normalizeSubmission(input);
-  const existingSubmissions = await listRows('submissions');
-  const submissionId = randomUUID();
-  const encryptedPayload = encryptJson(normalized);
-  const redactedBrief = normalizeAssessmentSubmission(normalized);
-  const now = toIso();
-  const clientLabel = `Client ${String(existingSubmissions.length + 1).padStart(3, '0')}`;
+/** Submissions joined with their assessment and case, newest first. */
+async function selectSubmissions(where?: ReturnType<typeof eq>, limit = 100) {
+  return db()
+    .select({ submission: submissions, assessment: assessments, matterCase: cases })
+    .from(submissions)
+    .leftJoin(assessments, eq(assessments.intakeSubmissionId, submissions.id))
+    .leftJoin(cases, eq(cases.intakeSubmissionId, submissions.id))
+    .where(where)
+    .orderBy(desc(submissions.createdAt))
+    .limit(limit);
+}
 
-  const record = {
-    id: submissionId,
-    client_label: clientLabel,
-    practice_area: normalized.practiceArea,
-    jurisdiction: normalized.jurisdiction,
-    urgency_hint: normalized.urgencyHint,
-    status: 'received',
-    summary_redacted: redactedBrief.matterSummary,
-    raw_payload_encrypted: encryptedPayload,
-    consent_to_ai: normalized.consentToAi,
-    consent_to_storage: normalized.consentToStorage,
-    created_at: now,
-    updated_at: now,
-  };
+export async function createSubmission(input: unknown): Promise<PublicSubmission> {
+  const submission = parse(intakeSubmissionSchema, input);
+  const brief = toMatterBrief(submission);
 
-  const saved = await insertRow('submissions', record);
-  await auditService
-    .logEvent(
-      {
-        entityType: 'submission',
-        entityId: saved.id,
-        action: 'submission_created',
-        summary: `Intake submitted: ${saved.client_label}`,
-      },
-      { email: normalized.email, fullName: normalized.fullName, role: 'client' },
-    )
-    .catch(() => {});
+  const [saved] = await db()
+    .insert(submissions)
+    .values({
+      clientLabel: await nextClientLabel(),
+      practiceArea: submission.practiceArea,
+      jurisdiction: submission.jurisdiction,
+      urgencyHint: submission.urgencyHint,
+      status: 'received',
+      summaryRedacted: brief.matterSummary ?? '',
+      rawPayloadEncrypted: encryptJson(submission),
+      emailLookup: blindIndex(submission.email),
+      consentToAi: submission.consentToAi,
+      consentToStorage: submission.consentToStorage,
+    })
+    .returning();
+  if (!saved) {
+    throw new Error('Submission was not stored');
+  }
+
+  await auditService.logEventSafely(
+    {
+      entityType: 'submission',
+      entityId: saved.id,
+      action: 'submission_created',
+      summary: `Intake submitted: ${saved.clientLabel}`,
+    },
+    // Audit rows are not encrypted, so they never carry the client's identity.
+    { fullName: saved.clientLabel, role: 'client' },
+  );
   return toPublicSubmission(saved);
 }
 
-async function listSubmissions() {
-  const rows = await listRows('submissions');
-  const assessments = await listRows('assessments');
-  const cases = await listRows('cases');
-
-  return rows.map((submission) =>
-    toPublicSubmission(
-      submission,
-      assessments.find((item) => item.intake_submission_id === submission.id),
-      cases.find((item) => item.intake_submission_id === submission.id),
-    ),
-  );
+export async function listSubmissions(limit = 100): Promise<PublicSubmission[]> {
+  const rows = await selectSubmissions(undefined, limit);
+  return rows.map((row) => toPublicSubmission(row.submission, row.assessment, row.matterCase));
 }
 
-async function getSubmission(id: string) {
-  const submission = await findRow('submissions', id);
-  if (!submission) {
-    return null;
-  }
-
-  const assessments = await listRows('assessments');
-  const cases = await listRows('cases');
-
-  return toPublicSubmission(
-    submission,
-    assessments.find((item) => item.intake_submission_id === submission.id),
-    cases.find((item) => item.intake_submission_id === submission.id),
-  );
+export async function getSubmission(id: string): Promise<PublicSubmission | null> {
+  const [row] = await selectSubmissions(eq(submissions.id, id), 1);
+  return row ? toPublicSubmission(row.submission, row.assessment, row.matterCase) : null;
 }
 
-async function getPrivateSubmission(id: string) {
-  const submission = await findRow('submissions', id);
-  if (!submission) {
+export interface PrivateSubmission {
+  submission: SubmissionRow;
+  raw: IntakeSubmission | null;
+  assessment: AssessmentRow | null;
+  caseRecord: CaseRow | null;
+}
+
+/** Includes the decrypted personal information: admin/compliance use only. */
+export async function getPrivateSubmission(id: string): Promise<PrivateSubmission | null> {
+  const [row] = await selectSubmissions(eq(submissions.id, id), 1);
+  if (!row) {
     return null;
   }
-
-  const raw = decryptJson(submission.raw_payload_encrypted);
-  const assessments = await listRows('assessments');
-  const cases = await listRows('cases');
-
   return {
-    submission,
-    raw,
-    assessment: assessments.find((item) => item.intake_submission_id === submission.id) || null,
-    caseRecord: cases.find((item) => item.intake_submission_id === submission.id) || null,
+    submission: row.submission,
+    raw: decryptJson<IntakeSubmission>(row.submission.rawPayloadEncrypted),
+    assessment: row.assessment,
+    caseRecord: row.matterCase,
   };
 }
 
-async function findSubmissionsByEmail(email: string) {
-  const normalized = String(email || '')
-    .trim()
-    .toLowerCase();
+/** Finds a data subject's submissions through the email blind index. */
+export async function findSubmissionsByEmail(email: string): Promise<PublicSubmission[]> {
+  const normalized = email.trim().toLowerCase();
   if (!normalized) {
     return [];
   }
-
-  const submissions = await listRows('submissions');
-  const assessments = await listRows('assessments');
-  const cases = await listRows('cases');
-
-  return submissions
-    .map((submission) => ({
-      submission,
-      raw: decryptJson(submission.raw_payload_encrypted),
-    }))
-    .filter(
-      (item) =>
-        String(item.raw?.email || '')
-          .trim()
-          .toLowerCase() === normalized,
-    )
-    .map((item) =>
-      toPublicSubmission(
-        item.submission,
-        assessments.find((entry) => entry.intake_submission_id === item.submission.id),
-        cases.find((entry) => entry.intake_submission_id === item.submission.id),
-      ),
-    );
+  const rows = await selectSubmissions(eq(submissions.emailLookup, blindIndex(normalized)), 1_000);
+  return rows.map((row) => toPublicSubmission(row.submission, row.assessment, row.matterCase));
 }
 
-async function assessSubmission(id: string) {
-  const submission = await findRow('submissions', id);
-  if (!submission) {
+export async function assessSubmission(id: string): Promise<PublicSubmission> {
+  const [existing] = await selectSubmissions(eq(submissions.id, id), 1);
+  if (!existing) {
     throw httpError('Intake submission not found', 404);
   }
 
-  const rawSubmission = decryptJson(submission.raw_payload_encrypted);
-  const redactedBrief = normalizeAssessmentSubmission(rawSubmission);
-  const assessment = await assessMatter(redactedBrief);
-  const assessmentId = randomUUID();
-  const now = toIso();
+  const raw = decryptJson<IntakeSubmission>(existing.submission.rawPayloadEncrypted);
+  if (!raw) {
+    throw httpError('Intake submission could not be decrypted', 500);
+  }
+  const brief = toMatterBrief(raw);
+  // The AI call happens outside any transaction: it can take seconds.
+  const result = await assessMatter(brief);
+  const nextAction =
+    result.nextActions?.[0] || 'Attorney to review the intake and confirm next steps.';
+  const caseNumber = existing.matterCase ? null : await nextCaseNumber();
 
-  const assessmentRecord = {
-    id: assessmentId,
-    intake_submission_id: submission.id,
-    provider: assessment.provider,
-    model_name: assessment.model,
-    matter_type: assessment.matterType,
-    urgency: assessment.urgency,
-    summary: assessment.summary,
-    key_facts: ensureStringArray(assessment.keyFacts),
-    attorney_questions: ensureStringArray(assessment.attorneyQuestions),
-    recommended_documents: ensureStringArray(assessment.recommendedDocuments),
-    compliance_flags: ensureStringArray(assessment.complianceFlags),
-    next_actions: ensureStringArray(assessment.nextActions),
-    confidence: assessment.confidence,
-    popia_notes: ensureStringArray(assessment.popiaNotes),
-    raw_redacted_brief: redactedBrief,
-    created_at: now,
-  };
+  const { submission, assessment, matterCase, created } = await db().transaction(async (tx) => {
+    const assessmentValues = {
+      intakeSubmissionId: id,
+      provider: result.provider,
+      modelName: result.model,
+      matterType: result.matterType,
+      urgency: result.urgency,
+      summary: result.summary,
+      keyFacts: ensureStringArray(result.keyFacts),
+      attorneyQuestions: ensureStringArray(result.attorneyQuestions),
+      recommendedDocuments: ensureStringArray(result.recommendedDocuments),
+      complianceFlags: ensureStringArray(result.complianceFlags),
+      nextActions: ensureStringArray(result.nextActions),
+      confidence: Number.isFinite(result.confidence) ? result.confidence : 0,
+      popiaNotes: ensureStringArray(result.popiaNotes),
+      rawRedactedBrief: brief as Record<string, unknown>,
+    };
+    const [savedAssessment] = await tx
+      .insert(assessments)
+      .values(assessmentValues)
+      .onConflictDoUpdate({
+        target: assessments.intakeSubmissionId,
+        set: { ...assessmentValues, createdAt: new Date() },
+      })
+      .returning();
 
-  const savedAssessment = await upsertRow('assessments', assessmentRecord, 'intake_submission_id');
+    let savedCase: CaseRow | undefined;
+    let isNew = false;
+    if (existing.matterCase) {
+      // Re-assessment refreshes the triage; the case keeps its number,
+      // status and history.
+      [savedCase] = await tx
+        .update(cases)
+        .set({
+          urgency: result.urgency,
+          practiceArea: result.matterType || existing.submission.practiceArea,
+          nextAction,
+          updatedAt: new Date(),
+        })
+        .where(eq(cases.id, existing.matterCase.id))
+        .returning();
+    } else {
+      isNew = true;
+      [savedCase] = await tx
+        .insert(cases)
+        .values({
+          intakeSubmissionId: id,
+          caseNumber: caseNumber as string,
+          clientLabel: existing.submission.clientLabel,
+          practiceArea: result.matterType || existing.submission.practiceArea,
+          urgency: result.urgency,
+          status: result.urgency === 'critical' ? 'priority-review' : 'triage',
+          nextAction,
+        })
+        .returning();
+    }
 
-  const existingCases = await listRows('cases');
-  const caseRecord = {
-    id: randomUUID(),
-    intake_submission_id: submission.id,
-    case_number: createCaseNumber(existingCases.length),
-    client_label: submission.client_label,
-    practice_area: assessment.matterType || submission.practice_area,
-    urgency: assessment.urgency,
-    status: assessment.urgency === 'critical' ? 'priority-review' : 'triage',
-    next_action:
-      assessment.nextActions?.[0] || 'Attorney to review the intake and confirm next steps.',
-    created_at: now,
-    updated_at: now,
-  };
+    const [savedSubmission] = await tx
+      .update(submissions)
+      .set({ status: 'assessed', updatedAt: new Date() })
+      .where(eq(submissions.id, id))
+      .returning();
 
-  const savedCase = await upsertRow('cases', caseRecord, 'intake_submission_id');
-  await auditService
-    .logEvent(
+    if (!savedAssessment || !savedCase || !savedSubmission) {
+      throw new Error('Assessment could not be stored');
+    }
+    return {
+      submission: savedSubmission,
+      assessment: savedAssessment,
+      matterCase: savedCase,
+      created: isNew,
+    };
+  });
+
+  if (created) {
+    await auditService.logEventSafely(
       {
         entityType: 'case',
-        entityId: savedCase.id,
+        entityId: matterCase.id,
         action: 'case_created',
-        summary: `Case created: ${savedCase.case_number}`,
-        details: {
-          submissionId: submission.id,
-          urgency: savedCase.urgency,
-        },
+        summary: `Case created: ${matterCase.caseNumber}`,
+        details: { submissionId: id, urgency: matterCase.urgency },
       },
-      { email: 'system', fullName: 'Intake pipeline', role: 'system' },
-    )
-    .catch(() => {});
+      { ...SYSTEM_ACTOR, fullName: 'Intake pipeline' },
+    );
+  }
+  await auditService.logEventSafely(
+    {
+      entityType: 'submission',
+      entityId: id,
+      action: 'submission_assessed',
+      summary: `Intake assessed: ${submission.clientLabel}`,
+      details: { provider: assessment.provider, urgency: matterCase.urgency },
+    },
+    { ...SYSTEM_ACTOR, fullName: 'Assessment pipeline' },
+  );
 
-  const updatedSubmission = {
-    ...submission,
-    status: 'assessed',
-    updated_at: now,
-  };
-
-  await upsertRow('submissions', updatedSubmission);
-  await auditService
-    .logEvent(
-      {
-        entityType: 'submission',
-        entityId: submission.id,
-        action: 'submission_assessed',
-        summary: `Intake assessed: ${submission.id}`,
-        details: {
-          provider: savedAssessment.provider,
-          urgency: savedCase.urgency,
-        },
-      },
-      { email: 'system', fullName: 'Assessment pipeline', role: 'system' },
-    )
-    .catch(() => {});
-
-  return toPublicSubmission(updatedSubmission, savedAssessment, savedCase);
+  return toPublicSubmission(submission, assessment, matterCase);
 }
 
-async function listCases() {
-  const cases = await listRows('cases');
-  return cases.map((item) => ({
-    id: item.id,
-    submissionId: item.intake_submission_id,
-    caseNumber: item.case_number,
-    clientLabel: item.client_label,
-    practiceArea: item.practice_area,
-    urgency: item.urgency,
-    status: item.status,
-    nextAction: item.next_action,
-    createdAt: item.created_at,
-    updatedAt: item.updated_at,
-  }));
+export async function listCases(limit = 500): Promise<MatterCase[]> {
+  const rows = await db().select().from(cases).orderBy(desc(cases.createdAt)).limit(limit);
+  return rows.map(toMatterCase);
 }
 
-async function getSummary() {
-  const submissions = await listRows('submissions');
-  const assessments = await listRows('assessments');
-  const cases = await listRows('cases');
+/** Finds a case by its id, case number, or intake submission id. */
+export async function findCaseByRef(ref: string): Promise<CaseRow | null> {
+  const value = ref.trim();
+  if (!value) {
+    return null;
+  }
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  const [row] = await db()
+    .select()
+    .from(cases)
+    .where(
+      isUuid
+        ? or(eq(cases.id, value), eq(cases.intakeSubmissionId, value), eq(cases.caseNumber, value))
+        : eq(cases.caseNumber, value),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+export async function getSummary(): Promise<IntakeSummary> {
+  const [submissionCounts] = await db()
+    .select({
+      open: sql<number>`count(*) filter (where ${submissions.status} = 'received')::int`,
+    })
+    .from(submissions);
+  const [assessmentCount] = await db().select({ value: count() }).from(assessments);
+  const [caseCounts] = await db()
+    .select({
+      live: sql<number>`count(*)::int`,
+      critical: sql<number>`count(*) filter (where ${cases.urgency} = 'critical')::int`,
+    })
+    .from(cases);
+  const [latest] = await selectSubmissions(undefined, 1);
 
   return {
-    openIntakes: submissions.filter((item) => item.status === 'received').length,
-    assessedIntakes: assessments.length,
-    liveCases: cases.length,
-    criticalMatters: cases.filter((item) => item.urgency === 'critical').length,
+    openIntakes: submissionCounts?.open ?? 0,
+    assessedIntakes: assessmentCount?.value ?? 0,
+    liveCases: caseCounts?.live ?? 0,
+    criticalMatters: caseCounts?.critical ?? 0,
     encryptedStorage: true,
     popiaCompliantAi: true,
-    latestIntake: submissions[0] || null,
+    latestIntake: latest
+      ? toPublicSubmission(latest.submission, latest.assessment, latest.matterCase)
+      : null,
   };
 }
 
-async function deleteSubmission(submissionId: string) {
-  const cases = await listRows('cases');
-  const relatedCases = cases.filter((item) => item.intake_submission_id === submissionId);
-
-  const db = getSupabaseClient();
-  if (db) {
-    const { error } = await db.from('submissions').delete().eq('id', submissionId);
-    if (error) {
-      throw error;
-    }
-  } else {
-    memory.submissions = memory.submissions.filter((item) => item.id !== submissionId);
-    memory.assessments = memory.assessments.filter(
-      (item) => item.intake_submission_id !== submissionId,
-    );
-    memory.cases = memory.cases.filter((item) => item.intake_submission_id !== submissionId);
+/**
+ * Permanently deletes submissions and everything that hangs off them
+ * (assessment, case, tasks, timeline, documents, billing, calendar) via
+ * ON DELETE CASCADE. Returns the ids of the cases removed.
+ */
+export async function deleteSubmissions(submissionIds: string[]): Promise<string[]> {
+  if (!submissionIds.length) {
+    return [];
   }
-
-  return {
-    submissionId,
-    caseIds: relatedCases.map((item) => item.id),
-  };
+  const removedCases = await db()
+    .select({ id: cases.id })
+    .from(cases)
+    .where(inArray(cases.intakeSubmissionId, submissionIds));
+  await db().delete(submissions).where(inArray(submissions.id, submissionIds));
+  return removedCases.map((row) => row.id);
 }
-
-export {
-  createSubmission,
-  deleteSubmission,
-  findSubmissionsByEmail,
-  getPrivateSubmission,
-  getSubmission,
-  assessSubmission,
-  listCases,
-  listSubmissions,
-  getSummary,
-};

@@ -1,13 +1,13 @@
+import { notificationFilterSchema, parse } from '../validation/schemas';
 import type { Request, Response } from 'express';
 import { sendError } from '../lib/http';
 import * as notificationsService from '../services/notifications.service';
 
 async function index(req: Request, res: Response) {
   try {
-    const notifications = await notificationsService.listNotifications({
-      recipientRole: req.query.recipientRole,
-      isRead: req.query.isRead === 'true' ? true : req.query.isRead === 'false' ? false : undefined,
-    });
+    const notifications = await notificationsService.listNotifications(
+      parse(notificationFilterSchema, req.query),
+    );
     res.status(200).json(notifications);
   } catch (error) {
     sendError(res, error);

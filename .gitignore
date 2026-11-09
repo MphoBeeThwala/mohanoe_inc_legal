@@ -10,6 +10,9 @@ build/
 .next/
 out/
 
+# Local development database (PGlite)
+.data/
+
 # Environment variables
 .env
 .env.local
