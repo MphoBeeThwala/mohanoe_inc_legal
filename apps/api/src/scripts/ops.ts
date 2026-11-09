@@ -25,7 +25,10 @@ import {
   pruneRetiredKeys,
   reencryptFirm,
 } from '../services/reencrypt.service';
+import { readFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 import { sendRemindersForAllFirms } from '../services/calendar.service';
+import { importRollFile, syncCourtRolls } from '../services/court-roll.service';
 import { anchorAllFirms } from '../services/audit-anchor.service';
 import { createOperator, listOperators, setOperatorActive } from '../services/support.service';
 import * as auditService from '../services/audit.service';
@@ -139,7 +142,14 @@ async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   const { values, positionals } = parseArgs({
     args: rest,
-    options: { slug: { type: 'string' }, email: { type: 'string' }, name: { type: 'string' } },
+    options: {
+      slug: { type: 'string' },
+      email: { type: 'string' },
+      name: { type: 'string' },
+      file: { type: 'string' },
+      division: { type: 'string' },
+      title: { type: 'string' },
+    },
     allowPositionals: true,
   });
   await initDb();
@@ -151,13 +161,30 @@ async function main(): Promise<void> {
     for (const result of await anchorAllFirms()) {
       console.log(`${result.firm}: ${result.anchored ? 'anchored' : 'no new events'}`);
     }
+  } else if (command === 'court-rolls') {
+    const report = values.file
+      ? await importRollFile({
+          division: values.division ?? '',
+          title: values.title ?? basename(values.file),
+          fileName: basename(values.file),
+          body: await readFile(values.file),
+        })
+      : await syncCourtRolls();
+    for (const source of report.sources) {
+      console.log(
+        `${source.division} ${source.url}: ${source.listed} listed, ${source.stored} new, ${source.unchanged} unchanged, ${source.failed} failed${source.skipped ? ` (${source.skipped})` : ''}${source.error ? ` (error: ${source.error})` : ''}`,
+      );
+    }
+    console.log(
+      `Matched ${report.matched} listing(s), flagged ${report.removed} removed, sent ${report.emails} email(s).`,
+    );
   } else if (command === 'reminders') {
     for (const result of await sendRemindersForAllFirms()) {
       console.log(`${result.firm}: ${result.events} event(s), ${result.emails} email(s)`);
     }
   } else {
     throw new Error(
-      'Usage: ops keys status|rotate|reencrypt|rewrap|prune [--slug <slug>] | ops anchor | ops reminders | ops operator create|list|disable|enable',
+      'Usage: ops keys status|rotate|reencrypt|rewrap|prune [--slug <slug>] | ops anchor | ops reminders | ops court-rolls [--file <roll> --division <code> --title <title>] | ops operator create|list|disable|enable',
     );
   }
 }

@@ -158,6 +158,17 @@ When the firms table is empty, the server creates a `default` firm from these va
 - **Reminders:** reminders go out by email and in the app, to the event's assignee or else the matter's team. They show the matter number, event type and time, not the title. Run `npm run ops -w apps/api -- reminders` every 15 minutes as a scheduled job (an Azure Container Apps job), or set `CALENDAR_REMINDER_INTERVAL_MINUTES`. Reminders more than six hours late, after downtime, are skipped.
 - **Encryption:** event titles, locations and notes, and prescription notes, are encrypted with the firm's key.
 
+## Court rolls
+- **Schedule and sources:** published court rolls are fetched on a schedule and matched with matters by court and court case number, which are set on each matter.
+  - Run `npm run ops -w apps/api -- court-rolls` as a scheduled job. Twice a week is the default (Mon and Thu 06:00 SAST: cron `0 4 * * 1,4`).
+  - The listing pages are configured in `COURT_ROLL_SOURCES`, for example a division's court-rolls page on the judiciary website, with a filter such as `Pretoria`.
+- **Matches need a person:** each match goes to the matter's team, by email and in the app. It appears under Operations → Calendar → Court rolls, where staff **Add to calendar** or **Dismiss** it. A roll never changes the calendar by itself: rolls are amended, and a published roll doesn't show matters that were removed, postponed or settled.
+- **Amended rolls:** an amended roll supersedes the earlier one (the same link with new content, or the same court, date and title marked "amended"). A matter that drops off it is flagged *removed* and its team is told; its calendar entry stays until someone checks with the registrar.
+- **Politeness:** the sync identifies itself (`COURT_ROLL_USER_AGENT`), honours `robots.txt`, waits two seconds between requests, fetches only https, and caps size (15 MB) and time (30 s). An unchanged roll is not read again.
+- **No party names:** rolls are public, but only case numbers, courtrooms, times, judges and roll sections are stored. The roll documents and their entries are platform tables that firms' requests cannot read; each firm sees only its own matches.
+- **Uploads:** staff can upload a roll they received another way, for example by email from a registrar, as PDF, Word (.docx), HTML or text. It is matched only with matters the uploader can see, and is not stored. A platform operator can import one for every firm with `ops court-rolls --file roll.pdf --division ZAGPPHC --title "…"`.
+- **Official sources:** check the court websites' terms before turning the sync on. Prefer official feeds (CaseLines, Court Online) when they become available to the platform.
+
 ## Encryption and records
 - **Per-firm envelope encryption.** Each firm has its own random data key (and a separate blind-index key), stored only wrapped by a key-encryption key: Azure Key Vault in production (`KEY_PROVIDER=azure-keyvault`, `AZURE_KEY_VAULT_KEY_ID`, managed identity), or `INTAKE_ENCRYPTION_KEY` locally. Ciphertext (`v2:`) is bound to its firm, so it can't be decrypted in another firm's rows. Data written before this (`v1:`) still reads; move it with `keys reencrypt`.
 - **Key operations** (`npm run ops -w apps/api -- …`, same environment as the server):

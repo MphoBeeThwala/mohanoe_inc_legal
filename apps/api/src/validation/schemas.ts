@@ -617,3 +617,23 @@ export const matterRateSchema = z.object({
   userId: z.string().uuid().nullable().default(null),
   hourlyRate: hourlyRate,
 });
+
+// ---------------------------------------------------------------- court rolls
+
+export const courtRollAcceptSchema = z.object({
+  startsAt: z
+    .string()
+    .trim()
+    .refine((value) => !Number.isNaN(Date.parse(value)), 'must be a valid date')
+    .optional(),
+  assigneeUserId: z.string().uuid().nullish(),
+});
+
+export const courtRollUploadSchema = z.object({
+  division: z.enum(COURT_DIVISIONS.map((court) => court.code) as [string, ...string[]]),
+  title: optionalText(200),
+  fileName: requiredText(200),
+  contentType: requiredText(120),
+  // 10 MB of file as base64.
+  contentBase64: z.string().min(1).max(14_000_000),
+});

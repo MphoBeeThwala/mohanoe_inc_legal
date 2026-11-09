@@ -12,6 +12,7 @@ import { tenantContext } from './middleware/tenant';
 import { ensureDefaultFirm } from './services/firm.service';
 import { scheduleAnchoring } from './services/audit-anchor.service';
 import { scheduleReminders } from './services/calendar.service';
+import { scheduleCourtRollSync } from './services/court-roll.service';
 import * as supportService from './services/support.service';
 import { createRateLimiter, requestLogger, securityHeaders } from './middleware/security';
 
@@ -52,11 +53,16 @@ app.use(
     credentials: true,
   }),
 );
-// JSON bodies: 1 MB, except FICA document uploads (base64 files up to 10 MB).
+// JSON bodies: 1 MB, except file uploads (base64 files up to 10 MB): FICA
+// documents and court rolls.
 const smallJson = express.json({ limit: '1mb' });
 const uploadJson = express.json({ limit: '14mb' });
+const UPLOAD_PATHS = [
+  /^\/api\/clients\/[^/]+\/fica\/documents\/?$/,
+  /^\/api\/court-rolls\/upload\/?$/,
+];
 app.use((req, res, next) =>
-  /^\/api\/clients\/[^/]+\/fica\/documents\/?$/.test(req.path) && req.method === 'POST'
+  req.method === 'POST' && UPLOAD_PATHS.some((path) => path.test(req.path))
     ? uploadJson(req, res, next)
     : smallJson(req, res, next),
 );
@@ -164,6 +170,7 @@ if (require.main === module) {
 
       scheduleAnchoring();
       scheduleReminders();
+      scheduleCourtRollSync();
       const server = app.listen(port, () => {
         console.log(`Legal practice API listening at http://localhost:${port}`);
       });

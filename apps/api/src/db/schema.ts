@@ -1129,6 +1129,100 @@ export const notifications = pgTable(
   ],
 );
 
+// ---------------------------------------------------------------- court rolls
+
+/**
+ * A published court roll fetched by the sync job. Platform-level: rolls are
+ * public and shared by every firm, and requests (app_tenant) can't read them.
+ * Only case numbers, courtrooms, times and judges are kept, never party names.
+ */
+export const courtRollDocuments = pgTable(
+  'court_roll_documents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** The configured source it came from (its index URL). */
+    source: text('source').notNull(),
+    division: text('division').notNull(),
+    url: text('url').notNull(),
+    title: text('title').notNull(),
+    rollDate: date('roll_date'),
+    contentHash: text('content_hash').notNull(),
+    contentType: text('content_type').notNull(),
+    /** 'active' | 'superseded' (an amended version replaced it) | 'failed' */
+    status: text('status').notNull().default('active'),
+    supersededBy: uuid('superseded_by'),
+    entryCount: integer('entry_count').notNull().default(0),
+    error: text('error'),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('court_roll_documents_version_idx').on(t.url, t.contentHash),
+    index('court_roll_documents_division_idx').on(t.division, t.rollDate),
+  ],
+);
+
+/** One matter on a roll: where and when it is heard. */
+export const courtRollEntries = pgTable(
+  'court_roll_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => courtRollDocuments.id, { onDelete: 'cascade' }),
+    division: text('division').notNull(),
+    /** Normalised court case number (lib/court.ts). */
+    caseKey: text('case_key').notNull(),
+    hearingDate: date('hearing_date'),
+    hearingTime: text('hearing_time'),
+    courtroom: text('courtroom'),
+    judge: text('judge'),
+    /** e.g. 'Opposed motions', 'Civil trials'. */
+    section: text('section'),
+  },
+  (t) => [index('court_roll_entries_case_idx').on(t.division, t.caseKey)],
+);
+
+/** A firm's matter found on a court roll, for staff to put on the calendar or dismiss. */
+export const courtRollMatches = pgTable(
+  'court_roll_matches',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id, { onDelete: 'cascade' }),
+    /** 'sync' (published roll) | 'upload' (a roll the firm uploaded) */
+    origin: text('origin').notNull(),
+    /** The roll's URL, or upload:<sha256> for an uploaded file. */
+    documentRef: text('document_ref').notNull(),
+    documentTitle: text('document_title').notNull(),
+    division: text('division').notNull(),
+    hearingDate: date('hearing_date'),
+    hearingTime: text('hearing_time'),
+    courtroom: text('courtroom'),
+    judge: text('judge'),
+    section: text('section'),
+    /** division|date|section|courtroom|time: one match per listing. */
+    listingKey: text('listing_key').notNull(),
+    /** 'new' | 'accepted' | 'dismissed' | 'removed' (no longer on an amended roll) */
+    status: text('status').notNull().default('new'),
+    eventId: uuid('event_id').references(() => calendarEvents.id, { onDelete: 'set null' }),
+    reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    ...updatable,
+  },
+  (t) => [
+    uniqueIndex('court_roll_matches_listing_idx').on(t.caseId, t.listingKey),
+    index('court_roll_matches_status_idx').on(t.status),
+    tenantPolicy('court_roll_matches'),
+    matterPolicy('court_roll_matches'),
+  ],
+);
+
+export type CourtRollDocumentRow = typeof courtRollDocuments.$inferSelect;
+export type CourtRollEntryRow = typeof courtRollEntries.$inferSelect;
+export type CourtRollMatchRow = typeof courtRollMatches.$inferSelect;
+
 // ---------------------------------------------------------------- audit, reports, compliance
 
 /**

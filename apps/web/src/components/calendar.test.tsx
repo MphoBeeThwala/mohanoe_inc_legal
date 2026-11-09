@@ -60,6 +60,7 @@ function mockGet() {
   return vi.spyOn(api, 'get').mockImplementation(async (url: string) => {
     if (url === '/calendar') return { data: [event] };
     if (url === '/calendar/prescriptions') return { data: [period] };
+    if (url === '/court-rolls/matches') return { data: [] };
     throw new Error(`unexpected ${url}`);
   });
 }
