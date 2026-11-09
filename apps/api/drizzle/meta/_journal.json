@@ -36,6 +36,13 @@
       "when": 1794231187742,
       "tag": "0004_support_access",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794231651591,
+      "tag": "0005_firm_sso",
+      "breakpoints": true
     }
   ]
 }

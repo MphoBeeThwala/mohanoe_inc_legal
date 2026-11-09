@@ -26,6 +26,7 @@ import ResetPassword from './auth/ResetPassword';
 import StaffAdmin from './components/StaffAdmin';
 import AccountPanel from './components/AccountPanel';
 import RecordsPanel from './components/RecordsPanel';
+import SignInSettingsPanel from './components/SignInSettingsPanel';
 import SupportAccessPanel from './components/SupportAccessPanel';
 import SupportSignIn from './auth/SupportSignIn';
 import type { Notice } from './components/DismissibleNotice';
@@ -146,6 +147,7 @@ function App() {
   const [authConfig, setAuthConfig] = useState<AuthConfig>({
     passwordLogin: true,
     oidc: { enabled: false, label: '' },
+    microsoft: { enabled: false, label: '', enforced: false },
     selfServiceReset: false,
   });
   const [link, setLink] = useState(() => linkFromPath(window.location.pathname));
@@ -663,6 +665,9 @@ function App() {
               </ErrorBoundary>
               <ErrorBoundary label="Records">
                 <RecordsPanel />
+              </ErrorBoundary>
+              <ErrorBoundary label="Sign-in settings">
+                <SignInSettingsPanel />
               </ErrorBoundary>
               <ErrorBoundary label="Support access">
                 <SupportAccessPanel platformName={branding.platform.legalName} />

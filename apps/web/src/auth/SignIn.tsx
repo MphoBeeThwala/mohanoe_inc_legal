@@ -20,6 +20,7 @@ const SIGNIN_ERRORS: Record<string, string> = {
   not_invited:
     'That Microsoft account is not linked to this workspace. Ask your administrator for an invitation.',
   inactive: 'Your account has been deactivated. Contact your administrator.',
+  wrong_directory: "That Microsoft account is not in your firm's Microsoft 365 directory.",
   mfa_required: 'Your Microsoft sign-in did not include multi-factor authentication.',
   oidc_state_missing: 'Your sign-in took too long or was started elsewhere. Please try again.',
   oidc_state_invalid: 'Your sign-in took too long or was started elsewhere. Please try again.',
@@ -170,6 +171,19 @@ function SignIn({ config, onSignedIn, onNotice }: SignInProps) {
   return (
     <div className="sign-in">
       <h2>Sign in</h2>
+      {config.microsoft.enabled ? (
+        <>
+          <a className="primary-button oidc-button" href="/api/auth/oidc/start?provider=microsoft">
+            {config.microsoft.label}
+          </a>
+          {config.microsoft.enforced ? (
+            <p className="field-hint">
+              Your firm uses Microsoft 365 sign-in. Passwords are for administrators only.
+            </p>
+          ) : null}
+          {config.passwordLogin || config.oidc.enabled ? <div className="divider">or</div> : null}
+        </>
+      ) : null}
       {config.oidc.enabled ? (
         <>
           <a className="primary-button oidc-button" href="/api/auth/oidc/start">

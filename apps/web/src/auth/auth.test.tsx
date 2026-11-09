@@ -9,6 +9,7 @@ import InviteAccept from './InviteAccept';
 const config: AuthConfig = {
   passwordLogin: true,
   oidc: { enabled: true, label: 'Sign in with Microsoft' },
+  microsoft: { enabled: false, label: '', enforced: false },
   selfServiceReset: true,
 };
 

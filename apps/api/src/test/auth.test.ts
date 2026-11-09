@@ -46,6 +46,7 @@ describe('no self sign-up', () => {
     expect(res.body).toEqual({
       passwordLogin: true,
       oidc: { enabled: false, label: '' },
+      microsoft: { enabled: false, label: '', enforced: false },
       selfServiceReset: true,
     });
   });

@@ -72,6 +72,15 @@ export const firms = pgTable(
     status: text('status').notNull().default('active'),
     /** Days a closed matter is kept; null = CLIENT_DATA_RETENTION_DAYS. */
     retentionDays: integer('retention_days'),
+    /** Microsoft 365 (Entra ID) directory (tenant) id for staff sign-in. */
+    ssoTenantId: text('sso_tenant_id'),
+    /** Work email domains that belong to that directory. */
+    ssoDomains: text('sso_domains')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    /** Staff (except admins, as break-glass) must use Microsoft sign-in. */
+    ssoEnforced: boolean('sso_enforced').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

@@ -350,7 +350,7 @@ describe('records administration', () => {
 
   test('administrators set their firm’s retention period (at least a year)', async () => {
     const initial = await request(app).get('/api/firm/settings').set(admin.auth);
-    expect(initial.body).toEqual({ retentionDays: 3650, retentionIsDefault: true });
+    expect(initial.body).toMatchObject({ retentionDays: 3650, retentionIsDefault: true });
     expect(
       (await request(app).patch('/api/firm/settings').set(admin.auth).send({ retentionDays: 30 }))
         .status,
@@ -367,7 +367,7 @@ describe('records administration', () => {
       .patch('/api/firm/settings')
       .set(admin.auth)
       .send({ retentionDays: 2555 });
-    expect(updated.body).toEqual({ retentionDays: 2555, retentionIsDefault: false });
+    expect(updated.body).toMatchObject({ retentionDays: 2555, retentionIsDefault: false });
     const summary = await request(app).get('/api/compliance/summary').set(admin.auth);
     expect(summary.body.retentionDays).toBe(2555);
   });
