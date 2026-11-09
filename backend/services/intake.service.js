@@ -8,6 +8,7 @@ const {
   redactText,
 } = require('./privacy.service');
 const auditService = require('./audit.service');
+const { getFirmBrand } = require('../config/brand');
 
 const memory = {
   clients: [],
@@ -93,7 +94,7 @@ function normalizeAssessmentSubmission(submission) {
 function createCaseNumber(existingCount) {
   const year = new Date().getFullYear();
   const sequence = String(existingCount + 1).padStart(4, '0');
-  return `MHL-${year}-${sequence}`;
+  return `${getFirmBrand().casePrefix}-${year}-${sequence}`;
 }
 
 async function insertRow(table, record) {

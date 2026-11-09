@@ -1,5 +1,5 @@
-const CACHE_VERSION = 'v2';
-const CACHE_NAME = `mohanoe-legal-shell-${CACHE_VERSION}`;
+const CACHE_VERSION = 'v3';
+const CACHE_NAME = `practice-workspace-shell-${CACHE_VERSION}`;
 const SHELL = ['/', '/index.html', '/offline.html', '/manifest.json', '/icons/icon.svg'];
 
 self.addEventListener('install', (event) => {

@@ -1,5 +1,6 @@
 const { randomUUID } = require('crypto');
 const { getSupabaseClient } = require('../config/supabase');
+const { requireSecret } = require('../config/env');
 
 const memory = {
   events: [],
@@ -48,7 +49,7 @@ function hashEvent(record, previousHash) {
   });
 
   return require('crypto')
-    .createHmac('sha256', process.env.AUDIT_CHAIN_SECRET || 'mohanoe-audit-dev-secret')
+    .createHmac('sha256', requireSecret('AUDIT_CHAIN_SECRET', 'local-development-audit-secret'))
     .update(payload)
     .digest('hex');
 }

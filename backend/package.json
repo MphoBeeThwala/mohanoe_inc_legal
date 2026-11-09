@@ -1,19 +1,20 @@
 {
-  "name": "backend",
+  "name": "legal-practice-api",
   "version": "1.0.0",
-  "description": "Backend for Mohanoe Inc. Legal Practice Management",
+  "description": "API for the Ahava on 88 white-label legal practice management platform",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.1",
     "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.2",
-    "mongoose": "^9.4.1"
+    "jsonwebtoken": "^9.0.2"
   },
-  "author": "",
-  "license": "ISC"
+  "author": "Ahava on 88 (Pty) Ltd",
+  "license": "UNLICENSED",
+  "private": true
 }

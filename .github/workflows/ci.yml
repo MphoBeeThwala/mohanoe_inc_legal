@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Brand guard
+        run: node scripts/check-legacy-brand.js
+      - name: Backend install and tests
+        run: npm ci --prefix backend && npm test --prefix backend
+      - name: Backend security audit
+        run: npm audit --omit=dev --audit-level=high --prefix backend
+      - name: Frontend install, test and build
+        run: |
+          npm ci --prefix frontend
+          CI=true npm test --prefix frontend -- --watchAll=false
+          npm run build --prefix frontend

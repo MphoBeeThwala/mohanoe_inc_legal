@@ -1,0 +1,65 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const KEYS = [
+  'FIRM_NAME',
+  'FIRM_SHORT_NAME',
+  'PRODUCT_NAME',
+  'FIRM_LOGO_URL',
+  'FIRM_PRIMARY_COLOR',
+  'FIRM_ACCENT_COLOR',
+  'FIRM_CASE_PREFIX',
+];
+
+function withEnv(values, fn) {
+  const saved = Object.fromEntries(KEYS.map((key) => [key, process.env[key]]));
+  KEYS.forEach((key) => delete process.env[key]);
+  Object.assign(process.env, values);
+  try {
+    return fn(require('../config/brand'));
+  } finally {
+    KEYS.forEach((key) => {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    });
+  }
+}
+
+test('neutral defaults when no firm is configured', () => {
+  withEnv({}, ({ getFirmBrand }) => {
+    const brand = getFirmBrand();
+    assert.equal(brand.firmName, 'Your Firm');
+    assert.equal(brand.casePrefix, 'MAT');
+    assert.equal(brand.logoUrl, null);
+  });
+});
+
+test('firm brand comes from configuration', () => {
+  withEnv(
+    {
+      FIRM_NAME: 'Nkosi & Partners Inc.',
+      FIRM_SHORT_NAME: 'Nkosi',
+      FIRM_PRIMARY_COLOR: '#123456',
+      FIRM_CASE_PREFIX: 'nkp',
+    },
+    ({ getPublicBranding }) => {
+      const brand = getPublicBranding();
+      assert.equal(brand.firmName, 'Nkosi & Partners Inc.');
+      assert.equal(brand.firmShortName, 'Nkosi');
+      assert.equal(brand.primaryColor, '#123456');
+      assert.equal(brand.casePrefix, 'NKP');
+      assert.equal(brand.platform.legalName, 'Ahava on 88 (Pty) Ltd');
+    },
+  );
+});
+
+test('invalid colours and prefixes fall back to safe defaults', () => {
+  withEnv(
+    { FIRM_PRIMARY_COLOR: 'red; background:url(x)', FIRM_CASE_PREFIX: 'BAD PREFIX!' },
+    ({ getFirmBrand }) => {
+      const brand = getFirmBrand();
+      assert.equal(brand.primaryColor, '#1b7a58');
+      assert.equal(brand.casePrefix, 'MAT');
+    },
+  );
+});

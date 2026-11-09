@@ -7,7 +7,36 @@ import CaseWorkspace from './components/CaseWorkspace';
 import OperationsHub from './components/OperationsHub';
 import ErrorBoundary from './components/ErrorBoundary';
 import DismissibleNotice from './components/DismissibleNotice';
+import { useBranding } from './branding';
 import './App.css';
+
+const TOKEN_KEY = 'pms_session_token';
+
+// Browser storage can be missing or throw (private mode, locked-down
+// browsers, test environments). Never let that crash the workspace.
+const sessionStore = {
+  get() {
+    try {
+      return window.localStorage?.getItem(TOKEN_KEY) ?? null;
+    } catch (error) {
+      return null;
+    }
+  },
+  set(value) {
+    try {
+      window.localStorage?.setItem(TOKEN_KEY, value);
+    } catch (error) {
+      // ignore: the session simply won't survive a reload
+    }
+  },
+  clear() {
+    try {
+      window.localStorage?.removeItem(TOKEN_KEY);
+    } catch (error) {
+      // ignore
+    }
+  },
+};
 
 const api = axios.create({
   baseURL: '/api',
@@ -15,7 +44,7 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = window.localStorage.getItem('mhl_token');
+  const token = sessionStore.get();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -72,7 +101,26 @@ function LoadingShell() {
   );
 }
 
+function BrandMark({ branding }) {
+  if (branding.logoUrl) {
+    return (
+      <img
+        className="brand-mark brand-logo"
+        src={branding.logoUrl}
+        alt={`${branding.firmName} logo`}
+      />
+    );
+  }
+
+  return (
+    <div className="brand-mark" aria-hidden="true">
+      {(branding.firmShortName || 'F').trim().charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
 function App() {
+  const branding = useBranding();
   const [currentUser, setCurrentUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
@@ -128,7 +176,7 @@ function App() {
   };
 
   const loadSession = async () => {
-    const token = window.localStorage.getItem('mhl_token');
+    const token = sessionStore.get();
     if (!token) {
       setAuthReady(true);
       setLoading(false);
@@ -140,7 +188,7 @@ function App() {
       setCurrentUser(data.user);
       await loadWorkspace();
     } catch (error) {
-      window.localStorage.removeItem('mhl_token');
+      sessionStore.clear();
       setAuthNotice({
         tone: 'warn',
         message: 'Your session expired. Please sign in again.',
@@ -218,7 +266,7 @@ function App() {
               password: authForm.password,
             };
       const { data } = await api.post(endpoint, payload);
-      window.localStorage.setItem('mhl_token', data.token);
+      sessionStore.set(data.token);
       setCurrentUser(data.user);
       setAuthNotice({
         tone: 'success',
@@ -239,7 +287,7 @@ function App() {
   };
 
   const handleLogout = () => {
-    window.localStorage.removeItem('mhl_token');
+    sessionStore.clear();
     setCurrentUser(null);
     setSummary(null);
     setCases([]);
@@ -315,9 +363,9 @@ function App() {
       <div className="app-shell auth-shell">
         <header className="hero">
           <div className="hero-copy">
-            <div className="brand-mark">M</div>
+            <BrandMark branding={branding} />
             <div>
-              <p className="eyebrow">Mohanoe Inc. Attorneys</p>
+              <p className="eyebrow">{branding.firmName}</p>
               <h1>Legal practice management platform</h1>
               <p className="hero-text">
                 Encrypted intake, role-based workspace access, case management,
@@ -430,9 +478,9 @@ function App() {
     <div className="app-shell">
       <header className="hero hero-compact">
         <div className="hero-copy">
-          <div className="brand-mark">M</div>
+          <BrandMark branding={branding} />
           <div>
-            <p className="eyebrow">Mohanoe Inc. Attorneys</p>
+            <p className="eyebrow">{branding.firmName}</p>
             <h1>Practice workspace</h1>
             <p className="hero-text">
               Encrypted intake, matter triage, and day-to-day case operations.

@@ -2,24 +2,16 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { getSupabaseClient } = require('../config/supabase');
 const auditService = require('./audit.service');
+const { requireSecret } = require('../config/env');
+
+const JWT_ISSUER = process.env.JWT_ISSUER || 'ahava88-legal-pms';
 
 const memory = {
   users: [],
 };
 
 function getJwtSecret() {
-  const secret = process.env.JWT_SECRET;
-  if (secret) {
-    return secret;
-  }
-
-  if (process.env.NODE_ENV === 'production') {
-    const error = new Error('JWT_SECRET must be set in production');
-    error.statusCode = 500;
-    throw error;
-  }
-
-  return 'mohanoe-dev-secret';
+  return requireSecret('JWT_SECRET', 'local-development-jwt-secret');
 }
 
 function isPublicRegistrationEnabled() {
@@ -43,7 +35,13 @@ function createPasswordHash(password) {
 }
 
 function verifyPassword(password, salt, expectedHash) {
-  return hashPassword(password, salt) === expectedHash;
+  if (!salt || !expectedHash) {
+    return false;
+  }
+
+  const actual = Buffer.from(hashPassword(password, salt), 'hex');
+  const expected = Buffer.from(String(expectedHash), 'hex');
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
 
 function signToken(user) {
@@ -57,7 +55,7 @@ function signToken(user) {
     getJwtSecret(),
     {
       algorithm: 'HS256',
-      issuer: 'mohanoe-inc-legal',
+      issuer: JWT_ISSUER,
       expiresIn: process.env.JWT_EXPIRES_IN || '12h',
     },
   );
@@ -281,7 +279,7 @@ function authenticateRequest(req, _res, next) {
     }
 
     const decoded = jwt.verify(token, getJwtSecret(), {
-      issuer: 'mohanoe-inc-legal',
+      issuer: JWT_ISSUER,
     });
 
     req.auth = {

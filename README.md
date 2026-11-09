@@ -1,56 +1,58 @@
-# Mohanoe Inc. Legal Practice Management
+# Legal Practice Management Platform
 
-Legal practice management app for Mohanoe Inc. Attorneys with encrypted intake, AI-assisted triage, and a POPIA-safe data path.
+White-label legal practice management software owned by **Ahava on 88 (Pty) Ltd** and licensed to individual law firms on a monthly subscription. Each firm sees its own name, logo and colours; no firm brand is hard-coded.
 
-## What the app does
-- Captures client intake details and consent
-- Encrypts raw PII before persistence
-- Strips PII from the matter brief before AI assessment
-- Produces attorney-facing triage notes, urgency, and next actions
-- Tracks assessed matters as live cases
+Current capabilities: encrypted client intake with POPIA consent, de-identified AI triage, case management, documents, billing, calendar, notifications, reports, a tamper-evident audit trail and data-subject compliance tools.
+
+The enterprise roadmap (multi-tenancy, Azure South Africa hosting, grounded AI legal research, time recording, trust accounting) is in [`docs/ROADMAP.md`](docs/ROADMAP.md). Coding conventions for humans and Claude Code are in [`CLAUDE.md`](CLAUDE.md).
 
 ## Project layout
-- `backend/` - Express API, intake workflow, encryption, and AI assessment
-- `frontend/` - React dashboard for intake and case review
-- `backend/database.sql` - Postgres/Supabase schema for production persistence
+- `backend/` — Express API, intake workflow, encryption, AI assessment
+- `backend/config/brand.js` — the single source of firm branding (white-label seam)
+- `backend/config/env.js` — startup checks; production refuses to boot without real secrets
+- `backend/test/` — unit tests (`npm test` in `backend/`)
+- `frontend/` — React workspace; loads branding from `GET /api/tenant/branding`
+- `backend/database.sql`, `backend/migrations/` — Postgres schema (to be replaced by one versioned migration history, roadmap epic 3)
+- `scripts/check-legacy-brand.js` — CI guard against hard-coded brand names
 
 ## Local development
-1. Copy `.env.example` to `.env` and set the secrets you want to use.
-2. Install dependencies in `backend/` and `frontend/`.
-3. For first-time login without admin seeding, set `ALLOW_PUBLIC_REGISTRATION=true` in `.env`, start the backend, then use **Create account** on the sign-in screen.
-4. Start the backend on port `3001`.
-5. Start the frontend on port `3000`.
+1. Copy `.env.example` to `.env` and fill in what you need. Without Supabase settings the API runs in memory (development only; production refuses to start).
+2. `npm ci` in `backend/` and in `frontend/`.
+3. For the first login, set `ALLOW_PUBLIC_REGISTRATION=true`, start the backend, then use **Create account** on the sign-in screen. Turn it off afterwards.
+4. Backend: `npm start` in `backend/` (port `3001`). Frontend: `npm start` in `frontend/` (port `3000`).
+5. Tests: `npm test` in `backend/`, and `node scripts/check-legacy-brand.js` from the repo root.
 
-## Production notes
-- Store `INTAKE_ENCRYPTION_KEY` as a 32-byte base64 or hex key.
-- Keep Supabase as the production datastore for the first live release.
-- Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to persist intake data in Postgres.
-- If API calls fail with missing tables or columns in Supabase, run the SQL in [`SUPABASE_FIX.md`](SUPABASE_FIX.md) (`backend/migrations/002_full_schema_bootstrap.sql`).
-- Set `ANTHROPIC_API_KEY` to enable live AI triage. Without it, the backend falls back to rules-based assessment.
+## Branding a deployment (one firm per deployment, until multi-tenancy)
+Set these environment variables; anything missing falls back to a neutral default:
 
-## Deployment
-- Recommended platform: Render.
-- Use the root-level `render.yaml` blueprint for a single web service.
-- The Render build copies the React build into `backend/public`, and the backend serves that directory so the UI and API stay on the same origin.
-- Populate the secret env vars Render prompts for on blueprint creation: `JWT_SECRET`, `INTAKE_ENCRYPTION_KEY`, `AUDIT_CHAIN_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `ANTHROPIC_API_KEY`.
-- The health check endpoint is `/ready`.
-- Admin auto-seeding is **deferred by default** (`SEED_ADMIN_ON_STARTUP=false`). For client demo/bootstrap, set `ALLOW_PUBLIC_REGISTRATION=true` and create the first staff account from the sign-in screen. Later, enable `SEED_ADMIN_ON_STARTUP=true` with `DEFAULT_ADMIN_EMAIL` and `DEFAULT_ADMIN_PASSWORD` to restore boot-time admin provisioning.
-- See `PROD_OPERATIONS.md` for backup, restore, and smoke-test procedures.
+| Variable | Example | Used for |
+|---|---|---|
+| `FIRM_NAME` | `Nkosi & Partners Inc.` | Header, page title |
+| `FIRM_SHORT_NAME` | `Nkosi` | Brand mark initial |
+| `FIRM_LOGO_URL` | `https://…/logo.png` | Logo in place of the initial |
+| `FIRM_PRIMARY_COLOR` / `FIRM_ACCENT_COLOR` | `#1b7a58` / `#0f5d43` | Theme colours (6-digit hex only) |
+| `FIRM_CASE_PREFIX` | `NKP` | Case numbers, e.g. `NKP-2026-0001` (2–8 letters/digits) |
+| `PRODUCT_NAME` | `Legal Practice Workspace` | Product name in the page title |
+| `PLATFORM_SUPPORT_EMAIL` | `support@…` | Platform support contact |
+
+## Production
+- Required, or the server will not start: `JWT_SECRET` (32+ chars), `INTAKE_ENCRYPTION_KEY` (32-byte base64 or 64-char hex), `AUDIT_CHAIN_SECRET` (32+ chars), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+- `ANTHROPIC_API_KEY` enables live AI triage; without it the backend uses rules-based triage.
+- Interim hosting is Render (`render.yaml`). The target is Microsoft Azure, South Africa North — see the roadmap.
+- If API calls fail with missing tables, see [`SUPABASE_FIX.md`](SUPABASE_FIX.md).
+- Backup, restore and smoke tests: [`PROD_OPERATIONS.md`](PROD_OPERATIONS.md).
 
 ## Install as a PWA
-
-The React app ships a minimal progressive web app shell for demos:
-
-1. Deploy or build the frontend (`npm run build --prefix frontend`) and serve over HTTPS (Render does this automatically).
+1. Build the frontend (`npm run build --prefix frontend`) and serve it over HTTPS.
 2. Open the site in Chrome or Edge on desktop or Android.
-3. Use **Install app** from the address bar (or browser menu → **Install Mohanoe Legal**).
-4. The installed app opens in standalone mode with the Mohanoe brand colors.
+3. Use **Install app** from the address bar or browser menu.
 
-Offline behavior is limited to the app shell (navigation and cached static assets). API calls require network access.
-
-Files: `frontend/public/manifest.json`, `frontend/public/sw.js`, `frontend/public/icons/icon.svg`.
+Offline support covers the app shell only; API calls need a network connection.
 
 ## Compliance
-- Raw client PII stays encrypted at rest.
-- Only redacted matter summaries are sent to AI.
-- Consent is required for both storage and AI assessment.
+- Raw client personal information is encrypted at rest (AES-256-GCM).
+- Only de-identified matter summaries are sent to AI.
+- Consent is required for storage and AI assessment.
+- Data-subject exports and request fulfilment are restricted to admins.
+
+© Ahava on 88 (Pty) Ltd. All rights reserved. Proprietary and confidential.

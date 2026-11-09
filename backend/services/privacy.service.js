@@ -5,8 +5,10 @@ const {
   randomBytes,
 } = require('crypto');
 
+const { isProduction } = require('../config/env');
+
 const FALLBACK_KEY = createHash('sha256')
-  .update('mohanoe-legal-intake-development-key')
+  .update('local-development-intake-key')
   .digest();
 
 function getEncryptionKey() {
@@ -14,6 +16,9 @@ function getEncryptionKey() {
     process.env.INTAKE_ENCRYPTION_KEY || process.env.PII_ENCRYPTION_KEY;
 
   if (!keySource) {
+    if (isProduction()) {
+      throw new Error('INTAKE_ENCRYPTION_KEY must be set in production');
+    }
     return FALLBACK_KEY;
   }
 

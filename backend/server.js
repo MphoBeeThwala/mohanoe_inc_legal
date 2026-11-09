@@ -5,6 +5,8 @@ require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const express = require('express');
 const cors = require('cors');
 const routes = require('./routes');
+const { assertConfig, configWarnings } = require('./config/env');
+const { getPublicBranding } = require('./config/brand');
 const { seedDefaultUsers } = require('./services/auth.service');
 const {
   createRateLimiter,
@@ -55,7 +57,7 @@ app.use(express.json({ limit: '1mb' }));
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    service: 'mohanoe-inc-legal-backend',
+    service: 'legal-practice-api',
     timestamp: new Date().toISOString(),
   });
 });
@@ -74,6 +76,11 @@ app.get('/ready', (req, res) => {
     retentionDays: Number(process.env.CLIENT_DATA_RETENTION_DAYS || 3650),
     timestamp: new Date().toISOString(),
   });
+});
+
+// Public, pre-login branding for the white-label UI.
+app.get('/api/tenant/branding', (req, res) => {
+  res.json(getPublicBranding());
 });
 
 // Routes
@@ -117,6 +124,14 @@ app.use((error, req, res, _next) => {
 });
 
 if (require.main === module) {
+  try {
+    assertConfig();
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+  configWarnings().forEach((warning) => console.warn(`WARNING: ${warning}`));
+
   if (String(process.env.SEED_ADMIN_ON_STARTUP || '').toLowerCase() === 'true') {
     seedDefaultUsers().catch((error) => {
       console.error('Admin seed on startup failed:', error.message);
@@ -124,7 +139,7 @@ if (require.main === module) {
   }
 
   app.listen(port, () => {
-    console.log(`Mohanoe backend listening at http://localhost:${port}`);
+    console.log(`Legal practice API listening at http://localhost:${port}`);
   });
 }
 

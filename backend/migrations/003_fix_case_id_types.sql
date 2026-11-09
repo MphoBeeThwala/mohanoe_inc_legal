@@ -16,7 +16,7 @@
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE OR REPLACE FUNCTION public._mohanoe_column_type(p_table text, p_column text)
+CREATE OR REPLACE FUNCTION public._pms_column_type(p_table text, p_column text)
 RETURNS text
 LANGUAGE sql
 STABLE
@@ -29,7 +29,7 @@ AS $$
     AND c.column_name = p_column
 $$;
 
-CREATE OR REPLACE FUNCTION public._mohanoe_drop_empty_wrong_pk(
+CREATE OR REPLACE FUNCTION public._pms_drop_empty_wrong_pk(
   p_table text,
   p_expected_type text DEFAULT 'uuid'
 )
@@ -45,7 +45,7 @@ BEGIN
     RETURN;
   END IF;
 
-  actual_type := public._mohanoe_column_type(p_table, 'id');
+  actual_type := public._pms_column_type(p_table, 'id');
   IF actual_type IS NULL OR actual_type = p_expected_type THEN
     RETURN;
   END IF;
@@ -62,7 +62,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public._mohanoe_drop_case_dependents()
+CREATE OR REPLACE FUNCTION public._pms_drop_case_dependents()
 RETURNS void
 LANGUAGE plpgsql
 SET search_path = public
@@ -78,34 +78,34 @@ END;
 $$;
 
 -- Remove any partially created case child tables (may not exist if 002 failed early).
-SELECT public._mohanoe_drop_case_dependents();
+SELECT public._pms_drop_case_dependents();
 
 DO $$
 DECLARE
   submissions_id_type text;
   cases_id_type text;
 BEGIN
-  submissions_id_type := public._mohanoe_column_type('submissions', 'id');
-  cases_id_type := public._mohanoe_column_type('cases', 'id');
+  submissions_id_type := public._pms_column_type('submissions', 'id');
+  cases_id_type := public._pms_column_type('cases', 'id');
 
   IF submissions_id_type IS NOT NULL AND submissions_id_type <> 'uuid' THEN
-    PERFORM public._mohanoe_drop_empty_wrong_pk('cases');
-    PERFORM public._mohanoe_drop_empty_wrong_pk('assessments');
-    PERFORM public._mohanoe_drop_empty_wrong_pk('submissions');
+    PERFORM public._pms_drop_empty_wrong_pk('cases');
+    PERFORM public._pms_drop_empty_wrong_pk('assessments');
+    PERFORM public._pms_drop_empty_wrong_pk('submissions');
   END IF;
 
   IF cases_id_type IS NOT NULL AND cases_id_type <> 'uuid' THEN
-    PERFORM public._mohanoe_drop_empty_wrong_pk('cases');
+    PERFORM public._pms_drop_empty_wrong_pk('cases');
   END IF;
 
-  IF public._mohanoe_column_type('assessments', 'intake_submission_id') IS NOT NULL
-     AND public._mohanoe_column_type('assessments', 'intake_submission_id') <> 'uuid' THEN
-    PERFORM public._mohanoe_drop_empty_wrong_pk('assessments');
+  IF public._pms_column_type('assessments', 'intake_submission_id') IS NOT NULL
+     AND public._pms_column_type('assessments', 'intake_submission_id') <> 'uuid' THEN
+    PERFORM public._pms_drop_empty_wrong_pk('assessments');
   END IF;
 
-  IF public._mohanoe_column_type('cases', 'intake_submission_id') IS NOT NULL
-     AND public._mohanoe_column_type('cases', 'intake_submission_id') <> 'uuid' THEN
-    PERFORM public._mohanoe_drop_empty_wrong_pk('cases');
+  IF public._pms_column_type('cases', 'intake_submission_id') IS NOT NULL
+     AND public._pms_column_type('cases', 'intake_submission_id') <> 'uuid' THEN
+    PERFORM public._pms_drop_empty_wrong_pk('cases');
   END IF;
 END $$;
 
