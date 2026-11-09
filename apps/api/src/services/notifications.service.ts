@@ -1,180 +1,128 @@
-import type { DbRow, RequestBody, Actor } from '../types/db';
+// In-app notifications for staff.
+
+import { and, count, desc, eq, type SQL } from 'drizzle-orm';
+import type { NotificationRecord } from '@ahava88/shared';
+import { db } from '../db/client';
+import { notifications, type NotificationRow } from '../db/schema';
 import { httpError } from '../lib/http';
-import { randomUUID } from 'crypto';
-import { getSupabaseClient } from '../config/supabase';
+import { actorName, type Actor } from '../lib/actor';
+import { iso, isoOrNull } from '../lib/time';
+import { notificationSchema, parse } from '../validation/schemas';
 import * as auditService from './audit.service';
 
-const memory: Record<string, DbRow[]> = {
-  notifications: [],
-};
-
-function toIso(value = new Date()) {
-  return new Date(value).toISOString();
-}
-
-async function listRows() {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db
-      .from('notifications')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) {
-      throw error;
-    }
-
-    return data || [];
-  }
-
-  return [...memory.notifications].sort((a, b) =>
-    String(b.created_at).localeCompare(String(a.created_at)),
-  );
-}
-
-async function saveRow(record: DbRow) {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db.from('notifications').insert(record).select().single();
-    if (error) {
-      throw error;
-    }
-
-    return data;
-  }
-
-  memory.notifications.unshift(record);
-  return record;
-}
-
-function formatNotification(row: DbRow) {
+function formatNotification(row: NotificationRow): NotificationRecord {
   return {
     id: row.id,
     title: row.title,
     body: row.body,
     category: row.category,
     priority: row.priority,
-    recipientRole: row.recipient_role,
-    recipientUserId: row.recipient_user_id,
-    relatedEntityType: row.related_entity_type,
-    relatedEntityId: row.related_entity_id,
-    isRead: row.is_read,
-    readAt: row.read_at,
-    createdAt: row.created_at,
+    recipientRole: row.recipientRole,
+    recipientUserId: row.recipientUserId,
+    relatedEntityType: row.relatedEntityType,
+    relatedEntityId: row.relatedEntityId,
+    isRead: row.isRead,
+    readAt: isoOrNull(row.readAt),
+    createdAt: iso(row.createdAt),
   };
 }
 
-async function listNotifications(filters: RequestBody = {}) {
-  const rows = await listRows();
-  return rows
-    .filter((row) => {
-      if (filters.recipientRole && row.recipient_role !== filters.recipientRole) {
-        return false;
-      }
+export interface NotificationFilters {
+  recipientRole?: string;
+  isRead?: boolean;
+}
 
-      if (typeof filters.isRead === 'boolean' && Boolean(row.is_read) !== filters.isRead) {
-        return false;
-      }
+function filterConditions(filters: NotificationFilters): SQL | undefined {
+  const conditions: SQL[] = [];
+  if (filters.recipientRole) {
+    conditions.push(eq(notifications.recipientRole, filters.recipientRole));
+  }
+  if (typeof filters.isRead === 'boolean') {
+    conditions.push(eq(notifications.isRead, filters.isRead));
+  }
+  return conditions.length ? and(...conditions) : undefined;
+}
 
-      return true;
+export async function listNotifications(
+  filters: NotificationFilters = {},
+  limit = 200,
+): Promise<NotificationRecord[]> {
+  const rows = await db()
+    .select()
+    .from(notifications)
+    .where(filterConditions(filters))
+    .orderBy(desc(notifications.createdAt))
+    .limit(limit);
+  return rows.map(formatNotification);
+}
+
+export async function unreadCount(recipientRole: string | null = null): Promise<number> {
+  const [row] = await db()
+    .select({ value: count() })
+    .from(notifications)
+    .where(filterConditions({ recipientRole: recipientRole ?? undefined, isRead: false }));
+  return row?.value ?? 0;
+}
+
+export async function createNotification(
+  input: unknown,
+  actor: Actor = {},
+): Promise<NotificationRecord> {
+  const notification = parse(notificationSchema, input);
+  const [saved] = await db()
+    .insert(notifications)
+    .values({
+      title: notification.title,
+      body: notification.body,
+      category: notification.category,
+      priority: notification.priority,
+      recipientRole: notification.recipientRole,
+      recipientUserId: notification.recipientUserId ?? null,
+      relatedEntityType: notification.relatedEntityType ?? null,
+      relatedEntityId: notification.relatedEntityId ?? null,
+      createdBy: actorName(actor),
     })
-    .map(formatNotification);
-}
-
-async function unreadCount(recipientRole: string | null = null) {
-  const rows = await listNotifications(
-    recipientRole ? { recipientRole, isRead: false } : { isRead: false },
-  );
-  return rows.length;
-}
-
-async function createNotification(input: RequestBody = {}, actor: Actor = {}) {
-  const title = String(input.title || '').trim();
-  const body = String(input.body || '').trim();
-  const category = String(input.category || 'general').trim();
-  const recipientRole = String(input.recipientRole || 'attorney').trim();
-
-  if (!title || !body) {
-    throw httpError('title and body are required', 400);
+    .returning();
+  if (!saved) {
+    throw new Error('Notification was not stored');
   }
 
-  const record = {
-    id: randomUUID(),
-    title,
-    body,
-    category,
-    priority: String(input.priority || 'medium').trim(),
-    recipient_role: recipientRole,
-    recipient_user_id: input.recipientUserId || null,
-    related_entity_type: input.relatedEntityType || null,
-    related_entity_id: input.relatedEntityId || null,
-    is_read: false,
-    read_at: null,
-    created_by: actor?.fullName || actor?.email || 'system',
-    created_at: toIso(),
-  };
-
-  const saved = await saveRow(record);
-  await auditService
-    .logEvent(
-      {
-        entityType: 'notification',
-        entityId: saved.id,
-        action: 'notification_created',
-        summary: title,
-        details: {
-          category,
-          recipientRole,
-        },
-      },
-      actor,
-    )
-    .catch(() => {});
+  await auditService.logEventSafely(
+    {
+      entityType: 'notification',
+      entityId: saved.id,
+      action: 'notification_created',
+      summary: saved.title,
+      details: { category: saved.category, recipientRole: saved.recipientRole },
+    },
+    actor,
+  );
 
   return formatNotification(saved);
 }
 
-async function markRead(notificationId: string, actor: Actor = {}) {
-  const rows = await listRows();
-  const row = rows.find((item) => item.id === notificationId);
-  if (!row) {
+export async function markRead(
+  notificationId: string,
+  actor: Actor = {},
+): Promise<NotificationRecord> {
+  const [updated] = await db()
+    .update(notifications)
+    .set({ isRead: true, readAt: new Date() })
+    .where(eq(notifications.id, notificationId))
+    .returning();
+  if (!updated) {
     throw httpError('Notification not found', 404);
   }
 
-  const updated = {
-    ...row,
-    is_read: true,
-    read_at: toIso(),
-  };
-
-  const db = getSupabaseClient();
-  if (db) {
-    const { error } = await db
-      .from('notifications')
-      .update({ is_read: true, read_at: updated.read_at })
-      .eq('id', notificationId);
-    if (error) {
-      throw error;
-    }
-  } else {
-    const index = memory.notifications.findIndex((item) => item.id === notificationId);
-    if (index >= 0) {
-      memory.notifications[index] = updated;
-    }
-  }
-
-  await auditService
-    .logEvent(
-      {
-        entityType: 'notification',
-        entityId: notificationId,
-        action: 'notification_read',
-        summary: row.title,
-      },
-      actor,
-    )
-    .catch(() => {});
+  await auditService.logEventSafely(
+    {
+      entityType: 'notification',
+      entityId: notificationId,
+      action: 'notification_read',
+      summary: updated.title,
+    },
+    actor,
+  );
 
   return formatNotification(updated);
 }
-
-export { createNotification, listNotifications, markRead, unreadCount };

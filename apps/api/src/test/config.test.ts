@@ -7,8 +7,7 @@ const goodProduction: NodeJS.ProcessEnv = {
   JWT_SECRET: 'x'.repeat(48),
   INTAKE_ENCRYPTION_KEY: 'a'.repeat(64),
   AUDIT_CHAIN_SECRET: 'y'.repeat(48),
-  SUPABASE_URL: 'https://example.supabase.co',
-  SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
+  DATABASE_URL: 'postgres://app:secret@db.example.com:5432/practice',
 };
 
 test('development config never blocks startup', () => {

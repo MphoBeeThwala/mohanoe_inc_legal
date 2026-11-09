@@ -1,3 +1,4 @@
+import { complianceFilterSchema, parse } from '../validation/schemas';
 import type { Request, Response } from 'express';
 import { sendError } from '../lib/http';
 import * as complianceService from '../services/compliance.service';
@@ -13,10 +14,7 @@ async function summary(req: Request, res: Response) {
 
 async function index(req: Request, res: Response) {
   try {
-    const requests = await complianceService.listRequests({
-      status: req.query.status,
-      requestType: req.query.requestType,
-    });
+    const requests = await complianceService.listRequests(parse(complianceFilterSchema, req.query));
     res.status(200).json(requests);
   } catch (error) {
     sendError(res, error);

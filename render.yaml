@@ -40,9 +40,7 @@ services:
         sync: false
       - key: AUDIT_CHAIN_SECRET
         sync: false
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
+      - key: DATABASE_URL
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false

@@ -1,11 +1,13 @@
 # Production Operations Runbook
 
 ## Datastore
-- Keep Supabase as the production datastore for the first live release.
-- Reason: the app already uses Supabase client access, encrypted intake storage, and RLS policies. A Render Postgres migration would require a data-layer rewrite and new migration verification.
+- Any PostgreSQL 15+ reached through `DATABASE_URL` (the app uses Drizzle ORM over node-postgres; no vendor SDK).
+- Target: Azure Database for PostgreSQL Flexible Server, South Africa North (see `docs/ROADMAP.md` §4). Interim: any managed Postgres, e.g. a Supabase project's Postgres connection string.
+- Migrations live in `apps/api/drizzle/` and are applied on start (or by `npm run db:migrate -w apps/api` with `DB_MIGRATE_ON_START=false`).
+- `INTAKE_ENCRYPTION_KEY` and `AUDIT_CHAIN_SECRET` must be backed up with the database: without the first, client data cannot be decrypted; without the second, the audit chain cannot be verified.
 
 ## Backups
-- Use Supabase managed backups as the primary recovery path.
+- Use the provider's managed backups with point-in-time recovery as the primary recovery path.
 - Before client go-live, verify:
   - backup retention window
   - point-in-time recovery / restore support on the chosen plan
@@ -18,6 +20,7 @@
   - intake records still decrypt
   - case, billing, calendar, and audit records still load
   - compliance export still returns a complete subject bundle
+  - `GET /api/audit/verify` (admin) returns `valid: true`
 
 ## Admin Provisioning
 - **Current demo phase:** `SEED_ADMIN_ON_STARTUP` defaults to `false`. Set `ALLOW_PUBLIC_REGISTRATION=true` to let the first presenter create a staff account from the UI, then disable public registration before go-live.

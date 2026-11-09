@@ -1,18 +1,17 @@
-import type { DbRow, RequestBody } from '../types/db';
-import { HttpError, errorMessage, httpError } from '../lib/http';
 import crypto from 'crypto';
+import { count, eq } from 'drizzle-orm';
 import jwt, { type JwtPayload, type SignOptions } from 'jsonwebtoken';
 import type { NextFunction, Request, Response } from 'express';
-import { type AuthConfig, type AuthResult, type PublicUser, type UserRole } from '@ahava88/shared';
-import { getSupabaseClient } from '../config/supabase';
-import * as auditService from './audit.service';
+import type { AuthConfig, AuthResult, PublicUser, UserRole } from '@ahava88/shared';
+import { HttpError, errorMessage, httpError } from '../lib/http';
 import { requireSecret } from '../config/env';
+import { db } from '../db/client';
+import { users, type UserRow } from '../db/schema';
+import { iso, isoOrNull } from '../lib/time';
+import { loginSchema, parse, registerSchema } from '../validation/schemas';
+import * as auditService from './audit.service';
 
 const JWT_ISSUER = process.env.JWT_ISSUER || 'ahava88-legal-pms';
-
-const memory: Record<string, DbRow[]> = {
-  users: [],
-};
 
 function getJwtSecret() {
   return requireSecret('JWT_SECRET', 'local-development-jwt-secret');
@@ -38,6 +37,10 @@ function createPasswordHash(password: string) {
   };
 }
 
+// Compared against when the email is unknown, so a failed login takes the
+// same time whether or not the account exists (no user enumeration).
+const DUMMY_CREDENTIALS = createPasswordHash(crypto.randomBytes(16).toString('hex'));
+
 function verifyPassword(password: string, salt: string, expectedHash: string) {
   if (!salt || !expectedHash) {
     return false;
@@ -48,13 +51,13 @@ function verifyPassword(password: string, salt: string, expectedHash: string) {
   return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
 
-function signToken(user: DbRow): string {
+function signToken(user: UserRow): string {
   return jwt.sign(
     {
       sub: user.id,
       email: user.email,
       role: user.role,
-      fullName: user.full_name,
+      fullName: user.fullName,
     },
     getJwtSecret(),
     {
@@ -65,198 +68,121 @@ function signToken(user: DbRow): string {
   );
 }
 
-function toPublicUser(user: DbRow): PublicUser;
-function toPublicUser(user: DbRow | null | undefined): PublicUser | null;
-function toPublicUser(user: DbRow | null | undefined): PublicUser | null {
-  if (!user) {
-    return null;
-  }
-
+function toPublicUser(user: UserRow): PublicUser {
   return {
     id: user.id,
     email: user.email,
-    fullName: user.full_name,
-    role: user.role,
-    createdAt: user.created_at,
-    lastLoginAt: user.last_login_at || null,
+    fullName: user.fullName,
+    role: user.role as UserRole,
+    createdAt: iso(user.createdAt),
+    lastLoginAt: isoOrNull(user.lastLoginAt),
   };
 }
 
-async function readUsers() {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db.from('users').select('*').order('created_at');
-    if (error) {
-      throw error;
-    }
-
-    return data || [];
-  }
-
-  return [...memory.users];
+async function findUserByEmail(email: string): Promise<UserRow | null> {
+  const normalized = email.trim().toLowerCase();
+  const [user] = await db().select().from(users).where(eq(users.email, normalized)).limit(1);
+  return user ?? null;
 }
 
-async function findUserByEmail(email: string) {
-  const normalized = String(email || '')
-    .trim()
-    .toLowerCase();
-  const users = await readUsers();
-  return users.find((user) => String(user.email).trim().toLowerCase() === normalized) || null;
+async function findUserById(id: string): Promise<UserRow | null> {
+  const [user] = await db().select().from(users).where(eq(users.id, id)).limit(1);
+  return user ?? null;
 }
 
-async function findUserById(id: string) {
-  const users = await readUsers();
-  return users.find((user) => String(user.id) === String(id)) || null;
+async function userCount(): Promise<number> {
+  const [row] = await db().select({ value: count() }).from(users);
+  return row?.value ?? 0;
 }
 
-async function saveUser(record: DbRow) {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db.from('users').insert(record).select().single();
-    if (error) {
-      console.error('[auth] users insert failed:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-      });
-      throw error;
-    }
-
-    return data;
-  }
-
-  memory.users.push(record);
-  return record;
+interface RegisterOptions {
+  /** Bypass the public-registration switch and set the role (admin seeding). */
+  role?: UserRole;
 }
 
-async function updateUser(id: string, patch: RequestBody) {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db.from('users').update(patch).eq('id', id).select().single();
+async function registerUser(input: unknown, options: RegisterOptions = {}): Promise<AuthResult> {
+  const { fullName, email, password } = parse(registerSchema, input);
 
-    if (error) {
-      throw error;
-    }
-
-    return data;
-  }
-
-  const index = memory.users.findIndex((user) => String(user.id) === String(id));
-  if (index >= 0) {
-    memory.users[index] = { ...memory.users[index], ...patch };
-    return memory.users[index];
-  }
-
-  return null;
-}
-
-async function registerUser(input: RequestBody, options: RequestBody = {}): Promise<AuthResult> {
-  const fullName = String(input.fullName || '').trim();
-  const email = String(input.email || '')
-    .trim()
-    .toLowerCase();
-  const password = String(input.password || '');
-  const role = options.allowRoleOverride
-    ? String(options.role || input.role || 'attorney').trim()
-    : 'attorney';
-  const passwordLength = password.length;
-
-  if (!fullName || !email || !password) {
-    throw httpError('fullName, email, and password are required', 400);
-  }
-
-  if (!options.allowRoleOverride && !isPublicRegistrationEnabled()) {
+  if (!options.role && !isPublicRegistrationEnabled()) {
     throw httpError('Public registration is disabled', 403);
   }
 
-  if (passwordLength < 12) {
-    throw httpError('Password must be at least 12 characters long', 400);
-  }
-
-  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) {
-    throw httpError('Password must include upper-case, lower-case, and a number', 400);
-  }
-
-  const existing = await findUserByEmail(email);
-  if (existing) {
+  if (await findUserByEmail(email)) {
     throw httpError('A user with that email already exists', 409);
   }
 
+  // Bootstrap: on a brand-new installation the first account is the admin.
+  const role: UserRole = options.role ?? ((await userCount()) === 0 ? 'admin' : 'attorney');
   const passwordData = createPasswordHash(password);
-  const user = {
-    id: crypto.randomUUID(),
-    email,
-    full_name: fullName,
-    role,
-    password_hash: passwordData.hash,
-    password_salt: passwordData.salt,
-    is_active: true,
-    created_at: new Date().toISOString(),
-    last_login_at: null,
-  };
+  const [saved] = await db()
+    .insert(users)
+    .values({
+      email,
+      fullName,
+      role,
+      passwordHash: passwordData.hash,
+      passwordSalt: passwordData.salt,
+    })
+    .onConflictDoNothing({ target: users.email })
+    .returning();
+  if (!saved) {
+    throw httpError('A user with that email already exists', 409);
+  }
 
-  const saved = await saveUser(user);
-  await auditService
-    .logEvent(
-      {
-        entityType: 'user',
-        entityId: saved.id,
-        action: 'user_registered',
-        summary: `User registered: ${saved.email}`,
-      },
-      { userId: saved.id, email: saved.email, fullName: saved.full_name, role: saved.role },
-    )
-    .catch(() => {});
+  await auditService.logEventSafely(
+    {
+      entityType: 'user',
+      entityId: saved.id,
+      action: 'user_registered',
+      summary: `User registered: ${saved.email}`,
+      details: { role: saved.role },
+    },
+    { userId: saved.id, email: saved.email, fullName: saved.fullName, role: saved.role },
+  );
   return {
     user: toPublicUser(saved),
     token: signToken(saved),
   };
 }
 
-async function loginUser(input: RequestBody): Promise<AuthResult> {
-  const email = String(input.email || '')
-    .trim()
-    .toLowerCase();
-  const password = String(input.password || '');
-
-  if (!email || !password) {
-    throw httpError('email and password are required', 400);
-  }
+async function loginUser(input: unknown): Promise<AuthResult> {
+  const { email, password } = parse(loginSchema, input);
 
   const user = await findUserByEmail(email);
-  if (!user || user.is_active === false) {
+  const credentials = user
+    ? { salt: user.passwordSalt, hash: user.passwordHash }
+    : DUMMY_CREDENTIALS;
+  const passwordOk = verifyPassword(password, credentials.salt, credentials.hash);
+  if (!user || !user.isActive || !passwordOk) {
     throw httpError('Invalid credentials', 401);
   }
 
-  if (!verifyPassword(password, user.password_salt, user.password_hash)) {
-    throw httpError('Invalid credentials', 401);
-  }
+  const [updated] = await db()
+    .update(users)
+    .set({ lastLoginAt: new Date() })
+    .where(eq(users.id, user.id))
+    .returning();
+  const current = updated ?? user;
 
-  const updated = await updateUser(user.id, {
-    last_login_at: new Date().toISOString(),
-  });
-  await auditService
-    .logEvent(
-      {
-        entityType: 'user',
-        entityId: user.id,
-        action: 'user_logged_in',
-        summary: `User logged in: ${user.email}`,
-      },
-      { userId: user.id, email: user.email, fullName: user.full_name, role: user.role },
-    )
-    .catch(() => {});
+  await auditService.logEventSafely(
+    {
+      entityType: 'user',
+      entityId: user.id,
+      action: 'user_logged_in',
+      summary: `User logged in: ${user.email}`,
+    },
+    { userId: user.id, email: user.email, fullName: user.fullName, role: user.role },
+  );
 
   return {
-    user: toPublicUser(updated || user),
-    token: signToken(updated || user),
+    user: toPublicUser(current),
+    token: signToken(current),
   };
 }
 
-async function getSessionUser(userId: string) {
+async function getSessionUser(userId: string): Promise<PublicUser | null> {
   const user = await findUserById(userId);
-  return toPublicUser(user);
+  return user && user.isActive ? toPublicUser(user) : null;
 }
 
 interface SessionClaims extends JwtPayload {
@@ -307,9 +233,9 @@ function requireRoles(...roles: UserRole[]) {
   };
 }
 
-// TODO(later-stage): enable SEED_ADMIN_ON_STARTUP=true with DEFAULT_ADMIN_* env vars
-// to auto-provision the initial admin account on server boot.
-async function seedDefaultUsers() {
+// Set SEED_ADMIN_ON_STARTUP=true with DEFAULT_ADMIN_EMAIL / DEFAULT_ADMIN_PASSWORD
+// to provision the initial admin account on server boot.
+async function seedDefaultUsers(): Promise<PublicUser | null> {
   if (!isSeedAdminOnStartupEnabled()) {
     return null;
   }
@@ -328,17 +254,9 @@ async function seedDefaultUsers() {
   }
 
   const created = await registerUser(
-    {
-      fullName: seedName,
-      email: seedEmail,
-      password: seedPassword,
-    },
-    {
-      allowRoleOverride: true,
-      role: 'admin',
-    },
+    { fullName: seedName, email: seedEmail, password: seedPassword },
+    { role: 'admin' },
   );
-
   return created.user;
 }
 

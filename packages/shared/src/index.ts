@@ -113,6 +113,14 @@ export interface MatterCaseSummary {
   createdAt: string;
 }
 
+export interface RetentionSweepResult {
+  retentionDays: number;
+  scannedCases: number;
+  eligibleCases: number;
+  removedSubmissions: number;
+  removedCases: number;
+}
+
 export interface PublicSubmission {
   id: string;
   clientLabel: string;
@@ -139,6 +147,18 @@ export interface ApiErrorBody {
 
 type Nullable<T> = T | null;
 
+export interface UpcomingTaskItem {
+  id: string;
+  type: 'task';
+  caseId: string;
+  title: string;
+  startsAt: string;
+  status: string;
+  assigneeName: Nullable<string>;
+}
+
+export type UpcomingItem = CalendarEvent | UpcomingTaskItem;
+
 export interface IntakeSummary {
   openIntakes: number;
   assessedIntakes: number;
@@ -147,6 +167,20 @@ export interface IntakeSummary {
   encryptedStorage: boolean;
   popiaCompliantAi: boolean;
   latestIntake: PublicSubmission | null;
+}
+
+export interface PracticeDashboard {
+  generatedAt: string;
+  summary: IntakeSummary;
+  caseCount: number;
+  criticalCases: number;
+  openTasks: number;
+  overdueInvoices: number;
+  unreadNotifications: number;
+  upcomingHearings: number;
+  auditEvents: number;
+  casesByStatus: Record<string, number>;
+  casesByPracticeArea: Record<string, number>;
 }
 
 export interface MatterCase {
@@ -168,33 +202,38 @@ export interface CaseIndexEntry extends MatterCase {
   timelineCount: number;
 }
 
-/** Case tasks and timeline entries are returned as stored (snake_case). */
-export interface CaseTaskRow {
+export interface CaseTask {
   id: string;
-  case_id: string;
+  caseId: string;
   title: string;
   description: string;
   status: string;
-  due_date: Nullable<string>;
-  assignee_name: Nullable<string>;
-  created_by: string;
-  created_at: string;
-  completed_at: Nullable<string>;
+  dueDate: Nullable<string>;
+  assigneeName: Nullable<string>;
+  createdBy: string;
+  createdAt: string;
+  completedAt: Nullable<string>;
 }
 
-export interface CaseTimelineRow {
+export interface CaseTimelineEntry {
   id: string;
-  case_id: string;
-  event_type: string;
+  caseId: string;
+  eventType: string;
   message: string;
   metadata: Record<string, unknown>;
-  actor_name: string;
-  created_at: string;
+  actorName: string;
+  createdAt: string;
 }
 
 export interface CaseDetail extends MatterCase {
-  tasks: CaseTaskRow[];
-  timeline: CaseTimelineRow[];
+  tasks: CaseTask[];
+  timeline: CaseTimelineEntry[];
+}
+
+export interface DocumentContent {
+  title: string;
+  body: string;
+  metadata: Record<string, unknown>;
 }
 
 export interface DocumentRecord {
@@ -211,13 +250,14 @@ export interface DocumentRecord {
   createdAt: string;
   updatedAt: Nullable<string>;
   signedAt: Nullable<string>;
+  content: DocumentContent | null;
 }
 
+/** Amounts in rand (the API stores cents and converts at the boundary). */
 export interface InvoiceLineItem {
-  description?: string;
-  quantity?: number;
-  rate?: number;
-  amount?: number;
+  description: string;
+  quantity: number;
+  rate: number;
 }
 
 export interface Invoice {
@@ -292,18 +332,23 @@ export interface NotificationRecord {
 
 export interface AuditEventRecord {
   id: string;
-  entity_type: string;
-  entity_id: Nullable<string>;
+  seq: number;
+  entityType: string;
+  entityId: Nullable<string>;
   action: string;
   summary: string;
   details: Record<string, unknown>;
-  actor_id: Nullable<string>;
-  actor_name: string;
-  actor_role: string;
-  created_at: string;
-  previous_hash: string;
-  entry_hash: string;
+  actorId: Nullable<string>;
+  actorName: string;
+  actorRole: string;
+  createdAt: string;
+  previousHash: string;
+  entryHash: string;
 }
+
+export type AuditChainResult =
+  | { valid: true; count: number }
+  | { valid: false; brokenAt: string; action: string; count: number };
 
 export interface ReportSnapshot {
   id: string;

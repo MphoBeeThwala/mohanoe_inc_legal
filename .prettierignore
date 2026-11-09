@@ -5,3 +5,4 @@ package-lock.json
 *.sql
 *.md
 apps/web/public
+apps/api/drizzle

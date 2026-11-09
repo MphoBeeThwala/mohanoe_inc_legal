@@ -1,0 +1,274 @@
+// Request validation. Every endpoint that accepts input parses it with one of
+// these schemas (see parse() below); services receive the typed result.
+//
+// The web app posts HTML form values, so numbers may arrive as strings and
+// optional fields as ''. `optionalText` and `money` absorb that.
+
+import { z } from 'zod';
+import { httpError } from '../lib/http';
+
+const MAX_TEXT = 20_000;
+
+const requiredText = (max = 500) => z.string().trim().min(1).max(max);
+
+/** Optional text: '' and whitespace become undefined. */
+const optionalText = (max = 2_000) =>
+  z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().trim().max(max).optional(),
+  );
+
+/** Optional ISO date/time string ('' → undefined). */
+const optionalDateTime = z.preprocess(
+  (value) => (value === '' || value === null ? undefined : value),
+  z
+    .string()
+    .refine((value) => !Number.isNaN(Date.parse(value)), 'must be a valid date')
+    .optional(),
+);
+
+/** Rand amount: accepts 1500, "1500", "1 500.50"; at most two decimals. */
+const money = z.preprocess(
+  (value) => (typeof value === 'string' ? Number(value.replace(/[\s,]/g, '')) : value),
+  z
+    .number()
+    .finite()
+    .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6, {
+      message: 'must have at most two decimal places',
+    }),
+);
+
+export const email = z.string().trim().toLowerCase().pipe(z.email().max(254));
+
+// ---------------------------------------------------------------- auth
+
+export const registerSchema = z.object({
+  fullName: requiredText(200),
+  email,
+  password: z
+    .string()
+    .min(12, 'Password must be at least 12 characters long')
+    .max(200)
+    .refine(
+      (value) => /[A-Z]/.test(value) && /[a-z]/.test(value) && /\d/.test(value),
+      'Password must include upper-case, lower-case, and a number',
+    ),
+});
+
+export const loginSchema = z.object({
+  email,
+  password: z.string().min(1).max(200),
+});
+
+// ---------------------------------------------------------------- intake
+
+export const intakeSubmissionSchema = z.object({
+  fullName: requiredText(200),
+  email,
+  phone: requiredText(40),
+  practiceArea: requiredText(100),
+  jurisdiction: optionalText(200).transform((value) => value ?? 'South Africa'),
+  matterSummary: requiredText(MAX_TEXT),
+  requestedOutcome: optionalText(MAX_TEXT).transform((value) => value ?? ''),
+  documentsMentioned: optionalText(MAX_TEXT).transform((value) => value ?? ''),
+  urgencyHint: optionalText(40).transform((value) => value ?? 'unspecified'),
+  preferredLanguage: optionalText(40).transform((value) => value ?? 'English'),
+  consentToAi: z.literal(
+    true,
+    'Consent for storage and AI assessment is required before submission',
+  ),
+  consentToStorage: z.literal(
+    true,
+    'Consent for storage and AI assessment is required before submission',
+  ),
+});
+export type IntakeSubmission = z.infer<typeof intakeSubmissionSchema>;
+
+// ---------------------------------------------------------------- cases
+
+export const caseTaskSchema = z.object({
+  title: requiredText(300),
+  description: optionalText(MAX_TEXT).transform((value) => value ?? ''),
+  dueDate: z.preprocess(
+    (value) => (value === '' || value === null ? undefined : value),
+    z.iso.date().optional(),
+  ),
+  assigneeName: optionalText(200),
+});
+export type CaseTaskInput = z.infer<typeof caseTaskSchema>;
+
+export const caseStatusSchema = z.object({
+  status: requiredText(60),
+  nextAction: optionalText(1_000),
+});
+export type CaseStatusInput = z.infer<typeof caseStatusSchema>;
+
+export const timelineNoteSchema = z.object({
+  eventType: optionalText(60).transform((value) => value ?? 'note'),
+  message: requiredText(MAX_TEXT),
+  metadata: z.record(z.string(), z.unknown()).optional().default({}),
+});
+export type TimelineNoteInput = z.infer<typeof timelineNoteSchema>;
+
+// ---------------------------------------------------------------- documents
+
+export const documentSchema = z
+  .object({
+    title: requiredText(300),
+    body: requiredText(200_000),
+    documentType: optionalText(60).transform((value) => value ?? 'correspondence'),
+    tags: z.array(z.string().trim().min(1).max(60)).max(30).optional().default([]),
+    status: optionalText(40).transform((value) => value ?? 'draft'),
+    metadata: z.record(z.string(), z.unknown()).optional().default({}),
+  })
+  .and(z.object({ caseId: optionalText(100), caseRef: optionalText(100) }))
+  .transform(({ caseId, caseRef, ...rest }) => ({ ...rest, caseRef: caseId || caseRef || '' }));
+export type DocumentInput = z.infer<typeof documentSchema>;
+
+// ---------------------------------------------------------------- billing
+
+const lineItemSchema = z
+  .object({
+    description: optionalText(500),
+    quantity: z.preprocess(
+      (value) => (value === '' || value === undefined ? 1 : Number(value)),
+      z.number().positive().max(100_000),
+    ),
+    rate: money.optional(),
+    amount: money.optional(),
+  })
+  .transform((item) => ({
+    description: item.description ?? '',
+    quantity: item.quantity,
+    rate: item.rate ?? item.amount ?? 0,
+  }))
+  .refine((item) => item.rate > 0, { message: 'each line item needs a positive rate or amount' });
+
+export const invoiceSchema = z
+  .object({
+    subject: requiredText(300),
+    invoiceNumber: optionalText(60),
+    currency: optionalText(3).transform((value) => (value ?? 'ZAR').toUpperCase()),
+    status: optionalText(40).transform((value) => value ?? 'issued'),
+    lineItems: z.array(lineItemSchema).min(1).max(200),
+    vatIncluded: z.boolean().optional(),
+    issuedAt: optionalDateTime,
+    dueAt: optionalDateTime,
+    paidAt: optionalDateTime,
+  })
+  .and(z.object({ caseId: optionalText(100), caseRef: optionalText(100) }))
+  .transform(({ caseId, caseRef, ...rest }) => ({ ...rest, caseRef: caseId || caseRef || '' }));
+export type InvoiceInput = z.infer<typeof invoiceSchema>;
+
+export const ledgerEntrySchema = z
+  .object({
+    entryType: optionalText(60).transform((value) => value ?? 'payment'),
+    account: z.enum(['trust', 'operating']).default('trust'),
+    amount: money.refine((value) => value !== 0, 'amount must not be zero'),
+    reference: optionalText(200).transform((value) => value ?? ''),
+    notes: optionalText(2_000).transform((value) => value ?? ''),
+  })
+  .and(z.object({ caseId: optionalText(100), caseRef: optionalText(100) }))
+  .transform(({ caseId, caseRef, ...rest }) => ({ ...rest, caseRef: caseId || caseRef || '' }));
+export type LedgerEntryInput = z.infer<typeof ledgerEntrySchema>;
+
+// ---------------------------------------------------------------- calendar
+
+export const calendarEventSchema = z.object({
+  caseId: requiredText(100),
+  title: requiredText(300),
+  eventType: optionalText(60).transform((value) => value ?? 'deadline'),
+  startsAt: z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'must be a valid date'),
+  endsAt: optionalDateTime,
+  location: optionalText(300).transform((value) => value ?? ''),
+  notes: optionalText(2_000).transform((value) => value ?? ''),
+});
+export type CalendarEventInput = z.infer<typeof calendarEventSchema>;
+
+// ---------------------------------------------------------------- notifications
+
+export const notificationSchema = z.object({
+  title: requiredText(300),
+  body: requiredText(5_000),
+  category: optionalText(60).transform((value) => value ?? 'general'),
+  priority: optionalText(20).transform((value) => value ?? 'medium'),
+  recipientRole: optionalText(40).transform((value) => value ?? 'attorney'),
+  recipientUserId: z.preprocess((value) => (value === '' ? undefined : value), z.uuid().optional()),
+  relatedEntityType: optionalText(60),
+  relatedEntityId: optionalText(100),
+});
+export type NotificationInput = z.infer<typeof notificationSchema>;
+
+export const notificationFilterSchema = z.object({
+  recipientRole: optionalText(40),
+  isRead: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === 'true')),
+});
+
+// ---------------------------------------------------------------- reports
+
+export const reportSchema = z.object({
+  title: optionalText(300).transform((value) => value ?? 'Operational snapshot'),
+  reportType: optionalText(60).transform((value) => value ?? 'dashboard'),
+});
+
+// ---------------------------------------------------------------- compliance
+
+export const complianceRequestSchema = z.object({
+  requestType: z
+    .enum(['access', 'correction', 'deletion', 'export', 'objection'])
+    .default('access'),
+  subjectName: requiredText(200),
+  subjectEmail: email,
+  caseRef: optionalText(100),
+  description: requiredText(5_000),
+  dueAt: optionalDateTime,
+});
+export type ComplianceRequestInput = z.infer<typeof complianceRequestSchema>;
+
+export const complianceFulfilSchema = z.object({
+  status: optionalText(40).transform((value) => value ?? 'fulfilled'),
+  responseSummary: optionalText(5_000),
+  responsePayload: z.unknown().optional(),
+});
+export type ComplianceFulfilInput = z.infer<typeof complianceFulfilSchema>;
+
+export const complianceFilterSchema = z.object({
+  status: optionalText(40),
+  requestType: optionalText(40),
+});
+
+export const dataExportQuerySchema = z
+  .object({
+    subjectEmail: z.preprocess((value) => (value === '' ? undefined : value), email.optional()),
+    caseRef: optionalText(100),
+  })
+  .refine((value) => value.subjectEmail || value.caseRef, {
+    message: 'subjectEmail or caseRef is required',
+  });
+export type DataExportQuery = z.infer<typeof dataExportQuerySchema>;
+
+export const auditFilterSchema = z.object({
+  entityType: optionalText(60),
+  entityId: optionalText(100),
+});
+
+// ---------------------------------------------------------------- helper
+
+/**
+ * Parses untrusted input or throws a 400 HttpError listing the problems,
+ * e.g. "Invalid request: email: Invalid email address; password: Required".
+ */
+export function parse<S extends z.ZodType>(schema: S, input: unknown): z.output<S> {
+  const result = schema.safeParse(input ?? {});
+  if (result.success) {
+    return result.data;
+  }
+  const problems = result.error.issues.map((issue) => {
+    const where = issue.path.length ? `${issue.path.join('.')}: ` : '';
+    return `${where}${issue.message}`;
+  });
+  throw httpError(`Invalid request: ${problems.join('; ')}`, 400);
+}

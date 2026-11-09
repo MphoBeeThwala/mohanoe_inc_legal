@@ -1,304 +1,204 @@
-import type { DbRow, RequestBody, Actor } from '../types/db';
+// Invoices and the trust/operating ledger.
+//
+// Amounts are stored as integer cents; the API accepts and returns rands.
+// (Time recording, gap-free per-firm invoice numbering and trust accounting
+// arrive in roadmap epic 7.)
+
+import { desc, sql } from 'drizzle-orm';
+import type { BillingSummary, Invoice, LedgerEntry } from '@ahava88/shared';
+import { db } from '../db/client';
+import {
+  invoices,
+  ledgerEntries,
+  type InvoiceRow,
+  type LedgerRow,
+  type StoredLineItem,
+} from '../db/schema';
 import { httpError } from '../lib/http';
-import { randomUUID } from 'crypto';
-import { getSupabaseClient } from '../config/supabase';
+import { actorName, type Actor } from '../lib/actor';
+import { fromCents, toCents, vatRate } from '../lib/money';
+import { iso, isoOrNull, toDateOrNull } from '../lib/time';
+import { invoiceSchema, ledgerEntrySchema, parse } from '../validation/schemas';
 import * as intakeService from './intake.service';
 import * as auditService from './audit.service';
 
-const memory: Record<string, DbRow[]> = {
-  invoices: [],
-  ledger: [],
-};
-
-function toIso(value = new Date()) {
-  return new Date(value).toISOString();
-}
-
-function toNumber(value: unknown): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-async function resolveCase(caseRef: string) {
-  if (!caseRef) {
-    return null;
-  }
-
-  const cases = await intakeService.listCases();
-  return (
-    cases.find(
-      (item) => item.id === caseRef || item.caseNumber === caseRef || item.submissionId === caseRef,
-    ) || null
-  );
-}
-
-async function listRows(table: string, memoryKey: string) {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db.from(table).select('*').order('created_at', {
-      ascending: false,
-    });
-    if (error) {
-      throw error;
-    }
-
-    return data || [];
-  }
-
-  return [...memory[memoryKey]].sort((a, b) =>
-    String(b.created_at).localeCompare(String(a.created_at)),
-  );
-}
-
-async function saveRow(table: string, memoryKey: string, record: DbRow) {
-  const db = getSupabaseClient();
-  if (db) {
-    const { data, error } = await db.from(table).insert(record).select().single();
-    if (error) {
-      throw error;
-    }
-
-    return data;
-  }
-
-  memory[memoryKey].unshift(record);
-  return record;
-}
-
-function sumLineItems(items: DbRow[] = []) {
-  return items.reduce(
-    (total, item) => total + toNumber(item.quantity || 1) * toNumber(item.rate || item.amount || 0),
-    0,
-  );
-}
-
-function formatInvoice(row: DbRow, caseRecord?: DbRow | null) {
+function formatInvoice(row: InvoiceRow): Invoice {
   return {
     id: row.id,
-    caseId: row.case_id,
-    caseNumber: caseRecord?.caseNumber || row.case_number || null,
-    clientLabel: row.client_label,
-    number: row.invoice_number,
+    caseId: row.caseId,
+    caseNumber: row.caseNumber,
+    clientLabel: row.clientLabel,
+    number: row.invoiceNumber,
     subject: row.subject,
     currency: row.currency,
     status: row.status,
-    lineItems: row.line_items || [],
-    subtotal: row.subtotal,
-    vat: row.vat,
-    total: row.total,
-    issuedAt: row.issued_at,
-    dueAt: row.due_at,
-    paidAt: row.paid_at,
-    createdAt: row.created_at,
+    lineItems: row.lineItems.map((item) => ({
+      description: item.description,
+      quantity: item.quantity,
+      rate: fromCents(item.rateCents),
+    })),
+    subtotal: fromCents(row.subtotalCents),
+    vat: fromCents(row.vatCents),
+    total: fromCents(row.totalCents),
+    issuedAt: isoOrNull(row.issuedAt),
+    dueAt: isoOrNull(row.dueAt),
+    paidAt: isoOrNull(row.paidAt),
+    createdAt: iso(row.createdAt),
   };
 }
 
-function formatLedgerEntry(row: DbRow, caseRecord?: DbRow | null) {
+function formatLedgerEntry(row: LedgerRow): LedgerEntry {
   return {
     id: row.id,
-    caseId: row.case_id,
-    caseNumber: caseRecord?.caseNumber || row.case_number || null,
-    entryType: row.entry_type,
+    caseId: row.caseId,
+    caseNumber: row.caseNumber,
+    entryType: row.entryType,
     account: row.account,
-    amount: row.amount,
+    amount: fromCents(row.amountCents),
     reference: row.reference,
     notes: row.notes,
-    createdBy: row.created_by,
-    createdAt: row.created_at,
+    createdBy: row.createdBy,
+    createdAt: iso(row.createdAt),
   };
 }
 
-async function listInvoices() {
-  const rows = await listRows('billing_invoices', 'invoices');
-  const cases = await intakeService.listCases();
-  return rows.map((row) =>
-    formatInvoice(
-      row,
-      cases.find((item) => item.id === row.case_id || item.caseNumber === row.case_number),
-    ),
-  );
+export async function listInvoices(limit = 200): Promise<Invoice[]> {
+  const rows = await db().select().from(invoices).orderBy(desc(invoices.createdAt)).limit(limit);
+  return rows.map(formatInvoice);
 }
 
-async function listLedgerEntries() {
-  const rows = await listRows('billing_ledger', 'ledger');
-  const cases = await intakeService.listCases();
-  return rows.map((row) =>
-    formatLedgerEntry(
-      row,
-      cases.find((item) => item.id === row.case_id || item.caseNumber === row.case_number),
-    ),
-  );
+export async function listLedgerEntries(limit = 200): Promise<LedgerEntry[]> {
+  const rows = await db()
+    .select()
+    .from(ledgerEntries)
+    .orderBy(desc(ledgerEntries.createdAt))
+    .limit(limit);
+  return rows.map(formatLedgerEntry);
 }
 
-async function createInvoice(input: RequestBody = {}, actor: Actor = {}) {
-  const caseRef = String(input.caseId || input.caseRef || '').trim();
-  const caseRecord = await resolveCase(caseRef);
-  const subject = String(input.subject || '').trim();
-  const lineItems = Array.isArray(input.lineItems) ? input.lineItems : [];
-  const currency = String(input.currency || 'ZAR').trim();
-
-  if (!caseRecord || !subject || !lineItems.length) {
+export async function createInvoice(input: unknown, actor: Actor = {}): Promise<Invoice> {
+  const invoice = parse(invoiceSchema, input);
+  const caseRecord = await intakeService.findCaseByRef(invoice.caseRef);
+  if (!caseRecord) {
     throw httpError('caseId, subject, and lineItems are required', 400);
   }
 
-  const subtotal = sumLineItems(lineItems);
-  const vat = input.vatIncluded === false ? 0 : subtotal * 0.15;
-  const total = subtotal + vat;
-  const now = toIso();
-  const record = {
-    id: randomUUID(),
-    case_id: caseRecord.id,
-    case_number: caseRecord.caseNumber,
-    client_label: caseRecord.clientLabel,
-    invoice_number: String(input.invoiceNumber || `INV-${Date.now()}`),
-    subject,
-    currency,
-    status: String(input.status || 'issued').trim(),
-    line_items: lineItems,
-    subtotal,
-    vat,
-    total,
-    issued_at: input.issuedAt || now,
-    due_at: input.dueAt || null,
-    paid_at: input.paidAt || null,
-    created_by: actor?.fullName || actor?.email || 'system',
-    created_at: now,
-    updated_at: now,
-  };
+  const lineItems: StoredLineItem[] = invoice.lineItems.map((item) => ({
+    description: item.description || invoice.subject,
+    quantity: item.quantity,
+    rateCents: toCents(item.rate),
+  }));
+  const subtotalCents = lineItems.reduce(
+    (total, item) => total + Math.round(item.quantity * item.rateCents),
+    0,
+  );
+  const vatCents = invoice.vatIncluded === false ? 0 : Math.round(subtotalCents * vatRate());
 
-  const saved = await saveRow('billing_invoices', 'invoices', record);
+  const [saved] = await db()
+    .insert(invoices)
+    .values({
+      caseId: caseRecord.id,
+      caseNumber: caseRecord.caseNumber,
+      clientLabel: caseRecord.clientLabel,
+      invoiceNumber: invoice.invoiceNumber || `INV-${Date.now()}`,
+      subject: invoice.subject,
+      currency: invoice.currency,
+      status: invoice.status,
+      lineItems,
+      subtotalCents,
+      vatCents,
+      totalCents: subtotalCents + vatCents,
+      issuedAt: toDateOrNull(invoice.issuedAt) ?? new Date(),
+      dueAt: toDateOrNull(invoice.dueAt),
+      paidAt: toDateOrNull(invoice.paidAt),
+      createdBy: actorName(actor),
+    })
+    .onConflictDoNothing({ target: invoices.invoiceNumber })
+    .returning();
+  if (!saved) {
+    throw httpError(`Invoice number ${invoice.invoiceNumber} is already in use`, 409);
+  }
+
   await auditService.logEvent(
     {
       entityType: 'invoice',
       entityId: saved.id,
       action: 'invoice_created',
-      summary: `Invoice created: ${subject}`,
-      details: {
-        caseId: caseRecord.id,
-        total,
-        currency,
-      },
+      summary: `Invoice created: ${saved.subject}`,
+      details: { caseId: caseRecord.id, totalCents: saved.totalCents, currency: saved.currency },
     },
     actor,
   );
 
-  return formatInvoice(saved, caseRecord);
+  return formatInvoice(saved);
 }
 
-async function recordLedgerEntry(input: RequestBody = {}, actor: Actor = {}) {
-  const caseRef = String(input.caseId || input.caseRef || '').trim();
-  const caseRecord = await resolveCase(caseRef);
-  const entryType = String(input.entryType || 'payment').trim();
-  const account = String(input.account || 'trust').trim();
-  const amount = toNumber(input.amount);
-
-  if (!caseRecord || !entryType || !account || !amount) {
+export async function recordLedgerEntry(input: unknown, actor: Actor = {}): Promise<LedgerEntry> {
+  const entry = parse(ledgerEntrySchema, input);
+  const caseRecord = await intakeService.findCaseByRef(entry.caseRef);
+  if (!caseRecord) {
     throw httpError('caseId, entryType, account, and amount are required', 400);
   }
 
-  const now = toIso();
-  const record = {
-    id: randomUUID(),
-    case_id: caseRecord.id,
-    case_number: caseRecord.caseNumber,
-    entry_type: entryType,
-    account,
-    amount,
-    reference: String(input.reference || '').trim(),
-    notes: String(input.notes || '').trim(),
-    created_by: actor?.fullName || actor?.email || 'system',
-    created_at: now,
-  };
+  const [saved] = await db()
+    .insert(ledgerEntries)
+    .values({
+      caseId: caseRecord.id,
+      caseNumber: caseRecord.caseNumber,
+      entryType: entry.entryType,
+      account: entry.account,
+      amountCents: toCents(entry.amount),
+      reference: entry.reference,
+      notes: entry.notes,
+      createdBy: actorName(actor),
+    })
+    .returning();
+  if (!saved) {
+    throw new Error('Ledger entry was not stored');
+  }
 
-  const saved = await saveRow('billing_ledger', 'ledger', record);
   await auditService.logEvent(
     {
       entityType: 'ledger',
       entityId: saved.id,
       action: 'ledger_entry_created',
-      summary: `Ledger entry recorded: ${entryType}`,
-      details: {
-        caseId: caseRecord.id,
-        amount,
-        account,
-      },
+      summary: `Ledger entry recorded: ${saved.entryType}`,
+      details: { caseId: caseRecord.id, amountCents: saved.amountCents, account: saved.account },
     },
     actor,
   );
 
-  return formatLedgerEntry(saved, caseRecord);
+  return formatLedgerEntry(saved);
 }
 
-async function getBillingSummary() {
-  const invoices = await listInvoices();
-  const ledger = await listLedgerEntries();
+export async function countUnpaidInvoices(): Promise<number> {
+  const [row] = await db()
+    .select({ value: sql<number>`count(*) filter (where ${invoices.status} <> 'paid')::int` })
+    .from(invoices);
+  return row?.value ?? 0;
+}
 
-  const outstanding = invoices
-    .filter((invoice) => invoice.status !== 'paid')
-    .reduce((total, invoice) => total + toNumber(invoice.total), 0);
-
-  const trustBalance = ledger.reduce((total, entry) => {
-    if (entry.account === 'trust') {
-      return total + toNumber(entry.amount);
-    }
-
-    return total;
-  }, 0);
-
-  const operatingBalance = ledger.reduce((total, entry) => {
-    if (entry.account === 'operating') {
-      return total + toNumber(entry.amount);
-    }
-
-    return total;
-  }, 0);
+export async function getBillingSummary(): Promise<BillingSummary> {
+  // Totals are computed in the database, over every row, in cents.
+  const [invoiceTotals] = await db()
+    .select({
+      count: sql<number>`count(*)::int`,
+      outstanding: sql<string>`coalesce(sum(${invoices.totalCents}) filter (where ${invoices.status} <> 'paid'), 0)`,
+    })
+    .from(invoices);
+  const [ledgerTotals] = await db()
+    .select({
+      trust: sql<string>`coalesce(sum(${ledgerEntries.amountCents}) filter (where ${ledgerEntries.account} = 'trust'), 0)`,
+      operating: sql<string>`coalesce(sum(${ledgerEntries.amountCents}) filter (where ${ledgerEntries.account} = 'operating'), 0)`,
+    })
+    .from(ledgerEntries);
 
   return {
-    invoices: invoices.length,
-    outstanding,
-    trustBalance,
-    operatingBalance,
-    recentInvoices: invoices.slice(0, 5),
-    recentLedger: ledger.slice(0, 8),
+    invoices: invoiceTotals?.count ?? 0,
+    outstanding: fromCents(Number(invoiceTotals?.outstanding ?? 0)),
+    trustBalance: fromCents(Number(ledgerTotals?.trust ?? 0)),
+    operatingBalance: fromCents(Number(ledgerTotals?.operating ?? 0)),
+    recentInvoices: await listInvoices(5),
+    recentLedger: await listLedgerEntries(8),
   };
 }
-
-async function deleteByCaseIds(caseIds: DbRow[] = []) {
-  if (!caseIds.length) {
-    return 0;
-  }
-
-  const normalized = new Set(caseIds.map((value) => String(value)));
-  const db = getSupabaseClient();
-  if (db) {
-    const { error } = await db
-      .from('billing_invoices')
-      .delete()
-      .in('case_id', [...normalized]);
-    if (error) {
-      throw error;
-    }
-
-    const { error: ledgerError } = await db
-      .from('billing_ledger')
-      .delete()
-      .in('case_id', [...normalized]);
-    if (ledgerError) {
-      throw ledgerError;
-    }
-  } else {
-    memory.invoices = memory.invoices.filter((item) => !normalized.has(String(item.case_id)));
-    memory.ledger = memory.ledger.filter((item) => !normalized.has(String(item.case_id)));
-  }
-
-  return normalized.size;
-}
-
-export {
-  createInvoice,
-  deleteByCaseIds,
-  getBillingSummary,
-  listInvoices,
-  listLedgerEntries,
-  recordLedgerEntry,
-};

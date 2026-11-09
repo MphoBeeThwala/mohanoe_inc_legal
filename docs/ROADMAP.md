@@ -121,10 +121,10 @@ Environment setup:
 - [ ] `firms` table; `firm_id NOT NULL` on all tables; backfill to the first firm
 - [ ] RLS on every table keyed on `current_setting('app.firm_id')`; app role cannot bypass
 - [ ] Tenant resolver (hostname → firm); every query in a transaction that sets the firm
-- [ ] One versioned migration history (Drizzle) replacing the hand-run SQL files
-- [ ] Remove all in-memory fallbacks; zod config validation
-- [ ] Pagination and indexes; no whole-table reads
-- [ ] Per-firm sequences for case, client and invoice numbers (gap-free invoices)
+- [x] One versioned migration history (Drizzle) replacing the hand-run SQL files
+- [x] Remove all in-memory fallbacks; zod request validation (config validated by `config/env.ts`)
+- [x] Indexes and bounded queries; no whole-table reads (cursor pagination for large lists still to do)
+- [ ] Per-firm sequences for case, client and invoice numbers (gap-free invoices) — atomic counters done for case numbers and client labels; per-firm scope with epic 4, invoices with epic 7
 - [ ] Isolation tests across every endpoint
 
 ### 5.3 Identity and access
@@ -204,7 +204,7 @@ Trust accounting and AI research ship behind feature flags to pilots first.
 
 1. **Rebrand and clean-up** — done on `chore/rebrand-ahava88-cleanup`.
 2. **TypeScript monorepo** — done on `chore/typescript-monorepo-vite`.
-3. **Data layer** — Drizzle on Postgres; one migration history from `database.sql` + migrations 001–003; remove in-memory fallbacks; zod env and request validation; replace `DbRow`/`RequestBody`. Also fix, found during epic 2: audit chain `previous_hash` is read from the in-memory list even in Supabase mode; retention eligibility uses `createdAt` rather than the closing date; case tasks/timeline are returned as raw snake_case rows.
+3. **Data layer** — done on `feat/data-layer-drizzle`: Drizzle + PostgreSQL, one migration history, PGlite for dev/tests, zod validation, linked audit chain, race-free numbering, money in cents, email blind index.
 4. **Multi-tenancy** — `firms` table, `firm_id`, RLS, tenant resolver, isolation tests; branding from `firms`.
 5. **Identity** — Entra External ID (+ Entra ID), MFA, cookies, invites, per-firm roles, matter access, super-admin.
 6. **Encryption** — Key Vault envelope encryption, re-encryption migration, per-firm audit chain.

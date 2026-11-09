@@ -4,7 +4,6 @@ import { apiErrorMessage } from '../api';
 import type {
   AuditEventRecord,
   BillingSummary,
-  CalendarEvent,
   ComplianceExport,
   ComplianceRequest,
   ComplianceSummary,
@@ -15,6 +14,7 @@ import type {
   NotificationRecord,
   PublicUser,
   ReportSnapshot,
+  UpcomingItem,
 } from '@ahava88/shared';
 import type { Notice } from './DismissibleNotice';
 import DismissibleNotice from './DismissibleNotice';
@@ -105,7 +105,7 @@ function OperationsHub({
   const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
   const [billingInvoices, setBillingInvoices] = useState<Invoice[]>([]);
   const [billingLedger, setBillingLedger] = useState<LedgerEntry[]>([]);
-  const [calendar, setCalendar] = useState<CalendarEvent[]>([]);
+  const [calendar, setCalendar] = useState<UpcomingItem[]>([]);
   const [audit, setAudit] = useState<AuditEventRecord[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [reports, setReports] = useState<ReportSnapshot[]>([]);
@@ -168,7 +168,7 @@ function OperationsHub({
     if (byPath['/billing/ledger']?.ok)
       setBillingLedger(byPath['/billing/ledger'].data as LedgerEntry[]);
     if (byPath['/calendar/upcoming']?.ok)
-      setCalendar(byPath['/calendar/upcoming'].data as CalendarEvent[]);
+      setCalendar(byPath['/calendar/upcoming'].data as UpcomingItem[]);
     if (byPath['/audit']?.ok) setAudit(byPath['/audit'].data as AuditEventRecord[]);
     if (byPath['/notifications']?.ok)
       setNotifications(byPath['/notifications'].data as NotificationRecord[]);
@@ -802,7 +802,7 @@ function OperationsHub({
                   <div>
                     <strong>{item.title}</strong>
                     <div className="muted">
-                      {item.startsAt} - {item.eventType}
+                      {item.startsAt} - {'type' in item ? 'task due' : item.eventType}
                     </div>
                   </div>
                 </div>
@@ -1119,7 +1119,7 @@ function OperationsHub({
                     <strong>{item.action}</strong>
                     <div className="muted">{item.summary}</div>
                   </div>
-                  <div className="muted">{item.created_at}</div>
+                  <div className="muted">{item.createdAt}</div>
                 </div>
               ))
             ) : (
