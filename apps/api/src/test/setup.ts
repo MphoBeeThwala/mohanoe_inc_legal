@@ -9,11 +9,16 @@
 // run with --no-file-parallelism (npm run test:postgres does both).
 import { afterAll, beforeAll } from 'vitest';
 import { closeDb, initDb } from '../db/client';
+import { clearFirmCache, ensureDefaultFirm } from '../services/firm.service';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 if (testDatabaseUrl) {
   process.env.DATABASE_URL = testDatabaseUrl;
   process.env.DATABASE_SSL = process.env.DATABASE_SSL ?? 'false';
+  // A real database needs real secrets (see config/env.ts devSecretsAllowed).
+  process.env.JWT_SECRET ??= 'test-jwt-secret-that-is-long-enough-000000';
+  process.env.AUDIT_CHAIN_SECRET ??= 'test-audit-secret-that-is-long-enough-0000';
+  process.env.INTAKE_ENCRYPTION_KEY ??= 'a'.repeat(64);
 } else {
   delete process.env.DATABASE_URL;
   process.env.PGLITE_DATA_DIR = 'memory://';
@@ -24,6 +29,8 @@ process.env.FIRM_NAME = 'Nkosi & Partners Inc.';
 process.env.FIRM_SHORT_NAME = 'Nkosi';
 process.env.FIRM_CASE_PREFIX = 'NKP';
 delete process.env.ANTHROPIC_API_KEY;
+delete process.env.PLATFORM_BASE_DOMAIN;
+delete process.env.DEFAULT_FIRM_SLUG;
 
 async function resetPostgres(url: string): Promise<void> {
   const { Client } = await import('pg');
@@ -43,6 +50,8 @@ beforeAll(async () => {
     await resetPostgres(testDatabaseUrl);
   }
   await initDb();
+  clearFirmCache();
+  await ensureDefaultFirm();
 });
 
 afterAll(async () => {

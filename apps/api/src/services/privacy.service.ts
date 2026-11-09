@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'crypto';
 
-import { isProduction } from '../config/env';
+import { devSecretsAllowed } from '../config/env';
 
 const FALLBACK_KEY = createHash('sha256').update('local-development-intake-key').digest();
 
@@ -8,8 +8,10 @@ function getEncryptionKey(): Buffer {
   const keySource = process.env.INTAKE_ENCRYPTION_KEY || process.env.PII_ENCRYPTION_KEY;
 
   if (!keySource) {
-    if (isProduction()) {
-      throw new Error('INTAKE_ENCRYPTION_KEY must be set in production');
+    if (!devSecretsAllowed()) {
+      throw new Error(
+        'INTAKE_ENCRYPTION_KEY must be set in production and whenever DATABASE_URL is set',
+      );
     }
     return FALLBACK_KEY;
   }

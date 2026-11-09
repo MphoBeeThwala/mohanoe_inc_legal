@@ -35,6 +35,16 @@ export function errorMessage(error: unknown): string {
   return 'Internal server error';
 }
 
+/**
+ * Full description for logs: includes the underlying cause, e.g. the
+ * PostgreSQL error behind Drizzle's "Failed query: …" wrapper.
+ */
+export function describeError(error: unknown): string {
+  const message = errorMessage(error);
+  const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : undefined;
+  return cause ? `${errorMessage(cause)} (${message.split('\n')[0]})` : message;
+}
+
 /** Standard JSON error response used by every controller. */
 export function sendError(res: Response, error: unknown): void {
   res.status(errorStatus(error)).json({ message: errorMessage(error) });

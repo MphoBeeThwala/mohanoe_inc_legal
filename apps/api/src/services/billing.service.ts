@@ -113,7 +113,7 @@ export async function createInvoice(input: unknown, actor: Actor = {}): Promise<
       paidAt: toDateOrNull(invoice.paidAt),
       createdBy: actorName(actor),
     })
-    .onConflictDoNothing({ target: invoices.invoiceNumber })
+    .onConflictDoNothing({ target: [invoices.firmId, invoices.invoiceNumber] })
     .returning();
   if (!saved) {
     throw httpError(`Invoice number ${invoice.invoiceNumber} is already in use`, 409);

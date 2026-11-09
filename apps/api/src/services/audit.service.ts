@@ -1,4 +1,4 @@
-// Tamper-evident audit trail.
+// Tamper-evident audit trail, one chain per firm.
 //
 // Every event stores an HMAC (AUDIT_CHAIN_SECRET) over its own contents and
 // the previous event's hash. Appends are serialised with a transaction-scoped
@@ -11,6 +11,7 @@ import { createHmac } from 'crypto';
 import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
 import type { AuditChainResult, AuditEventRecord } from '@ahava88/shared';
 import { db } from '../db/client';
+import { currentFirm } from '../db/tenant-context';
 import { auditEvents, type AuditEventRow } from '../db/schema';
 import { requireSecret } from '../config/env';
 import { actorName, type Actor } from '../lib/actor';
@@ -110,7 +111,10 @@ export async function logEvent(
   const userId = actor.userId && UUID.test(actor.userId) ? actor.userId : null;
 
   return db().transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(${AUDIT_CHAIN_LOCK})`);
+    // One chain per firm: serialise appends within the firm only.
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(${AUDIT_CHAIN_LOCK}, hashtext(${currentFirm().id}))`,
+    );
     const [last] = await tx
       .select({ entryHash: auditEvents.entryHash })
       .from(auditEvents)

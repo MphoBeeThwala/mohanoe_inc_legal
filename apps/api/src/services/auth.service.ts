@@ -6,6 +6,7 @@ import type { AuthConfig, AuthResult, PublicUser, UserRole } from '@ahava88/shar
 import { HttpError, errorMessage, httpError } from '../lib/http';
 import { requireSecret } from '../config/env';
 import { db } from '../db/client';
+import { currentFirm } from '../db/tenant-context';
 import { users, type UserRow } from '../db/schema';
 import { iso, isoOrNull } from '../lib/time';
 import { loginSchema, parse, registerSchema } from '../validation/schemas';
@@ -55,6 +56,7 @@ function signToken(user: UserRow): string {
   return jwt.sign(
     {
       sub: user.id,
+      firmId: user.firmId,
       email: user.email,
       role: user.role,
       fullName: user.fullName,
@@ -111,7 +113,7 @@ async function registerUser(input: unknown, options: RegisterOptions = {}): Prom
     throw httpError('A user with that email already exists', 409);
   }
 
-  // Bootstrap: on a brand-new installation the first account is the admin.
+  // Bootstrap: a firm's first account is its admin.
   const role: UserRole = options.role ?? ((await userCount()) === 0 ? 'admin' : 'attorney');
   const passwordData = createPasswordHash(password);
   const [saved] = await db()
@@ -123,7 +125,7 @@ async function registerUser(input: unknown, options: RegisterOptions = {}): Prom
       passwordHash: passwordData.hash,
       passwordSalt: passwordData.salt,
     })
-    .onConflictDoNothing({ target: users.email })
+    .onConflictDoNothing({ target: [users.firmId, users.email] })
     .returning();
   if (!saved) {
     throw httpError('A user with that email already exists', 409);
@@ -187,6 +189,7 @@ async function getSessionUser(userId: string): Promise<PublicUser | null> {
 
 interface SessionClaims extends JwtPayload {
   sub: string;
+  firmId: string;
   email: string;
   role: UserRole;
   fullName: string;
@@ -207,9 +210,14 @@ function authenticateRequest(req: Request, _res: Response, next: NextFunction): 
       throw httpError('Invalid session token', 401);
     }
     const claims = decoded as SessionClaims;
+    // A session is only valid on its own firm's workspace.
+    if (!claims.firmId || claims.firmId !== currentFirm().id) {
+      throw httpError('Session belongs to another workspace', 401);
+    }
 
     req.auth = {
       userId: claims.sub,
+      firmId: claims.firmId,
       email: claims.email,
       role: claims.role,
       fullName: claims.fullName,
@@ -234,7 +242,8 @@ function requireRoles(...roles: UserRole[]) {
 }
 
 // Set SEED_ADMIN_ON_STARTUP=true with DEFAULT_ADMIN_EMAIL / DEFAULT_ADMIN_PASSWORD
-// to provision the initial admin account on server boot.
+// to provision the default firm's admin on server boot. Must run inside that
+// firm's tenant context (server.ts does this).
 async function seedDefaultUsers(): Promise<PublicUser | null> {
   if (!isSeedAdminOnStartupEnabled()) {
     return null;

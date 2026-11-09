@@ -16,7 +16,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node dist/db/migrate.js",
     "db:studio": "drizzle-kit studio",
-    "test:postgres": "vitest run --no-file-parallelism"
+    "test:postgres": "vitest run --no-file-parallelism",
+    "firm": "node dist/scripts/firm.js"
   },
   "dependencies": {
     "@ahava88/shared": "*",

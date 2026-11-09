@@ -28,6 +28,10 @@ services:
         value: Practice Admin
       - key: JWT_ISSUER
         value: ahava88-legal-pms
+      - key: DEFAULT_FIRM_SLUG
+        value: default
+      - key: PLATFORM_BASE_DOMAIN
+        sync: false
       - key: FIRM_NAME
         sync: false
       - key: FIRM_SHORT_NAME

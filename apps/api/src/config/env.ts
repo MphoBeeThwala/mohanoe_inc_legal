@@ -71,14 +71,27 @@ function assertConfig(env: NodeJS.ProcessEnv = process.env): void {
   }
 }
 
+/**
+ * Development fallback secrets are only safe with the embedded development
+ * database. Against any real database (DATABASE_URL), a fallback key would
+ * silently encrypt data or sign audit events with a key the server doesn't
+ * share, so the real secrets are required everywhere outside local dev.
+ */
+function devSecretsAllowed(): boolean {
+  return !isProduction() && !process.env.DATABASE_URL;
+}
+
 function requireSecret(name: string, devFallback: string): string {
   const value = process.env[name];
   if (value) {
     return value;
   }
 
-  if (isProduction()) {
-    throw httpError(`${name} must be set in production`, 500);
+  if (!devSecretsAllowed()) {
+    throw httpError(
+      `${name} must be set ${isProduction() ? 'in production' : 'when DATABASE_URL is set'}`,
+      500,
+    );
   }
 
   return devFallback;
@@ -88,6 +101,7 @@ export {
   REQUIRED_IN_PRODUCTION,
   assertConfig,
   configWarnings,
+  devSecretsAllowed,
   isProduction,
   requireSecret,
   validateConfig,

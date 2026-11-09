@@ -3,12 +3,15 @@ import * as path from 'path';
 import * as fs from 'fs';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
-import { errorMessage, errorStatus } from './lib/http';
+import { describeError, errorMessage, errorStatus } from './lib/http';
 import routes from './routes';
 import { assertConfig, configWarnings } from './config/env';
 import { getPublicBranding } from './config/brand';
 import { seedDefaultUsers } from './services/auth.service';
 import { closeDb, dbDriver, initDb, pingDb } from './db/client';
+import { withTenant } from './db/tenant';
+import { tenantContext } from './middleware/tenant';
+import { ensureDefaultFirm } from './services/firm.service';
 import { createRateLimiter, requestLogger, securityHeaders } from './middleware/security';
 
 const app = express();
@@ -76,9 +79,13 @@ app.get('/ready', async (req, res) => {
   });
 });
 
+// Every /api request belongs to one firm, resolved from the host name, and
+// runs inside that firm's row-level-security context.
+app.use('/api', tenantContext());
+
 // Public, pre-login branding for the white-label UI.
 app.get('/api/tenant/branding', (req, res) => {
-  res.json(getPublicBranding());
+  res.json(getPublicBranding(req.firm!));
 });
 
 // Routes
@@ -133,8 +140,12 @@ if (require.main === module) {
   initDb()
     .then(async () => {
       console.log(`Database connected (${dbDriver()}); migrations applied.`);
-      if (String(process.env.SEED_ADMIN_ON_STARTUP || '').toLowerCase() === 'true') {
-        await seedDefaultUsers().catch((error: unknown) => {
+      const defaultFirm = await ensureDefaultFirm();
+      if (defaultFirm) {
+        console.log(`Default firm: ${defaultFirm.slug} (${defaultFirm.legalName})`);
+      }
+      if (defaultFirm && String(process.env.SEED_ADMIN_ON_STARTUP || '').toLowerCase() === 'true') {
+        await withTenant(defaultFirm, () => seedDefaultUsers()).catch((error: unknown) => {
           console.error('Admin seed on startup failed:', errorMessage(error));
         });
       }
@@ -153,7 +164,7 @@ if (require.main === module) {
       process.on('SIGINT', () => shutdown('SIGINT'));
     })
     .catch((error: unknown) => {
-      console.error(`Refusing to start: database unavailable: ${errorMessage(error)}`);
+      console.error(`Refusing to start: database unavailable: ${describeError(error)}`);
       process.exit(1);
     });
 }

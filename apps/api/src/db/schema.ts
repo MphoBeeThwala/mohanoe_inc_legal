@@ -8,8 +8,12 @@
 // from the original schema so existing data can be migrated). Money is stored
 // as integer cents. Timestamps are timestamptz.
 //
-// Multi-tenancy (firm_id + row-level security) arrives in roadmap epic 4.
+// Multi-tenancy: every table except `firms` carries firm_id and a forced
+// row-level security policy. firm_id defaults to the request's firm
+// (`app.firm_id`, set per request by db/tenant.ts), so a row can only ever be
+// written to, and read from, the firm of the request that touches it.
 
+import { sql } from 'drizzle-orm';
 import {
   bigint,
   bigserial,
@@ -18,9 +22,12 @@ import {
   index,
   jsonb,
   numeric,
+  pgPolicy,
+  primaryKey,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -33,19 +40,73 @@ const updatable = {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 };
 
+// ---------------------------------------------------------------- tenancy
+
+export interface FirmBranding {
+  logoUrl?: string | null;
+  primaryColor?: string;
+  accentColor?: string;
+}
+
+/** A law firm licensed to use the platform (a tenant). Platform-level table. */
+export const firms = pgTable('firms', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** URL-safe identifier; also the subdomain under PLATFORM_BASE_DOMAIN. */
+  slug: text('slug').notNull().unique(),
+  legalName: text('legal_name').notNull(),
+  tradingName: text('trading_name').notNull(),
+  productName: text('product_name'),
+  branding: jsonb('branding').$type<FirmBranding>().notNull().default({}),
+  casePrefix: text('case_prefix').notNull().default('MAT'),
+  /** Custom domains (lower-case host names) that resolve to this firm. */
+  domains: text('domains')
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
+  vatNumber: text('vat_number'),
+  plan: text('plan').notNull().default('pilot'),
+  status: text('status').notNull().default('active'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** The firm of the current request, from the transaction-local setting. */
+const CURRENT_FIRM = sql`nullif(current_setting('app.firm_id', true), '')::uuid`;
+
+/** firm_id column: defaults to the request's firm; cascades if the firm is deleted. */
+const firmId = () =>
+  uuid('firm_id')
+    .notNull()
+    .default(CURRENT_FIRM)
+    .references(() => firms.id, { onDelete: 'cascade' });
+
+/** Row-level security: a row is visible and writable only within its firm. */
+const tenantPolicy = (table: string) =>
+  pgPolicy(`${table}_tenant_isolation`, {
+    as: 'permissive',
+    for: 'all',
+    using: sql`firm_id = nullif(current_setting('app.firm_id', true), '')::uuid`,
+    withCheck: sql`firm_id = nullif(current_setting('app.firm_id', true), '')::uuid`,
+  });
+
 // ---------------------------------------------------------------- identity
 
-export const users = pgTable('users', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  email: text('email').notNull().unique(),
-  fullName: text('full_name').notNull(),
-  role: text('role').notNull().default('attorney'),
-  passwordHash: text('password_hash').notNull(),
-  passwordSalt: text('password_salt').notNull(),
-  isActive: boolean('is_active').notNull().default(true),
-  lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
-  ...timestamps,
-});
+export const users = pgTable(
+  'users',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    email: text('email').notNull(),
+    fullName: text('full_name').notNull(),
+    role: text('role').notNull().default('attorney'),
+    passwordHash: text('password_hash').notNull(),
+    passwordSalt: text('password_salt').notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('users_firm_email_idx').on(t.firmId, t.email), tenantPolicy('users')],
+);
 
 // ---------------------------------------------------------------- sequences
 
@@ -54,10 +115,15 @@ export const users = pgTable('users', {
  * Incremented atomically with UPDATE … RETURNING, so concurrent requests can
  * never receive the same number.
  */
-export const counters = pgTable('counters', {
-  name: text('name').primaryKey(),
-  value: bigint('value', { mode: 'number' }).notNull().default(0),
-});
+export const counters = pgTable(
+  'counters',
+  {
+    firmId: firmId(),
+    name: text('name').notNull(),
+    value: bigint('value', { mode: 'number' }).notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.firmId, t.name] }), tenantPolicy('counters')],
+);
 
 // ---------------------------------------------------------------- intake
 
@@ -65,6 +131,7 @@ export const submissions = pgTable(
   'submissions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
     clientLabel: text('client_label').notNull(),
     practiceArea: text('practice_area').notNull(),
     jurisdiction: text('jurisdiction').notNull().default('South Africa'),
@@ -81,35 +148,41 @@ export const submissions = pgTable(
   (t) => [
     index('submissions_created_at_idx').on(t.createdAt),
     index('submissions_email_lookup_idx').on(t.emailLookup),
+    tenantPolicy('submissions'),
   ],
 );
 
-export const assessments = pgTable('assessments', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  intakeSubmissionId: uuid('intake_submission_id')
-    .notNull()
-    .unique()
-    .references(() => submissions.id, { onDelete: 'cascade' }),
-  provider: text('provider').notNull(),
-  modelName: text('model_name').notNull(),
-  matterType: text('matter_type').notNull(),
-  urgency: text('urgency').notNull(),
-  summary: text('summary').notNull(),
-  keyFacts: jsonb('key_facts').$type<string[]>().notNull().default([]),
-  attorneyQuestions: jsonb('attorney_questions').$type<string[]>().notNull().default([]),
-  recommendedDocuments: jsonb('recommended_documents').$type<string[]>().notNull().default([]),
-  complianceFlags: jsonb('compliance_flags').$type<string[]>().notNull().default([]),
-  nextActions: jsonb('next_actions').$type<string[]>().notNull().default([]),
-  confidence: numeric('confidence', { precision: 4, scale: 2, mode: 'number' })
-    .notNull()
-    .default(0),
-  popiaNotes: jsonb('popia_notes').$type<string[]>().notNull().default([]),
-  rawRedactedBrief: jsonb('raw_redacted_brief')
-    .$type<Record<string, unknown>>()
-    .notNull()
-    .default({}),
-  ...timestamps,
-});
+export const assessments = pgTable(
+  'assessments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    intakeSubmissionId: uuid('intake_submission_id')
+      .notNull()
+      .unique()
+      .references(() => submissions.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    modelName: text('model_name').notNull(),
+    matterType: text('matter_type').notNull(),
+    urgency: text('urgency').notNull(),
+    summary: text('summary').notNull(),
+    keyFacts: jsonb('key_facts').$type<string[]>().notNull().default([]),
+    attorneyQuestions: jsonb('attorney_questions').$type<string[]>().notNull().default([]),
+    recommendedDocuments: jsonb('recommended_documents').$type<string[]>().notNull().default([]),
+    complianceFlags: jsonb('compliance_flags').$type<string[]>().notNull().default([]),
+    nextActions: jsonb('next_actions').$type<string[]>().notNull().default([]),
+    confidence: numeric('confidence', { precision: 4, scale: 2, mode: 'number' })
+      .notNull()
+      .default(0),
+    popiaNotes: jsonb('popia_notes').$type<string[]>().notNull().default([]),
+    rawRedactedBrief: jsonb('raw_redacted_brief')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    ...timestamps,
+  },
+  () => [tenantPolicy('assessments')],
+);
 
 // ---------------------------------------------------------------- matters
 
@@ -117,11 +190,12 @@ export const cases = pgTable(
   'cases',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
     intakeSubmissionId: uuid('intake_submission_id')
       .notNull()
       .unique()
       .references(() => submissions.id, { onDelete: 'cascade' }),
-    caseNumber: text('case_number').notNull().unique(),
+    caseNumber: text('case_number').notNull(),
     clientLabel: text('client_label').notNull(),
     practiceArea: text('practice_area').notNull(),
     urgency: text('urgency').notNull(),
@@ -129,13 +203,18 @@ export const cases = pgTable(
     nextAction: text('next_action').notNull(),
     ...updatable,
   },
-  (t) => [index('cases_created_at_idx').on(t.createdAt)],
+  (t) => [
+    index('cases_created_at_idx').on(t.createdAt),
+    uniqueIndex('cases_firm_case_number_idx').on(t.firmId, t.caseNumber),
+    tenantPolicy('cases'),
+  ],
 );
 
 export const caseTasks = pgTable(
   'case_tasks',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
     caseId: uuid('case_id')
       .notNull()
       .references(() => cases.id, { onDelete: 'cascade' }),
@@ -148,13 +227,14 @@ export const caseTasks = pgTable(
     completedAt: timestamp('completed_at', { withTimezone: true }),
     ...timestamps,
   },
-  (t) => [index('case_tasks_case_id_idx').on(t.caseId)],
+  (t) => [index('case_tasks_case_id_idx').on(t.caseId), tenantPolicy('case_tasks')],
 );
 
 export const caseTimeline = pgTable(
   'case_timeline',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
     caseId: uuid('case_id')
       .notNull()
       .references(() => cases.id, { onDelete: 'cascade' }),
@@ -164,13 +244,14 @@ export const caseTimeline = pgTable(
     actorName: text('actor_name').notNull(),
     ...timestamps,
   },
-  (t) => [index('case_timeline_case_id_idx').on(t.caseId)],
+  (t) => [index('case_timeline_case_id_idx').on(t.caseId), tenantPolicy('case_timeline')],
 );
 
 export const documents = pgTable(
   'documents',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
     caseId: uuid('case_id')
       .notNull()
       .references(() => cases.id, { onDelete: 'cascade' }),
@@ -186,7 +267,7 @@ export const documents = pgTable(
     signedAt: timestamp('signed_at', { withTimezone: true }),
     ...updatable,
   },
-  (t) => [index('documents_case_id_idx').on(t.caseId)],
+  (t) => [index('documents_case_id_idx').on(t.caseId), tenantPolicy('documents')],
 );
 
 // ---------------------------------------------------------------- billing
@@ -202,12 +283,13 @@ export const invoices = pgTable(
   'billing_invoices',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
     caseId: uuid('case_id')
       .notNull()
       .references(() => cases.id, { onDelete: 'cascade' }),
     caseNumber: text('case_number').notNull(),
     clientLabel: text('client_label').notNull(),
-    invoiceNumber: text('invoice_number').notNull().unique(),
+    invoiceNumber: text('invoice_number').notNull(),
     subject: text('subject').notNull(),
     currency: text('currency').notNull().default('ZAR'),
     status: text('status').notNull().default('issued'),
@@ -221,13 +303,18 @@ export const invoices = pgTable(
     createdBy: text('created_by').notNull(),
     ...updatable,
   },
-  (t) => [index('billing_invoices_case_id_idx').on(t.caseId)],
+  (t) => [
+    index('billing_invoices_case_id_idx').on(t.caseId),
+    uniqueIndex('billing_invoices_firm_number_idx').on(t.firmId, t.invoiceNumber),
+    tenantPolicy('billing_invoices'),
+  ],
 );
 
 export const ledgerEntries = pgTable(
   'billing_ledger',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
     caseId: uuid('case_id')
       .notNull()
       .references(() => cases.id, { onDelete: 'cascade' }),
@@ -240,7 +327,7 @@ export const ledgerEntries = pgTable(
     createdBy: text('created_by').notNull(),
     ...timestamps,
   },
-  (t) => [index('billing_ledger_case_id_idx').on(t.caseId)],
+  (t) => [index('billing_ledger_case_id_idx').on(t.caseId), tenantPolicy('billing_ledger')],
 );
 
 // ---------------------------------------------------------------- calendar & notifications
@@ -249,6 +336,7 @@ export const calendarEvents = pgTable(
   'calendar_events',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
     caseId: uuid('case_id')
       .notNull()
       .references(() => cases.id, { onDelete: 'cascade' }),
@@ -262,13 +350,14 @@ export const calendarEvents = pgTable(
     createdBy: text('created_by').notNull(),
     ...timestamps,
   },
-  (t) => [index('calendar_events_starts_at_idx').on(t.startsAt)],
+  (t) => [index('calendar_events_starts_at_idx').on(t.startsAt), tenantPolicy('calendar_events')],
 );
 
 export const notifications = pgTable(
   'notifications',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
     title: text('title').notNull(),
     body: text('body').notNull(),
     category: text('category').notNull().default('general'),
@@ -282,7 +371,10 @@ export const notifications = pgTable(
     createdBy: text('created_by').notNull(),
     ...timestamps,
   },
-  (t) => [index('notifications_recipient_idx').on(t.recipientRole, t.isRead)],
+  (t) => [
+    index('notifications_recipient_idx').on(t.recipientRole, t.isRead),
+    tenantPolicy('notifications'),
+  ],
 );
 
 // ---------------------------------------------------------------- audit, reports, compliance
@@ -296,6 +388,7 @@ export const auditEvents = pgTable(
   {
     seq: bigserial('seq', { mode: 'number' }).primaryKey(),
     id: uuid('id').notNull().unique().defaultRandom(),
+    firmId: firmId(),
     actorId: uuid('actor_id'),
     actorName: text('actor_name').notNull(),
     actorRole: text('actor_role').notNull(),
@@ -308,22 +401,31 @@ export const auditEvents = pgTable(
     entryHash: text('entry_hash').notNull(),
     ...timestamps,
   },
-  (t) => [index('audit_events_entity_idx').on(t.entityType, t.entityId)],
+  (t) => [
+    index('audit_events_entity_idx').on(t.entityType, t.entityId),
+    tenantPolicy('audit_events'),
+  ],
 );
 
-export const reportSnapshots = pgTable('report_snapshots', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  reportType: text('report_type').notNull().default('dashboard'),
-  title: text('title').notNull(),
-  payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
-  createdBy: text('created_by').notNull(),
-  ...timestamps,
-});
+export const reportSnapshots = pgTable(
+  'report_snapshots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    reportType: text('report_type').notNull().default('dashboard'),
+    title: text('title').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    createdBy: text('created_by').notNull(),
+    ...timestamps,
+  },
+  () => [tenantPolicy('report_snapshots')],
+);
 
 export const complianceRequests = pgTable(
   'compliance_requests',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
     requestType: text('request_type').notNull().default('access'),
     subjectName: text('subject_name').notNull(),
     subjectEmail: text('subject_email').notNull(),
@@ -337,10 +439,11 @@ export const complianceRequests = pgTable(
     createdBy: text('created_by').notNull(),
     ...updatable,
   },
-  (t) => [index('compliance_status_idx').on(t.status)],
+  (t) => [index('compliance_status_idx').on(t.status), tenantPolicy('compliance_requests')],
 );
 
 // Row types for services.
+export type FirmRow = typeof firms.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type SubmissionRow = typeof submissions.$inferSelect;
 export type AssessmentRow = typeof assessments.$inferSelect;

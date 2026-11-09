@@ -9,6 +9,7 @@ import type {
   PublicSubmission,
 } from '@ahava88/shared';
 import { db } from '../db/client';
+import { currentFirm } from '../db/tenant-context';
 import { nextValue } from '../db/sequences';
 import {
   assessments,
@@ -51,7 +52,7 @@ function toMatterBrief(submission: IntakeSubmission): MatterBrief {
 async function nextCaseNumber(): Promise<string> {
   const year = new Date().getFullYear();
   const sequence = await nextValue(`case_number:${year}`);
-  return `${getFirmBrand().casePrefix}-${year}-${String(sequence).padStart(4, '0')}`;
+  return `${getFirmBrand(currentFirm()).casePrefix}-${year}-${String(sequence).padStart(4, '0')}`;
 }
 
 async function nextClientLabel(): Promise<string> {

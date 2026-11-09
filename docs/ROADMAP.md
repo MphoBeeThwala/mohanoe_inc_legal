@@ -32,7 +32,7 @@ Ahava on 88 (Pty) Ltd owns the software and IP and licenses it to firms monthly.
 
 Technical design:
 - A `firms` table: `slug`, `legal_name`, `trading_name`, `branding` (logo, primary/accent colours), `domains[]`, `case_prefix`, `invoice_settings`, `vat_number`, `plan`, `status`.
-- Before login the frontend calls `GET /api/tenant/branding` (resolves the firm from the hostname) and applies colours as CSS variables. **Done in epic 1 for one firm per deployment via env vars; epic 4 moves it to the `firms` table.**
+- Before login the frontend calls `GET /api/tenant/branding` (resolves the firm from the hostname) and applies colours as CSS variables. **Done: read from the `firms` table (epic 4); env vars only seed the first firm.**
 - Default domain `firmslug.<product-domain>`; custom domains via Azure Front Door managed certificates.
 - Emails, PDFs and the client portal render from firm branding.
 
@@ -118,14 +118,14 @@ Environment setup:
 - [ ] Dependabot and secret scanning enabled in GitHub settings
 
 ### 5.2 Multi-tenancy and data layer
-- [ ] `firms` table; `firm_id NOT NULL` on all tables; backfill to the first firm
-- [ ] RLS on every table keyed on `current_setting('app.firm_id')`; app role cannot bypass
-- [ ] Tenant resolver (hostname → firm); every query in a transaction that sets the firm
+- [x] `firms` table; `firm_id NOT NULL` on all tables; backfill to the first firm
+- [x] RLS on every table keyed on `current_setting('app.firm_id')`; app role cannot bypass
+- [x] Tenant resolver (hostname → firm); every query in a transaction that sets the firm
 - [x] One versioned migration history (Drizzle) replacing the hand-run SQL files
 - [x] Remove all in-memory fallbacks; zod request validation (config validated by `config/env.ts`)
 - [x] Indexes and bounded queries; no whole-table reads (cursor pagination for large lists still to do)
-- [ ] Per-firm sequences for case, client and invoice numbers (gap-free invoices) — atomic counters done for case numbers and client labels; per-firm scope with epic 4, invoices with epic 7
-- [ ] Isolation tests across every endpoint
+- [ ] Per-firm sequences for case, client and invoice numbers (gap-free invoices) — per-firm atomic counters done for case numbers and client labels; gap-free invoice numbering with epic 7
+- [x] Isolation tests across every endpoint (`tenancy.test.ts`, plus a schema guard that fails if a table lacks `firm_id` or RLS)
 
 ### 5.3 Identity and access
 - [ ] Entra External ID, mandatory staff MFA, reset, lockout, revocation
@@ -205,7 +205,7 @@ Trust accounting and AI research ship behind feature flags to pilots first.
 1. **Rebrand and clean-up** — done on `chore/rebrand-ahava88-cleanup`.
 2. **TypeScript monorepo** — done on `chore/typescript-monorepo-vite`.
 3. **Data layer** — done on `feat/data-layer-drizzle`: Drizzle + PostgreSQL, one migration history, PGlite for dev/tests, zod validation, linked audit chain, race-free numbering, money in cents, email blind index.
-4. **Multi-tenancy** — `firms` table, `firm_id`, RLS, tenant resolver, isolation tests; branding from `firms`.
+4. **Multi-tenancy** — done on `feat/multi-tenancy`: `firms` table, `firm_id` and forced RLS on every table, `app_tenant` role, host-name resolver, per-firm numbering and audit chains, firm CLI, isolation tests; branding from `firms`.
 5. **Identity** — Entra External ID (+ Entra ID), MFA, cookies, invites, per-firm roles, matter access, super-admin.
 6. **Encryption** — Key Vault envelope encryption, re-encryption migration, per-firm audit chain.
 7. **Practice core** — clients/matters, conflicts, FICA, time, invoicing, calendar.
