@@ -18,6 +18,11 @@
 - The CLI needs the same `DATABASE_URL`, `JWT_SECRET`, `INTAKE_ENCRYPTION_KEY` and `AUDIT_CHAIN_SECRET` as the server; it refuses to run without them. Otherwise the admin's email would be encrypted with the wrong key and the audit chain would break.
 - Point the firm's DNS (subdomain or custom domain) at the app; the host name selects the firm.
 
+## Platform support
+- Create operators only for named Ahava on 88 staff: `npm run ops -w apps/api -- operator create --email … --name "…"`. Hand over the printed password and authenticator key in person or through a password manager.
+- Disable leavers the same day: `operator disable --email …`. Operators lock for 15 minutes after 5 failed attempts.
+- Support work starts with the firm granting access in the app. Never ask a firm for a staff password. The firm sees the grant and every support request in its audit trail.
+
 ## Encryption keys
 - **After upgrading to epic 6:** run `npm run ops -w apps/api -- keys reencrypt` once. It moves existing data to per-firm keys and is safe to re-run. Check with `keys status`.
 - **Moving to Azure Key Vault:** create an RSA key (HSM-backed in production) and give the app's managed identity *Key Vault Crypto User* on it. Set `KEY_PROVIDER=azure-keyvault` and `AZURE_KEY_VAULT_KEY_ID`, keep `INTAKE_ENCRYPTION_KEY`, deploy, then run `keys rewrap`.

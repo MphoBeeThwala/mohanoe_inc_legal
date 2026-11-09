@@ -48,6 +48,7 @@ import {
 import { decryptJson, encryptJson } from './privacy.service';
 import { mailEnabled } from './mail.service';
 import * as sessionService from './session.service';
+import * as supportService from './support.service';
 import * as auditService from './audit.service';
 
 const JWT_ISSUER = process.env.JWT_ISSUER || 'ahava88-legal-pms';
@@ -75,7 +76,7 @@ export function createPasswordHash(password: string) {
 // failed sign-in takes the same time either way (no user enumeration).
 const DUMMY_CREDENTIALS = createPasswordHash(crypto.randomBytes(16).toString('hex'));
 
-function verifyPassword(password: string, salt: string | null, expectedHash: string | null) {
+export function verifyPassword(password: string, salt: string | null, expectedHash: string | null) {
   const credentials =
     salt && expectedHash ? { salt, hash: expectedHash } : { ...DUMMY_CREDENTIALS, real: false };
   const actual = Buffer.from(hashPassword(password, credentials.salt), 'hex');
@@ -476,8 +477,14 @@ export function authenticateRequest(req: Request, _res: Response, next: NextFunc
       fullName: user.fullName,
       sessionId: session.id,
       method: session.method as SignInMethod,
+      sessionExpiresAt: session.expiresAt,
     };
     await setPrincipal({ id: user.id, role: user.role });
+    if (session.method === 'support') {
+      // Platform support: the firm's grant must still be active, and every
+      // request is recorded in the firm's audit trail.
+      await supportService.checkSupportRequest(req, session, user);
+    }
   })().then(
     () => next(),
     (error: unknown) =>

@@ -55,6 +55,11 @@ Requires Node 22+.
 - **Roles** (per firm): Administrator, Attorney, Paralegal, Secretary, Bookkeeper. Each grants permissions (`ROLE_PERMISSIONS` in `packages/shared`); routes check them with `requirePermission(...)`. Role changes apply on the next request.
 - **Matter access:** a matter is visible firm-wide by default. Its lead (whoever opened it) or an administrator can restrict it to named members, and add **ethical walls** that hide it from specific people, administrators included. PostgreSQL row-level security enforces this, and hides the matter's tasks, documents, invoices, ledger, calendar and intake record with it. POPIA exports, erasure and retention sweeps (information officer only) still cover every matter.
 
+## Platform support access
+- Ahava on 88 support staff (*platform operators*) have no standing access to any firm. Create them with `npm run ops -w apps/api -- operator create --email … --name …`; it prints a one-time password and an authenticator key, and MFA is mandatory. List or disable them with `operator list`, `operator disable --email …`.
+- A firm administrator opens access under **Account & team → Support access**, for 1 hour to 3 days and with a reason. While a grant is active, the operator signs in at that firm's address under `/support` (email, password, authenticator code).
+- Support sessions are **read-only** (role `support`). Restricted matters and ethical walls still apply, and the session ends when the grant expires or is revoked. **Every request** is written to the firm's audit trail, with the method and path.
+
 ## Firms (multi-tenancy)
 One deployment serves many firms. Every tenant table has a `firm_id`, and PostgreSQL row-level security keeps each firm's rows invisible to the others.
 

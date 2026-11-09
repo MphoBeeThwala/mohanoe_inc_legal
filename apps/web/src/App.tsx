@@ -12,8 +12,9 @@ import {
   hasPermission,
   type AuthConfig,
   type IntakeSubmissionInput,
-  IntakeSummary,
+  type IntakeSummary,
   type MatterCase,
+  type MeResponse,
   type PublicBranding,
   type PublicSubmission,
   type PublicUser,
@@ -25,6 +26,8 @@ import ResetPassword from './auth/ResetPassword';
 import StaffAdmin from './components/StaffAdmin';
 import AccountPanel from './components/AccountPanel';
 import RecordsPanel from './components/RecordsPanel';
+import SupportAccessPanel from './components/SupportAccessPanel';
+import SupportSignIn from './auth/SupportSignIn';
 import type { Notice } from './components/DismissibleNotice';
 import IntakeForm from './components/IntakeForm';
 import AssessmentCard from './components/AssessmentCard';
@@ -68,6 +71,7 @@ function linkFromPath(pathname: string) {
   if (invite) return { kind: 'invite' as const, token: decodeURIComponent(invite[1]!) };
   const reset = /^\/reset-password\/([^/]+)\/?$/.exec(pathname);
   if (reset) return { kind: 'reset' as const, token: decodeURIComponent(reset[1]!) };
+  if (/^\/support\/?$/.test(pathname)) return { kind: 'support' as const, token: '' };
   return null;
 }
 
@@ -145,6 +149,7 @@ function App() {
     selfServiceReset: false,
   });
   const [link, setLink] = useState(() => linkFromPath(window.location.pathname));
+  const [sessionInfo, setSessionInfo] = useState<MeResponse['session'] | null>(null);
   const [summary, setSummary] = useState<IntakeSummary | null>(null);
   const [cases, setCases] = useState<MatterCase[]>([]);
   const [selectedMatter, setSelectedMatter] = useState<PublicSubmission | null>(null);
@@ -212,8 +217,9 @@ function App() {
   const loadSession = async () => {
     // The session is an httpOnly cookie: ask the API who we are.
     try {
-      const { data } = await api.get<{ user: PublicUser }>('/auth/me');
+      const { data } = await api.get<MeResponse>('/auth/me');
       setCurrentUser(data.user);
+      setSessionInfo(data.session);
       await loadWorkspace(data.user);
     } catch (error) {
       if (apiStatus(error) !== 401) {
@@ -394,6 +400,14 @@ function App() {
                 onSignedIn={handleSignedIn}
                 onNotice={(tone, message) => setAuthNotice({ tone, message })}
               />
+            ) : link?.kind === 'support' ? (
+              <SupportSignIn
+                onSignedIn={() => {
+                  leaveLinkPage();
+                  window.location.reload();
+                }}
+                onNotice={(tone, message) => setAuthNotice({ tone, message })}
+              />
             ) : link?.kind === 'reset' ? (
               <ResetPassword
                 token={link.token}
@@ -470,6 +484,13 @@ function App() {
           </div>
         </div>
       </nav>
+
+      {sessionInfo?.method === 'support' ? (
+        <div className="notice notice-warn support-banner" role="status">
+          {branding.platform.legalName} support session: read-only, recorded in the firm's audit
+          trail, ends {new Date(sessionInfo.expiresAt).toLocaleString()}.
+        </div>
+      ) : null}
 
       <DismissibleNotice
         tone={authNotice.tone}
@@ -642,6 +663,9 @@ function App() {
               </ErrorBoundary>
               <ErrorBoundary label="Records">
                 <RecordsPanel />
+              </ErrorBoundary>
+              <ErrorBoundary label="Support access">
+                <SupportAccessPanel platformName={branding.platform.legalName} />
               </ErrorBoundary>
             </>
           ) : null}

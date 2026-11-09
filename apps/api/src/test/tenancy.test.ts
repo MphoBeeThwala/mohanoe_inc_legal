@@ -12,6 +12,9 @@ import { clearFirmCache, createFirm } from '../services/firm.service';
 import * as auditService from '../services/audit.service';
 import { createStaff, signInAgain, type TestStaff } from './helpers';
 
+/** Platform-level tables: no firm_id, and no access for app_tenant. */
+const PLATFORM_TABLES = ['platform_operators'];
+
 const HOST_A = 'portal.alpha-law.test';
 const HOST_B = 'portal.beta-law.test';
 
@@ -390,6 +393,14 @@ describe('the database enforces isolation (row-level security)', () => {
     expect(tables.length).toBeGreaterThan(10);
     for (const table of tables) {
       if (table.name === 'firms') {
+        continue;
+      }
+      // Platform tables carry no firm data, and requests can't touch them.
+      if (PLATFORM_TABLES.includes(table.name)) {
+        const privileges = (await rootDb().execute(
+          sql`select has_table_privilege('app_tenant', ${table.name}, 'select, insert, update, delete') as any`,
+        )) as { rows: Array<{ any: boolean }> };
+        expect(privileges.rows[0]!.any, `app_tenant must not access ${table.name}`).toBe(false);
         continue;
       }
       expect(table, table.name).toMatchObject({

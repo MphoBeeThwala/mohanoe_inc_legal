@@ -1,4 +1,4 @@
-import type { UserRole } from '@ahava88/shared';
+import type { SignInMethod, UserRole } from '@ahava88/shared';
 import type { FirmRow } from '../db/schema';
 
 declare global {
@@ -14,7 +14,8 @@ declare global {
         role: UserRole;
         fullName: string;
         sessionId: string;
-        method: 'password' | 'oidc';
+        method: SignInMethod;
+        sessionExpiresAt: Date;
       };
     }
   }

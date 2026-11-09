@@ -43,8 +43,9 @@ export function isHexColor(value: unknown): value is string {
 
 // ---------------------------------------------------------------- auth
 
-export type UserRole = 'admin' | 'attorney' | 'paralegal' | 'secretary' | 'bookkeeper';
+export type UserRole = 'admin' | 'attorney' | 'paralegal' | 'secretary' | 'bookkeeper' | 'support';
 
+/** Roles a firm can give its own staff ('support' is only for platform support sessions). */
 export const STAFF_ROLES: readonly UserRole[] = [
   'admin',
   'attorney',
@@ -59,6 +60,7 @@ export const ROLE_LABELS: Readonly<Record<UserRole, string>> = {
   paralegal: 'Paralegal',
   secretary: 'Secretary',
   bookkeeper: 'Bookkeeper',
+  support: 'Platform support',
 };
 
 export type Permission =
@@ -128,6 +130,17 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'reports.read',
     'notifications.read',
   ],
+  // Platform support, while the firm allows it: read-only, and still subject
+  // to restricted matters and ethical walls.
+  support: [
+    'intake.read',
+    'matters.read',
+    'documents.read',
+    'calendar.read',
+    'billing.read',
+    'reports.read',
+    'notifications.read',
+  ],
 };
 
 export function hasPermission(
@@ -150,7 +163,13 @@ export interface PublicUser {
   signInMethods: SignInMethod[];
 }
 
-export type SignInMethod = 'password' | 'oidc';
+export type SignInMethod = 'password' | 'oidc' | 'support';
+
+/** GET /api/auth/me */
+export interface MeResponse {
+  user: PublicUser;
+  session: { method: SignInMethod; expiresAt: string };
+}
 
 export interface AuthConfig {
   /** Email + password (with authenticator-app MFA). */
@@ -251,6 +270,31 @@ export interface FirmSettings {
 export interface UserUpdateInput {
   role?: UserRole;
   isActive?: boolean;
+}
+
+// ---------------------------------------------------------------- platform support
+
+export interface SupportGrantInput {
+  /** 1 to 72 hours. */
+  hours: number;
+  /** Why support needs access (e.g. the ticket number). Shown in the audit trail. */
+  reason: string;
+}
+
+export interface SupportGrant {
+  id: string;
+  reason: string;
+  grantedBy: string | null;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  status: 'active' | 'expired' | 'revoked';
+}
+
+export interface SupportSignInInput {
+  email: string;
+  password: string;
+  code: string;
 }
 
 // ---------------------------------------------------------------- matter access

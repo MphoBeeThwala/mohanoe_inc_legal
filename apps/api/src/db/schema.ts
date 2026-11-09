@@ -128,6 +128,44 @@ const matterPolicy = (table: string) =>
     withCheck: sql.raw(`exists (select 1 from cases c where c.id = ${table}.case_id)`),
   });
 
+// ---------------------------------------------------------------- platform
+
+/**
+ * Ahava on 88 support staff (platform operators). Platform-level: no firm_id,
+ * and the app_tenant role has no access at all. Operators can only enter a
+ * firm's workspace while that firm has granted support access.
+ */
+export const platformOperators = pgTable('platform_operators', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email').notNull().unique(),
+  fullName: text('full_name').notNull(),
+  passwordHash: text('password_hash').notNull(),
+  passwordSalt: text('password_salt').notNull(),
+  /** TOTP secret, sealed with the platform key. MFA is mandatory. */
+  mfaSecretEncrypted: text('mfa_secret_encrypted').notNull(),
+  mfaLastStep: bigint('mfa_last_step', { mode: 'number' }),
+  failedLoginCount: integer('failed_login_count').notNull().default(0),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** A firm administrator's time-boxed permission for platform support to sign in (read-only). */
+export const supportGrants = pgTable(
+  'support_grants',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    reason: text('reason').notNull(),
+    grantedBy: uuid('granted_by').references(() => users.id, { onDelete: 'set null' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    revokedBy: uuid('revoked_by').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [index('support_grants_expires_idx').on(t.expiresAt), tenantPolicy('support_grants')],
+);
+
 // ---------------------------------------------------------------- keys
 
 /**
@@ -182,6 +220,8 @@ export const users = pgTable(
     mfaLastStep: bigint('mfa_last_step', { mode: 'number' }),
     failedLoginCount: integer('failed_login_count').notNull().default(0),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
+    /** Set on the firm's stand-in account for a platform support operator. */
+    platformOperatorId: uuid('platform_operator_id'),
     isActive: boolean('is_active').notNull().default(true),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
     ...timestamps,
@@ -731,6 +771,8 @@ export type CaseMemberRow = typeof caseMembers.$inferSelect;
 export type CaseExclusionRow = typeof caseExclusions.$inferSelect;
 export type FirmKeyRow = typeof firmKeys.$inferSelect;
 export type AuditAnchorRow = typeof auditAnchors.$inferSelect;
+export type PlatformOperatorRow = typeof platformOperators.$inferSelect;
+export type SupportGrantRow = typeof supportGrants.$inferSelect;
 export type FirmRow = typeof firms.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type SubmissionRow = typeof submissions.$inferSelect;

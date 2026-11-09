@@ -132,7 +132,7 @@ Environment setup:
 - [x] httpOnly secure SameSite cookies
 - [x] Invite-only users per firm; remove public registration and `/auth/seed-admin`
 - [x] Per-firm roles, matter-level access, ethical walls (enforced by RLS)
-- [ ] Platform super-admin with audited, firm-approved support access
+- [x] Platform super-admin with audited, firm-approved support access (support grants; read-only; every request audited)
 - [x] CSP, HSTS, helmet-style headers
 
 ### 5.4 Encryption and records
