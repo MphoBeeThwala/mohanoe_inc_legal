@@ -7,10 +7,26 @@ import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { IntakeSubmission } from '../validation/schemas';
 import { db } from '../db/client';
 import { withTenant } from '../db/tenant';
-import { documents, firmKeys, submissions, users, type FirmRow } from '../db/schema';
+import {
+  conflictChecks,
+  documents,
+  ficaDocuments,
+  ficaProfiles,
+  firmKeys,
+  parties,
+  submissions,
+  timeEntries,
+  timers,
+  users,
+  invoices,
+  disbursements,
+  type FirmRow,
+} from '../db/schema';
 import { activeKey, deleteKey } from './keys.service';
 import { blindIndex, decryptJson, encryptJson } from './privacy.service';
 import { readSealedContent, writeSealedContent } from './documents.service';
+import { readSealedFica } from './fica.service';
+import { firmContainer, objectStore } from './object-store';
 
 const BATCH = 200;
 
@@ -32,6 +48,63 @@ function staleDocuments(version: number): SQL {
   ) as SQL;
 }
 
+function staleParties(version: number): SQL {
+  return notOnVersion(parties.detailsEncrypted, version);
+}
+
+function staleChecks(version: number): SQL {
+  return or(
+    notOnVersion(conflictChecks.queryEncrypted, version),
+    and(
+      isNotNull(conflictChecks.decisionNotesEncrypted),
+      notOnVersion(conflictChecks.decisionNotesEncrypted, version),
+    ),
+  ) as SQL;
+}
+
+function staleFicaProfiles(version: number): SQL {
+  return and(
+    isNotNull(ficaProfiles.notesEncrypted),
+    notOnVersion(ficaProfiles.notesEncrypted, version),
+  ) as SQL;
+}
+
+function staleFicaDocuments(version: number): SQL {
+  return or(
+    notOnVersion(ficaDocuments.fileNameEncrypted, version),
+    and(
+      isNotNull(ficaDocuments.encryptedContent),
+      notOnVersion(ficaDocuments.encryptedContent, version),
+    ),
+    and(
+      isNotNull(ficaDocuments.storageKey),
+      or(isNull(ficaDocuments.contentKeyVersion), ne(ficaDocuments.contentKeyVersion, version)),
+    ),
+  ) as SQL;
+}
+
+function staleTimeEntries(version: number): SQL {
+  return notOnVersion(timeEntries.descriptionEncrypted, version);
+}
+
+function staleTimers(version: number): SQL {
+  return and(
+    isNotNull(timers.descriptionEncrypted),
+    notOnVersion(timers.descriptionEncrypted, version),
+  ) as SQL;
+}
+
+function staleInvoices(version: number): SQL {
+  return and(
+    isNotNull(invoices.contentEncrypted),
+    notOnVersion(invoices.contentEncrypted, version),
+  ) as SQL;
+}
+
+function staleDisbursements(version: number): SQL {
+  return notOnVersion(disbursements.descriptionEncrypted, version);
+}
+
 function staleUsers(version: number): SQL {
   return and(
     isNotNull(users.mfaSecretEncrypted),
@@ -39,30 +112,67 @@ function staleUsers(version: number): SQL {
   ) as SQL;
 }
 
+export interface ReencryptCounts {
+  submissions: number;
+  documents: number;
+  users: number;
+  parties: number;
+  conflictChecks: number;
+  fica: number;
+  time: number;
+  billing: number;
+}
+
 export interface ReencryptStatus {
   activeVersion: number;
-  pending: { submissions: number; documents: number; users: number };
+  pending: {
+    submissions: number;
+    documents: number;
+    users: number;
+    parties: number;
+    conflictChecks: number;
+    fica: number;
+    time: number;
+    billing: number;
+  };
 }
 
 /** How much of the current firm's data is not yet on the active key. */
 export async function pendingReencryption(): Promise<ReencryptStatus> {
   const { version } = await activeKey('data');
-  const [[s], [d], [u]] = await Promise.all([
+  const [[fp], [fd], [te], [tm]] = await Promise.all([
+    db().select({ value: count() }).from(ficaProfiles).where(staleFicaProfiles(version)),
+    db().select({ value: count() }).from(ficaDocuments).where(staleFicaDocuments(version)),
+    db().select({ value: count() }).from(timeEntries).where(staleTimeEntries(version)),
+    db().select({ value: count() }).from(timers).where(staleTimers(version)),
+  ]);
+  const [[bi], [bd]] = await Promise.all([
+    db().select({ value: count() }).from(invoices).where(staleInvoices(version)),
+    db().select({ value: count() }).from(disbursements).where(staleDisbursements(version)),
+  ]);
+  const [[s], [d], [u], [p], [c]] = await Promise.all([
     db().select({ value: count() }).from(submissions).where(staleSubmissions(version)),
     db().select({ value: count() }).from(documents).where(staleDocuments(version)),
     db().select({ value: count() }).from(users).where(staleUsers(version)),
+    db().select({ value: count() }).from(parties).where(staleParties(version)),
+    db().select({ value: count() }).from(conflictChecks).where(staleChecks(version)),
   ]);
   return {
     activeVersion: version,
-    pending: { submissions: s?.value ?? 0, documents: d?.value ?? 0, users: u?.value ?? 0 },
+    pending: {
+      submissions: s?.value ?? 0,
+      documents: d?.value ?? 0,
+      users: u?.value ?? 0,
+      parties: p?.value ?? 0,
+      conflictChecks: c?.value ?? 0,
+      fica: (fp?.value ?? 0) + (fd?.value ?? 0),
+      time: (te?.value ?? 0) + (tm?.value ?? 0),
+      billing: (bi?.value ?? 0) + (bd?.value ?? 0),
+    },
   };
 }
 
-async function reencryptBatch(): Promise<{
-  submissions: number;
-  documents: number;
-  users: number;
-}> {
+async function reencryptBatch(): Promise<ReencryptCounts> {
   const { version } = await activeKey('data');
 
   const subs = await db().select().from(submissions).where(staleSubmissions(version)).limit(BATCH);
@@ -106,18 +216,139 @@ async function reencryptBatch(): Promise<{
       .where(eq(users.id, row.id));
   }
 
-  return { submissions: subs.length, documents: docs.length, users: people.length };
+  const partyRows = await db().select().from(parties).where(staleParties(version)).limit(BATCH);
+  for (const row of partyRows) {
+    const details = await decryptJson(row.detailsEncrypted);
+    await db()
+      .update(parties)
+      .set({ detailsEncrypted: await encryptJson(details) })
+      .where(eq(parties.id, row.id));
+  }
+  // Party blind indexes use the stable index key, so they need no rebuild.
+
+  const checks = await db().select().from(conflictChecks).where(staleChecks(version)).limit(BATCH);
+  for (const row of checks) {
+    await db()
+      .update(conflictChecks)
+      .set({
+        queryEncrypted: await encryptJson(await decryptJson(row.queryEncrypted)),
+        decisionNotesEncrypted: row.decisionNotesEncrypted
+          ? await encryptJson(await decryptJson(row.decisionNotesEncrypted))
+          : null,
+      })
+      .where(eq(conflictChecks.id, row.id));
+  }
+
+  const profiles = await db()
+    .select()
+    .from(ficaProfiles)
+    .where(staleFicaProfiles(version))
+    .limit(BATCH);
+  for (const row of profiles) {
+    await db()
+      .update(ficaProfiles)
+      .set({ notesEncrypted: await encryptJson(await decryptJson(row.notesEncrypted)) })
+      .where(eq(ficaProfiles.id, row.id));
+  }
+  const kyc = await db()
+    .select()
+    .from(ficaDocuments)
+    .where(staleFicaDocuments(version))
+    .limit(BATCH);
+  for (const row of kyc) {
+    const sealed = await encryptJson(await decryptJson(await readSealedFica(row)));
+    const fileNameEncrypted = await encryptJson(await decryptJson(row.fileNameEncrypted));
+    if (row.storageKey) {
+      await objectStore()?.put(
+        firmContainer(row.firmId),
+        row.storageKey,
+        Buffer.from(sealed, 'utf8'),
+      );
+      await db()
+        .update(ficaDocuments)
+        .set({ fileNameEncrypted, contentKeyVersion: version })
+        .where(eq(ficaDocuments.id, row.id));
+    } else {
+      await db()
+        .update(ficaDocuments)
+        .set({ fileNameEncrypted, encryptedContent: sealed })
+        .where(eq(ficaDocuments.id, row.id));
+    }
+  }
+
+  const entries = await db()
+    .select()
+    .from(timeEntries)
+    .where(staleTimeEntries(version))
+    .limit(BATCH);
+  for (const row of entries) {
+    await db()
+      .update(timeEntries)
+      .set({ descriptionEncrypted: await encryptJson(await decryptJson(row.descriptionEncrypted)) })
+      .where(eq(timeEntries.id, row.id));
+  }
+  const running = await db().select().from(timers).where(staleTimers(version)).limit(BATCH);
+  for (const row of running) {
+    await db()
+      .update(timers)
+      .set({ descriptionEncrypted: await encryptJson(await decryptJson(row.descriptionEncrypted)) })
+      .where(eq(timers.id, row.id));
+  }
+
+  const bills = await db().select().from(invoices).where(staleInvoices(version)).limit(BATCH);
+  for (const row of bills) {
+    await db()
+      .update(invoices)
+      .set({ contentEncrypted: await encryptJson(await decryptJson(row.contentEncrypted)) })
+      .where(eq(invoices.id, row.id));
+  }
+  const costs = await db()
+    .select()
+    .from(disbursements)
+    .where(staleDisbursements(version))
+    .limit(BATCH);
+  for (const row of costs) {
+    await db()
+      .update(disbursements)
+      .set({ descriptionEncrypted: await encryptJson(await decryptJson(row.descriptionEncrypted)) })
+      .where(eq(disbursements.id, row.id));
+  }
+
+  return {
+    submissions: subs.length,
+    documents: docs.length,
+    users: people.length,
+    parties: partyRows.length,
+    conflictChecks: checks.length,
+    fica: profiles.length + kyc.length,
+    time: entries.length + running.length,
+    billing: bills.length + costs.length,
+  };
 }
 
 /** Re-encrypts all of a firm's data onto its active key. */
 export async function reencryptFirm(firm: FirmRow) {
-  const total = { submissions: 0, documents: 0, users: 0 };
+  const total = {
+    submissions: 0,
+    documents: 0,
+    users: 0,
+    parties: 0,
+    conflictChecks: 0,
+    fica: 0,
+    time: 0,
+    billing: 0,
+  };
   for (;;) {
     const done = await withTenant(firm, () => reencryptBatch(), { system: true });
     total.submissions += done.submissions;
     total.documents += done.documents;
     total.users += done.users;
-    if (!done.submissions && !done.documents && !done.users) {
+    total.parties += done.parties;
+    total.conflictChecks += done.conflictChecks;
+    total.fica += done.fica;
+    total.time += done.time;
+    total.billing += done.billing;
+    if (Object.values(done).every((value) => value === 0)) {
       return total;
     }
   }
@@ -151,7 +382,59 @@ export async function pruneRetiredKeys(): Promise<number[]> {
         .from(users)
         .where(sql`${users.mfaSecretEncrypted} like ${prefix}`),
     ]);
-    if (!s?.value && !d?.value && !u?.value) {
+    const [[p], [c]] = await Promise.all([
+      db()
+        .select({ value: count() })
+        .from(parties)
+        .where(sql`${parties.detailsEncrypted} like ${prefix}`),
+      db()
+        .select({ value: count() })
+        .from(conflictChecks)
+        .where(
+          or(
+            sql`${conflictChecks.queryEncrypted} like ${prefix}`,
+            sql`${conflictChecks.decisionNotesEncrypted} like ${prefix}`,
+          ),
+        ),
+    ]);
+    const [[fp], [fd]] = await Promise.all([
+      db()
+        .select({ value: count() })
+        .from(ficaProfiles)
+        .where(sql`${ficaProfiles.notesEncrypted} like ${prefix}`),
+      db()
+        .select({ value: count() })
+        .from(ficaDocuments)
+        .where(
+          or(
+            sql`${ficaDocuments.fileNameEncrypted} like ${prefix}`,
+            sql`${ficaDocuments.encryptedContent} like ${prefix}`,
+            eq(ficaDocuments.contentKeyVersion, key.version),
+          ),
+        ),
+    ]);
+    const [[te], [tm]] = await Promise.all([
+      db()
+        .select({ value: count() })
+        .from(timeEntries)
+        .where(sql`${timeEntries.descriptionEncrypted} like ${prefix}`),
+      db()
+        .select({ value: count() })
+        .from(timers)
+        .where(sql`${timers.descriptionEncrypted} like ${prefix}`),
+    ]);
+    const [[bi], [bd]] = await Promise.all([
+      db()
+        .select({ value: count() })
+        .from(invoices)
+        .where(sql`${invoices.contentEncrypted} like ${prefix}`),
+      db()
+        .select({ value: count() })
+        .from(disbursements)
+        .where(sql`${disbursements.descriptionEncrypted} like ${prefix}`),
+    ]);
+    const inUse = [s, d, u, p, c, fp, fd, te, tm, bi, bd].some((row) => row?.value);
+    if (!inUse) {
       await deleteKey(key.id);
       pruned.push(key.version);
     }

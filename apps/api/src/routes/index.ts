@@ -12,6 +12,8 @@ import intakeRoutes from './intake.routes';
 import usersRoutes from './users.routes';
 import firmRoutes from './firm.routes';
 import supportRoutes from './support.routes';
+import timeRoutes from './time.routes';
+import { clients, conflicts, partiesRouter } from './clients.routes';
 
 const router = express.Router();
 
@@ -28,5 +30,9 @@ router.use('/intake', intakeRoutes);
 router.use('/users', usersRoutes);
 router.use('/firm', firmRoutes);
 router.use('/support', supportRoutes);
+router.use('/time', timeRoutes);
+router.use('/clients', clients);
+router.use('/parties', partiesRouter);
+router.use('/conflicts', conflicts);
 
 export default router;

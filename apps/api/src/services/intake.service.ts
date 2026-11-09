@@ -53,7 +53,7 @@ function toMatterBrief(submission: IntakeSubmission): MatterBrief {
   };
 }
 
-async function nextCaseNumber(): Promise<string> {
+export async function nextCaseNumber(): Promise<string> {
   const year = new Date().getFullYear();
   const sequence = await nextValue(`case_number:${year}`);
   return `${getFirmBrand(currentFirm()).casePrefix}-${year}-${String(sequence).padStart(4, '0')}`;
@@ -82,6 +82,7 @@ export function toMatterCase(row: CaseRow): MatterCase {
     id: row.id,
     submissionId: row.intakeSubmissionId,
     caseNumber: row.caseNumber,
+    title: row.title,
     clientLabel: row.clientLabel,
     practiceArea: row.practiceArea,
     urgency: row.urgency,
@@ -416,14 +417,36 @@ export async function deleteSubmissions(submissionIds: string[]): Promise<string
     .select({ id: cases.id })
     .from(cases)
     .where(inArray(cases.intakeSubmissionId, submissionIds));
-  const caseIds = removedCases.map((row) => row.id);
+  return deleteRecords(
+    submissionIds,
+    removedCases.map((row) => row.id),
+  );
+}
+
+/**
+ * Permanently deletes matters (and their intakes, if any) with everything
+ * attached to them. Returns the ids of the cases removed.
+ */
+export async function deleteMatters(rows: Pick<CaseRow, 'id' | 'intakeSubmissionId'>[]) {
+  return deleteRecords(
+    rows.map((row) => row.intakeSubmissionId).filter((id): id is string => Boolean(id)),
+    rows.map((row) => row.id),
+  );
+}
+
+async function deleteRecords(submissionIds: string[], caseIds: string[]): Promise<string[]> {
   const stored = caseIds.length
     ? await db()
         .select({ firmId: documents.firmId, storageKey: documents.storageKey })
         .from(documents)
         .where(and(inArray(documents.caseId, caseIds), isNotNull(documents.storageKey)))
     : [];
-  await db().delete(submissions).where(inArray(submissions.id, submissionIds));
+  if (caseIds.length) {
+    await db().delete(cases).where(inArray(cases.id, caseIds));
+  }
+  if (submissionIds.length) {
+    await db().delete(submissions).where(inArray(submissions.id, submissionIds));
+  }
   // Document bodies in the object store go once the deletion has committed.
   if (stored.length) {
     afterCommit(async () => {

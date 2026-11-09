@@ -124,7 +124,7 @@ Environment setup:
 - [x] One versioned migration history (Drizzle) replacing the hand-run SQL files
 - [x] Remove all in-memory fallbacks; zod request validation (config validated by `config/env.ts`)
 - [x] Indexes and bounded queries; no whole-table reads (cursor pagination for large lists still to do)
-- [ ] Per-firm sequences for case, client and invoice numbers (gap-free invoices) — per-firm atomic counters done for case numbers and client labels; gap-free invoice numbering with epic 7
+- [x] Per-firm sequences for case, client and invoice numbers (gap-free invoices): per-firm atomic counters; invoice numbers are taken when issuing, in the same transaction
 - [x] Isolation tests across every endpoint (`tenancy.test.ts`, plus a schema guard that fails if a table lacks `firm_id` or RLS)
 
 ### 5.3 Identity and access
@@ -143,10 +143,10 @@ Environment setup:
 - [x] Per-firm retention and full firm data export on exit
 
 ### 5.5 Core practice features
-- [ ] Clients (individuals and entities) and matters, with conflict-of-interest checks
-- [ ] FICA onboarding (KYC documents, risk rating, verification status)
-- [ ] Time recording: timer, manual entries, 6-minute units, fee-earner and matter rates, billable/non-billable, WIP
-- [ ] Billing from time + disbursements, 15% VAT, branded PDFs, email, payments, statements, aging
+- [x] Clients (individuals and entities) and matters, with conflict-of-interest checks (encrypted party register, blind-index search, conflict register with decisions and waivers)
+- [x] FICA onboarding (KYC documents, risk rating, verification status, review dates, optional enforcement before new matters)
+- [x] Time recording: timer, manual entries, 6-minute units, fee-earner and matter rates, billable/non-billable, WIP
+- [x] Billing from time + disbursements, 15% VAT, branded PDFs, email, payments, statements, aging
 - [ ] Calendar: court dates, deadlines, prescription reminders, email notifications
 - [ ] Intake → consent → de-identified triage → matter
 
@@ -206,7 +206,7 @@ Trust accounting and AI research ship behind feature flags to pilots first.
 2. **TypeScript monorepo** — done on `chore/typescript-monorepo-vite`.
 3. **Data layer** — done on `feat/data-layer-drizzle`: Drizzle + PostgreSQL, one migration history, PGlite for dev/tests, zod validation, linked audit chain, race-free numbering, money in cents, email blind index.
 4. **Multi-tenancy** — done on `feat/multi-tenancy`: `firms` table, `firm_id` and forced RLS on every table, `app_tenant` role, host-name resolver, per-firm numbering and audit chains, firm CLI, isolation tests; branding from `firms`.
-5. **Identity** — done on `feat/identity` (except super-admin): invite-only staff, mandatory TOTP MFA with recovery codes, Entra External ID (OIDC + PKCE), lockout, resets, revocable server-side cookie sessions, CSRF origin check, five roles with permissions, matter access and ethical walls in RLS, CSP/HSTS. Platform support access and per-firm Microsoft 365 (Entra ID) sign-in followed in their own PRs.
+5. **Identity** — done on `feat/identity` (except super-admin): invite-only staff, mandatory TOTP MFA with recovery codes, Entra External ID (OIDC + PKCE), lockout, resets, revocable server-side cookie sessions, CSRF origin check, five roles with permissions, matter access and ethical walls in RLS, CSP/HSTS. Platform support access, per-firm Microsoft 365 (Entra ID) sign-in and permission-aware screens (read-only roles see no edit forms) followed in their own PRs.
 6. **Encryption and records** — done on `feat/encryption-records`: per-firm data and index keys wrapped by Azure Key Vault (or a local KEK), rotation, re-encryption and rewrap via `npm run ops`, documents in Blob Storage, daily audit anchors with immutable copies and anchor-aware verification, admin-only POPIA requests, per-firm retention, firm exit export.
 7. **Practice core** — clients/matters, conflicts, FICA, time, invoicing, calendar.
 8. **White-label and onboarding** — firm settings, theming, custom domains, wizard.

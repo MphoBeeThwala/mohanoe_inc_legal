@@ -8,7 +8,6 @@ import type {
   ComplianceRequest,
   ComplianceSummary,
   DocumentRecord,
-  Invoice,
   LedgerEntry,
   MatterCase,
   NotificationRecord,
@@ -16,23 +15,40 @@ import type {
   ReportSnapshot,
   UpcomingItem,
 } from '@ahava88/shared';
-import { ROLE_LABELS, STAFF_ROLES } from '@ahava88/shared';
+import { ROLE_LABELS, STAFF_ROLES, hasPermission, type Permission } from '@ahava88/shared';
 import type { Notice } from './DismissibleNotice';
 import DismissibleNotice from './DismissibleNotice';
+import BillingPanel, { rand } from './BillingPanel';
+
+const ALL_TABS: Array<[OpsTab, string, Permission]> = [
+  ['documents', 'Documents', 'documents.read'],
+  ['billing', 'Billing', 'billing.read'],
+  ['calendar', 'Calendar', 'calendar.read'],
+  ['notifications', 'Notifications', 'notifications.read'],
+  ['reports', 'Reports', 'reports.read'],
+  ['compliance', 'Compliance', 'compliance.read'],
+  ['audit', 'Audit', 'audit.read'],
+];
+
+/** The permission each list endpoint needs, so we only ask for what we may see. */
+const READ_PERMISSION: Record<string, Permission> = {
+  '/documents': 'documents.read',
+  '/billing/summary': 'billing.read',
+  '/billing/invoices': 'billing.read',
+  '/billing/ledger': 'billing.read',
+  '/calendar/upcoming': 'calendar.read',
+  '/audit': 'audit.read',
+  '/notifications': 'notifications.read',
+  '/reports': 'reports.read',
+  '/compliance/summary': 'compliance.read',
+  '/compliance/requests': 'compliance.read',
+};
 
 const initialDocumentForm = {
   title: '',
   documentType: 'correspondence',
   body: '',
   tags: '',
-};
-
-const initialInvoiceForm = {
-  subject: '',
-  invoiceNumber: '',
-  lineDescription: '',
-  lineAmount: '',
-  currency: 'ZAR',
 };
 
 const initialLedgerForm = {
@@ -101,10 +117,13 @@ function OperationsHub({
   currentUser,
   onChanged,
 }: OperationsHubProps) {
-  const [tab, setTab] = useState<OpsTab>('documents');
+  // Show only what the signed-in role may use; the API enforces the same rules.
+  const can = (permission: Permission) => hasPermission(currentUser?.role, permission);
+  const [tab, setTab] = useState<OpsTab>(
+    () => ALL_TABS.find(([, , permission]) => can(permission))?.[0] ?? 'documents',
+  );
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
-  const [billingInvoices, setBillingInvoices] = useState<Invoice[]>([]);
   const [billingLedger, setBillingLedger] = useState<LedgerEntry[]>([]);
   const [calendar, setCalendar] = useState<UpcomingItem[]>([]);
   const [audit, setAudit] = useState<AuditEventRecord[]>([]);
@@ -117,7 +136,6 @@ function OperationsHub({
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [documentForm, setDocumentForm] = useState(initialDocumentForm);
-  const [invoiceForm, setInvoiceForm] = useState(initialInvoiceForm);
   const [ledgerForm, setLedgerForm] = useState(initialLedgerForm);
   const [eventForm, setEventForm] = useState(initialEventForm);
   const [notificationForm, setNotificationForm] = useState(initialNotificationForm);
@@ -130,7 +148,8 @@ function OperationsHub({
     [cases, selectedCaseId],
   );
 
-  const loadBatch = async (paths: string[]): Promise<BatchResult[]> => {
+  const loadBatch = async (wanted: string[]): Promise<BatchResult[]> => {
+    const paths = wanted.filter((path) => can(READ_PERMISSION[path] ?? 'matters.read'));
     const results = await Promise.allSettled(paths.map((path) => api.get(path)));
     return results.map((result, index) => ({
       path: paths[index],
@@ -144,7 +163,6 @@ function OperationsHub({
     const batchOne = await loadBatch([
       '/documents',
       '/billing/summary',
-      '/billing/invoices',
       '/billing/ledger',
       '/calendar/upcoming',
     ]);
@@ -164,8 +182,6 @@ function OperationsHub({
     if (byPath['/documents']?.ok) setDocuments(byPath['/documents'].data as DocumentRecord[]);
     if (byPath['/billing/summary']?.ok)
       setBillingSummary(byPath['/billing/summary'].data as BillingSummary);
-    if (byPath['/billing/invoices']?.ok)
-      setBillingInvoices(byPath['/billing/invoices'].data as Invoice[]);
     if (byPath['/billing/ledger']?.ok)
       setBillingLedger(byPath['/billing/ledger'].data as LedgerEntry[]);
     if (byPath['/calendar/upcoming']?.ok)
@@ -179,7 +195,7 @@ function OperationsHub({
     if (byPath['/compliance/requests']?.ok)
       setComplianceRequests(byPath['/compliance/requests'].data as ComplianceRequest[]);
 
-    if (failed.length === responses.length) {
+    if (responses.length && failed.length === responses.length) {
       throw new Error('All operations endpoints failed');
     }
 
@@ -230,41 +246,6 @@ function OperationsHub({
       setNotice({
         tone: 'error',
         message: apiErrorMessage(error, 'Could not save document.'),
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const submitInvoice = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!activeCaseId || !invoiceForm.subject || !invoiceForm.lineAmount) {
-      return;
-    }
-
-    setBusy(true);
-    try {
-      await api.post('/billing/invoices', {
-        caseId: activeCaseId,
-        subject: invoiceForm.subject,
-        invoiceNumber: invoiceForm.invoiceNumber,
-        lineItems: [
-          {
-            description: invoiceForm.lineDescription || invoiceForm.subject,
-            amount: invoiceForm.lineAmount,
-            quantity: 1,
-            rate: invoiceForm.lineAmount,
-          },
-        ],
-        currency: invoiceForm.currency,
-      });
-      setInvoiceForm(initialInvoiceForm);
-      await Promise.all([loadData(), onChanged?.()]);
-      setNotice({ tone: 'success', message: 'Invoice issued.' });
-    } catch (error) {
-      setNotice({
-        tone: 'error',
-        message: apiErrorMessage(error, 'Could not issue invoice.'),
       });
     } finally {
       setBusy(false);
@@ -468,15 +449,7 @@ function OperationsHub({
     }
   };
 
-  const tabs: Array<[OpsTab, string]> = [
-    ['documents', 'Documents'],
-    ['billing', 'Billing'],
-    ['calendar', 'Calendar'],
-    ['notifications', 'Notifications'],
-    ['reports', 'Reports'],
-    ['compliance', 'Compliance'],
-    ['audit', 'Audit'],
-  ];
+  const tabs = ALL_TABS.filter(([, , permission]) => can(permission));
 
   return (
     <div className="panel">
@@ -509,57 +482,59 @@ function OperationsHub({
 
       {!loading && tab === 'documents' ? (
         <section className="ops-section">
-          <form className="stack-form" onSubmit={submitDocument}>
-            <input
-              value={documentForm.title}
-              onChange={(event) =>
-                setDocumentForm((current) => ({
-                  ...current,
-                  title: event.target.value,
-                }))
-              }
-              placeholder="Pleadings cover note"
-            />
-            <select
-              value={documentForm.documentType}
-              onChange={(event) =>
-                setDocumentForm((current) => ({
-                  ...current,
-                  documentType: event.target.value,
-                }))
-              }
-            >
-              <option value="correspondence">Correspondence</option>
-              <option value="pleading">Pleading</option>
-              <option value="memo">Memo</option>
-              <option value="agreement">Agreement</option>
-              <option value="template">Template</option>
-            </select>
-            <textarea
-              rows={4}
-              value={documentForm.body}
-              onChange={(event) =>
-                setDocumentForm((current) => ({
-                  ...current,
-                  body: event.target.value,
-                }))
-              }
-              placeholder="Document body"
-            />
-            <input
-              value={documentForm.tags}
-              onChange={(event) =>
-                setDocumentForm((current) => ({
-                  ...current,
-                  tags: event.target.value,
-                }))
-              }
-              placeholder="Tags, comma separated"
-            />
-            <button className="secondary-button" disabled={busy}>
-              Save document
-            </button>
-          </form>
+          {can('documents.write') ? (
+            <form className="stack-form" onSubmit={submitDocument}>
+              <input
+                value={documentForm.title}
+                onChange={(event) =>
+                  setDocumentForm((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
+                placeholder="Pleadings cover note"
+              />
+              <select
+                value={documentForm.documentType}
+                onChange={(event) =>
+                  setDocumentForm((current) => ({
+                    ...current,
+                    documentType: event.target.value,
+                  }))
+                }
+              >
+                <option value="correspondence">Correspondence</option>
+                <option value="pleading">Pleading</option>
+                <option value="memo">Memo</option>
+                <option value="agreement">Agreement</option>
+                <option value="template">Template</option>
+              </select>
+              <textarea
+                rows={4}
+                value={documentForm.body}
+                onChange={(event) =>
+                  setDocumentForm((current) => ({
+                    ...current,
+                    body: event.target.value,
+                  }))
+                }
+                placeholder="Document body"
+              />
+              <input
+                value={documentForm.tags}
+                onChange={(event) =>
+                  setDocumentForm((current) => ({
+                    ...current,
+                    tags: event.target.value,
+                  }))
+                }
+                placeholder="Tags, comma separated"
+              />
+              <button className="secondary-button" disabled={busy}>
+                Save document
+              </button>
+            </form>
+          ) : null}
 
           <div className="mini-list">
             {documents.length ? (
@@ -589,72 +564,18 @@ function OperationsHub({
 
       {!loading && tab === 'billing' ? (
         <section className="ops-section">
+          <BillingPanel
+            currentUser={currentUser}
+            cases={cases}
+            selectedCaseId={activeCaseId || null}
+            onChanged={onChanged}
+          />
+
+          <h3>Trust and operating ledger</h3>
           <div className="mini-grid">
-            <Stat label="Invoices" value={billingSummary?.invoices ?? 0} />
-            <Stat label="Outstanding" value={billingSummary?.outstanding ?? 0} />
-            <Stat label="Trust" value={billingSummary?.trustBalance ?? 0} />
-            <Stat label="Operating" value={billingSummary?.operatingBalance ?? 0} />
+            <Stat label="Trust" value={rand(billingSummary?.trustBalance ?? 0)} />
+            <Stat label="Operating" value={rand(billingSummary?.operatingBalance ?? 0)} />
           </div>
-
-          <form className="stack-form" onSubmit={submitInvoice}>
-            <input
-              value={invoiceForm.subject}
-              onChange={(event) =>
-                setInvoiceForm((current) => ({
-                  ...current,
-                  subject: event.target.value,
-                }))
-              }
-              placeholder="Consultation and drafting"
-            />
-            <input
-              value={invoiceForm.invoiceNumber}
-              onChange={(event) =>
-                setInvoiceForm((current) => ({
-                  ...current,
-                  invoiceNumber: event.target.value,
-                }))
-              }
-              placeholder="INV-2026-001"
-            />
-            <input
-              value={invoiceForm.lineDescription}
-              onChange={(event) =>
-                setInvoiceForm((current) => ({
-                  ...current,
-                  lineDescription: event.target.value,
-                }))
-              }
-              placeholder="Line item description"
-            />
-            <input
-              type="number"
-              value={invoiceForm.lineAmount}
-              onChange={(event) =>
-                setInvoiceForm((current) => ({
-                  ...current,
-                  lineAmount: event.target.value,
-                }))
-              }
-              placeholder="Amount"
-            />
-            <button className="secondary-button" disabled={busy}>
-              Issue invoice
-            </button>
-          </form>
-
-          <div className="mini-list">
-            {billingInvoices.slice(0, 4).map((item) => (
-              <div key={item.id} className="mini-item">
-                <div>
-                  <strong>{item.number}</strong>
-                  <div className="muted">{item.subject}</div>
-                </div>
-                <div>{item.total}</div>
-              </div>
-            ))}
-          </div>
-
           <div className="mini-list">
             {billingLedger.slice(0, 4).map((item) => (
               <div key={item.id} className="mini-item">
@@ -667,134 +588,138 @@ function OperationsHub({
             ))}
           </div>
 
-          <form className="stack-form" onSubmit={submitLedger}>
-            <select
-              value={ledgerForm.entryType}
-              onChange={(event) =>
-                setLedgerForm((current) => ({
-                  ...current,
-                  entryType: event.target.value,
-                }))
-              }
-            >
-              <option value="payment">Payment</option>
-              <option value="trust_deposit">Trust deposit</option>
-              <option value="trust_withdrawal">Trust withdrawal</option>
-              <option value="fee_transfer">Fee transfer</option>
-            </select>
-            <select
-              value={ledgerForm.account}
-              onChange={(event) =>
-                setLedgerForm((current) => ({
-                  ...current,
-                  account: event.target.value,
-                }))
-              }
-            >
-              <option value="trust">Trust</option>
-              <option value="operating">Operating</option>
-            </select>
-            <input
-              type="number"
-              value={ledgerForm.amount}
-              onChange={(event) =>
-                setLedgerForm((current) => ({
-                  ...current,
-                  amount: event.target.value,
-                }))
-              }
-              placeholder="Amount"
-            />
-            <input
-              value={ledgerForm.reference}
-              onChange={(event) =>
-                setLedgerForm((current) => ({
-                  ...current,
-                  reference: event.target.value,
-                }))
-              }
-              placeholder="Reference"
-            />
-            <textarea
-              rows={3}
-              value={ledgerForm.notes}
-              onChange={(event) =>
-                setLedgerForm((current) => ({
-                  ...current,
-                  notes: event.target.value,
-                }))
-              }
-              placeholder="Notes"
-            />
-            <button className="secondary-button" disabled={busy}>
-              Record ledger entry
-            </button>
-          </form>
+          {can('billing.write') ? (
+            <form className="stack-form" onSubmit={submitLedger}>
+              <select
+                value={ledgerForm.entryType}
+                onChange={(event) =>
+                  setLedgerForm((current) => ({
+                    ...current,
+                    entryType: event.target.value,
+                  }))
+                }
+              >
+                <option value="payment">Payment</option>
+                <option value="trust_deposit">Trust deposit</option>
+                <option value="trust_withdrawal">Trust withdrawal</option>
+                <option value="fee_transfer">Fee transfer</option>
+              </select>
+              <select
+                value={ledgerForm.account}
+                onChange={(event) =>
+                  setLedgerForm((current) => ({
+                    ...current,
+                    account: event.target.value,
+                  }))
+                }
+              >
+                <option value="trust">Trust</option>
+                <option value="operating">Operating</option>
+              </select>
+              <input
+                type="number"
+                value={ledgerForm.amount}
+                onChange={(event) =>
+                  setLedgerForm((current) => ({
+                    ...current,
+                    amount: event.target.value,
+                  }))
+                }
+                placeholder="Amount"
+              />
+              <input
+                value={ledgerForm.reference}
+                onChange={(event) =>
+                  setLedgerForm((current) => ({
+                    ...current,
+                    reference: event.target.value,
+                  }))
+                }
+                placeholder="Reference"
+              />
+              <textarea
+                rows={3}
+                value={ledgerForm.notes}
+                onChange={(event) =>
+                  setLedgerForm((current) => ({
+                    ...current,
+                    notes: event.target.value,
+                  }))
+                }
+                placeholder="Notes"
+              />
+              <button className="secondary-button" disabled={busy}>
+                Record ledger entry
+              </button>
+            </form>
+          ) : null}
         </section>
       ) : null}
 
       {!loading && tab === 'calendar' ? (
         <section className="ops-section">
-          <form className="stack-form" onSubmit={submitEvent}>
-            <input
-              value={eventForm.title}
-              onChange={(event) =>
-                setEventForm((current) => ({
-                  ...current,
-                  title: event.target.value,
-                }))
-              }
-              placeholder="High court appearance"
-            />
-            <input
-              type="datetime-local"
-              value={eventForm.startsAt}
-              onChange={(event) =>
-                setEventForm((current) => ({
-                  ...current,
-                  startsAt: event.target.value,
-                }))
-              }
-            />
-            <select
-              value={eventForm.eventType}
-              onChange={(event) =>
-                setEventForm((current) => ({
-                  ...current,
-                  eventType: event.target.value,
-                }))
-              }
-            >
-              <option value="deadline">Deadline</option>
-              <option value="hearing">Hearing</option>
-              <option value="client_meeting">Client meeting</option>
-              <option value="internal">Internal</option>
-            </select>
-            <input
-              value={eventForm.location}
-              onChange={(event) =>
-                setEventForm((current) => ({
-                  ...current,
-                  location: event.target.value,
-                }))
-              }
-              placeholder="Courtroom / virtual link"
-            />
-            <textarea
-              rows={3}
-              value={eventForm.notes}
-              onChange={(event) =>
-                setEventForm((current) => ({
-                  ...current,
-                  notes: event.target.value,
-                }))
-              }
-              placeholder="Notes"
-            />
-            <button className="secondary-button" disabled={busy}>
-              Add event
-            </button>
-          </form>
+          {can('calendar.write') ? (
+            <form className="stack-form" onSubmit={submitEvent}>
+              <input
+                value={eventForm.title}
+                onChange={(event) =>
+                  setEventForm((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
+                placeholder="High court appearance"
+              />
+              <input
+                type="datetime-local"
+                value={eventForm.startsAt}
+                onChange={(event) =>
+                  setEventForm((current) => ({
+                    ...current,
+                    startsAt: event.target.value,
+                  }))
+                }
+              />
+              <select
+                value={eventForm.eventType}
+                onChange={(event) =>
+                  setEventForm((current) => ({
+                    ...current,
+                    eventType: event.target.value,
+                  }))
+                }
+              >
+                <option value="deadline">Deadline</option>
+                <option value="hearing">Hearing</option>
+                <option value="client_meeting">Client meeting</option>
+                <option value="internal">Internal</option>
+              </select>
+              <input
+                value={eventForm.location}
+                onChange={(event) =>
+                  setEventForm((current) => ({
+                    ...current,
+                    location: event.target.value,
+                  }))
+                }
+                placeholder="Courtroom / virtual link"
+              />
+              <textarea
+                rows={3}
+                value={eventForm.notes}
+                onChange={(event) =>
+                  setEventForm((current) => ({
+                    ...current,
+                    notes: event.target.value,
+                  }))
+                }
+                placeholder="Notes"
+              />
+              <button className="secondary-button" disabled={busy}>
+                Add event
+              </button>
+            </form>
+          ) : null}
 
           <div className="mini-list">
             {calendar.length ? (
@@ -822,75 +747,77 @@ function OperationsHub({
             <Stat label="Total" value={notifications.length} />
           </div>
 
-          <form className="stack-form" onSubmit={submitNotification}>
-            <input
-              value={notificationForm.title}
-              onChange={(event) =>
-                setNotificationForm((current) => ({
-                  ...current,
-                  title: event.target.value,
-                }))
-              }
-              placeholder="Urgent hearing reminder"
-            />
-            <textarea
-              rows={3}
-              value={notificationForm.body}
-              onChange={(event) =>
-                setNotificationForm((current) => ({
-                  ...current,
-                  body: event.target.value,
-                }))
-              }
-              placeholder="Notification body"
-            />
-            <select
-              value={notificationForm.category}
-              onChange={(event) =>
-                setNotificationForm((current) => ({
-                  ...current,
-                  category: event.target.value,
-                }))
-              }
-            >
-              <option value="general">General</option>
-              <option value="deadline">Deadline</option>
-              <option value="billing">Billing</option>
-              <option value="case_update">Case update</option>
-            </select>
-            <select
-              value={notificationForm.priority}
-              onChange={(event) =>
-                setNotificationForm((current) => ({
-                  ...current,
-                  priority: event.target.value,
-                }))
-              }
-            >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </select>
-            <select
-              value={notificationForm.recipientRole}
-              onChange={(event) =>
-                setNotificationForm((current) => ({
-                  ...current,
-                  recipientRole: event.target.value,
-                }))
-              }
-            >
-              {STAFF_ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {ROLE_LABELS[role]}
-                </option>
-              ))}
-            </select>
-            <button className="secondary-button" disabled={busy}>
-              Send notification
-            </button>
-          </form>
+          {can('notifications.write') ? (
+            <form className="stack-form" onSubmit={submitNotification}>
+              <input
+                value={notificationForm.title}
+                onChange={(event) =>
+                  setNotificationForm((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
+                placeholder="Urgent hearing reminder"
+              />
+              <textarea
+                rows={3}
+                value={notificationForm.body}
+                onChange={(event) =>
+                  setNotificationForm((current) => ({
+                    ...current,
+                    body: event.target.value,
+                  }))
+                }
+                placeholder="Notification body"
+              />
+              <select
+                value={notificationForm.category}
+                onChange={(event) =>
+                  setNotificationForm((current) => ({
+                    ...current,
+                    category: event.target.value,
+                  }))
+                }
+              >
+                <option value="general">General</option>
+                <option value="deadline">Deadline</option>
+                <option value="billing">Billing</option>
+                <option value="case_update">Case update</option>
+              </select>
+              <select
+                value={notificationForm.priority}
+                onChange={(event) =>
+                  setNotificationForm((current) => ({
+                    ...current,
+                    priority: event.target.value,
+                  }))
+                }
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+              <select
+                value={notificationForm.recipientRole}
+                onChange={(event) =>
+                  setNotificationForm((current) => ({
+                    ...current,
+                    recipientRole: event.target.value,
+                  }))
+                }
+              >
+                {STAFF_ROLES.map((role) => (
+                  <option key={role} value={role}>
+                    {ROLE_LABELS[role]}
+                  </option>
+                ))}
+              </select>
+              <button className="secondary-button" disabled={busy}>
+                Send notification
+              </button>
+            </form>
+          ) : null}
 
           <div className="mini-list">
             {notifications.slice(0, 6).map((item) => (
@@ -923,34 +850,36 @@ function OperationsHub({
             />
           </div>
 
-          <form className="stack-form" onSubmit={submitReport}>
-            <input
-              value={reportForm.title}
-              onChange={(event) =>
-                setReportForm((current) => ({
-                  ...current,
-                  title: event.target.value,
-                }))
-              }
-              placeholder="Practice snapshot"
-            />
-            <select
-              value={reportForm.reportType}
-              onChange={(event) =>
-                setReportForm((current) => ({
-                  ...current,
-                  reportType: event.target.value,
-                }))
-              }
-            >
-              <option value="dashboard">Dashboard</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-            <button className="secondary-button" disabled={busy}>
-              Generate report
-            </button>
-          </form>
+          {can('reports.read') ? (
+            <form className="stack-form" onSubmit={submitReport}>
+              <input
+                value={reportForm.title}
+                onChange={(event) =>
+                  setReportForm((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
+                placeholder="Practice snapshot"
+              />
+              <select
+                value={reportForm.reportType}
+                onChange={(event) =>
+                  setReportForm((current) => ({
+                    ...current,
+                    reportType: event.target.value,
+                  }))
+                }
+              >
+                <option value="dashboard">Dashboard</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+              <button className="secondary-button" disabled={busy}>
+                Generate report
+              </button>
+            </form>
+          ) : null}
 
           <div className="mini-list">
             {reports.slice(0, 5).map((item) => (
@@ -975,97 +904,101 @@ function OperationsHub({
             <Stat label="Eligible" value={complianceSummary?.eligibleForRetention ?? 0} />
           </div>
 
-          <form className="stack-form" onSubmit={submitComplianceRequest}>
-            <select
-              value={complianceForm.requestType}
-              onChange={(event) =>
-                setComplianceForm((current) => ({
-                  ...current,
-                  requestType: event.target.value,
-                }))
-              }
-            >
-              <option value="access">Access</option>
-              <option value="correction">Correction</option>
-              <option value="deletion">Deletion</option>
-              <option value="export">Export</option>
-              <option value="objection">Objection</option>
-            </select>
-            <input
-              value={complianceForm.subjectName}
-              onChange={(event) =>
-                setComplianceForm((current) => ({
-                  ...current,
-                  subjectName: event.target.value,
-                }))
-              }
-              placeholder="Subject name"
-            />
-            <input
-              type="email"
-              value={complianceForm.subjectEmail}
-              onChange={(event) =>
-                setComplianceForm((current) => ({
-                  ...current,
-                  subjectEmail: event.target.value,
-                }))
-              }
-              placeholder="subject@example.com"
-            />
-            <input
-              value={complianceForm.caseRef}
-              onChange={(event) =>
-                setComplianceForm((current) => ({
-                  ...current,
-                  caseRef: event.target.value,
-                }))
-              }
-              placeholder="Case number or submission id"
-            />
-            <textarea
-              rows={3}
-              value={complianceForm.description}
-              onChange={(event) =>
-                setComplianceForm((current) => ({
-                  ...current,
-                  description: event.target.value,
-                }))
-              }
-              placeholder="Request details"
-            />
-            <button className="secondary-button" disabled={busy}>
-              Log compliance request
-            </button>
-          </form>
+          {can('compliance.write') ? (
+            <form className="stack-form" onSubmit={submitComplianceRequest}>
+              <select
+                value={complianceForm.requestType}
+                onChange={(event) =>
+                  setComplianceForm((current) => ({
+                    ...current,
+                    requestType: event.target.value,
+                  }))
+                }
+              >
+                <option value="access">Access</option>
+                <option value="correction">Correction</option>
+                <option value="deletion">Deletion</option>
+                <option value="export">Export</option>
+                <option value="objection">Objection</option>
+              </select>
+              <input
+                value={complianceForm.subjectName}
+                onChange={(event) =>
+                  setComplianceForm((current) => ({
+                    ...current,
+                    subjectName: event.target.value,
+                  }))
+                }
+                placeholder="Subject name"
+              />
+              <input
+                type="email"
+                value={complianceForm.subjectEmail}
+                onChange={(event) =>
+                  setComplianceForm((current) => ({
+                    ...current,
+                    subjectEmail: event.target.value,
+                  }))
+                }
+                placeholder="subject@example.com"
+              />
+              <input
+                value={complianceForm.caseRef}
+                onChange={(event) =>
+                  setComplianceForm((current) => ({
+                    ...current,
+                    caseRef: event.target.value,
+                  }))
+                }
+                placeholder="Case number or submission id"
+              />
+              <textarea
+                rows={3}
+                value={complianceForm.description}
+                onChange={(event) =>
+                  setComplianceForm((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+                placeholder="Request details"
+              />
+              <button className="secondary-button" disabled={busy}>
+                Log compliance request
+              </button>
+            </form>
+          ) : null}
 
-          <form className="stack-form" onSubmit={submitExportPreview}>
-            <input
-              type="email"
-              value={exportForm.subjectEmail}
-              onChange={(event) =>
-                setExportForm((current) => ({
-                  ...current,
-                  subjectEmail: event.target.value,
-                }))
-              }
-              placeholder="Export subject email"
-            />
-            <input
-              value={exportForm.caseRef}
-              onChange={(event) =>
-                setExportForm((current) => ({
-                  ...current,
-                  caseRef: event.target.value,
-                }))
-              }
-              placeholder="Case ref for export"
-            />
-            <button className="secondary-button" disabled={busy}>
-              Generate export preview
-            </button>
-          </form>
+          {can('compliance.admin') ? (
+            <form className="stack-form" onSubmit={submitExportPreview}>
+              <input
+                type="email"
+                value={exportForm.subjectEmail}
+                onChange={(event) =>
+                  setExportForm((current) => ({
+                    ...current,
+                    subjectEmail: event.target.value,
+                  }))
+                }
+                placeholder="Export subject email"
+              />
+              <input
+                value={exportForm.caseRef}
+                onChange={(event) =>
+                  setExportForm((current) => ({
+                    ...current,
+                    caseRef: event.target.value,
+                  }))
+                }
+                placeholder="Case ref for export"
+              />
+              <button className="secondary-button" disabled={busy}>
+                Generate export preview
+              </button>
+            </form>
+          ) : null}
 
-          {currentUser?.permissions.includes('compliance.admin') ? (
+          {can('compliance.admin') ? (
             <button
               type="button"
               className="secondary-button"
@@ -1098,14 +1031,16 @@ function OperationsHub({
                     {item.subjectName} - {item.status}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="link-button"
-                  onClick={() => fulfillComplianceRequest(item.id)}
-                  disabled={busy || item.status === 'fulfilled'}
-                >
-                  {item.status === 'fulfilled' ? 'Fulfilled' : 'Fulfill'}
-                </button>
+                {can('compliance.admin') ? (
+                  <button
+                    type="button"
+                    className="link-button"
+                    onClick={() => fulfillComplianceRequest(item.id)}
+                    disabled={busy || item.status === 'fulfilled'}
+                  >
+                    {item.status === 'fulfilled' ? 'Fulfilled' : 'Fulfill'}
+                  </button>
+                ) : null}
               </div>
             ))}
           </div>

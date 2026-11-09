@@ -83,6 +83,28 @@ function RecordsPanel() {
         sweep permanently deletes closed matters and everything attached to them.
       </p>
 
+      <label className="checkbox-row">
+        <input
+          type="checkbox"
+          checked={Boolean(settings?.ficaEnforced)}
+          disabled={busy || !settings}
+          onChange={async (event) => {
+            setBusy(true);
+            try {
+              const { data } = await api.patch<FirmSettings>('/firm/settings', {
+                ficaEnforced: event.target.checked,
+              });
+              setSettings(data);
+            } catch (error) {
+              setNotice({ tone: 'error', message: apiErrorMessage(error, 'Could not save.') });
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+        Open new matters only for FICA-verified clients
+      </label>
+
       <div className="action-row">
         <button type="button" className="secondary-button" disabled={busy} onClick={verify}>
           Verify audit trail

@@ -15,6 +15,7 @@ import {
   type IntakeSummary,
   type MatterCase,
   type MeResponse,
+  type Permission,
   type PublicBranding,
   type PublicSubmission,
   type PublicUser,
@@ -26,6 +27,8 @@ import ResetPassword from './auth/ResetPassword';
 import StaffAdmin from './components/StaffAdmin';
 import AccountPanel from './components/AccountPanel';
 import RecordsPanel from './components/RecordsPanel';
+import ClientsPanel from './components/ClientsPanel';
+import TimePanel from './components/TimePanel';
 import SignInSettingsPanel from './components/SignInSettingsPanel';
 import SupportAccessPanel from './components/SupportAccessPanel';
 import SupportSignIn from './auth/SupportSignIn';
@@ -56,12 +59,14 @@ const sampleMatter: Omit<IntakeSubmissionInput, 'consentToAi' | 'consentToStorag
   preferredLanguage: 'English',
 };
 
-type SectionId = 'overview' | 'intake' | 'cases' | 'operations' | 'account';
+type SectionId = 'overview' | 'intake' | 'clients' | 'cases' | 'time' | 'operations' | 'account';
 
-const NAV_SECTIONS: Array<{ id: SectionId; label: string }> = [
+const NAV_SECTIONS: Array<{ id: SectionId; label: string; permission?: Permission }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'intake', label: 'Intake' },
+  { id: 'clients', label: 'Clients', permission: 'clients.read' },
   { id: 'cases', label: 'Cases' },
+  { id: 'time', label: 'Time', permission: 'time.read' },
   { id: 'operations', label: 'Operations' },
   { id: 'account', label: 'Account & team' },
 ];
@@ -222,6 +227,7 @@ function App() {
       const { data } = await api.get<MeResponse>('/auth/me');
       setCurrentUser(data.user);
       setSessionInfo(data.session);
+      setAuthNotice({ tone: 'info', message: '' });
       await loadWorkspace(data.user);
     } catch (error) {
       if (apiStatus(error) !== 401) {
@@ -468,7 +474,9 @@ function App() {
       <nav className="workspace-nav" aria-label="Workspace sections">
         <div className="workspace-nav-inner">
           <div className="nav-links">
-            {NAV_SECTIONS.map(({ id, label }) => (
+            {NAV_SECTIONS.filter(
+              ({ permission }) => !permission || currentUser.permissions.includes(permission),
+            ).map(({ id, label }) => (
               <button
                 key={id}
                 type="button"
@@ -568,14 +576,39 @@ function App() {
                   </button>
                 </div>
 
-                <IntakeForm
-                  onSubmit={handleSubmit}
-                  busy={busy}
-                  sampleMatter={sampleMatter}
-                  onGoToCases={() => scrollToSection('cases')}
-                />
+                {currentUser.permissions.includes('intake.write') ? (
+                  <IntakeForm
+                    onSubmit={handleSubmit}
+                    busy={busy}
+                    sampleMatter={sampleMatter}
+                    onGoToCases={() => scrollToSection('cases')}
+                  />
+                ) : (
+                  <p className="field-hint">Your role can view matters but not take new intakes.</p>
+                )}
               </div>
             </section>
+
+            {currentUser.permissions.includes('clients.read') ? (
+              <section
+                id="section-clients"
+                className="dashboard-section"
+                data-section="clients"
+                ref={(node) => {
+                  sectionRefs.current.clients = node;
+                }}
+              >
+                <ErrorBoundary label="Clients">
+                  <ClientsPanel
+                    currentUser={currentUser}
+                    onMatterOpened={(matter) => {
+                      loadWorkspace().catch(() => undefined);
+                      handleSelectCase(matter);
+                    }}
+                  />
+                </ErrorBoundary>
+              </section>
+            ) : null}
 
             <section
               id="section-cases"
@@ -599,22 +632,46 @@ function App() {
                 />
               </div>
             </section>
+
+            {currentUser.permissions.includes('time.read') ? (
+              <section
+                id="section-time"
+                className="dashboard-section"
+                data-section="time"
+                ref={(node) => {
+                  sectionRefs.current.time = node;
+                }}
+              >
+                <ErrorBoundary label="Time">
+                  <TimePanel
+                    currentUser={currentUser}
+                    cases={cases}
+                    selectedCaseId={selectedCaseId}
+                  />
+                </ErrorBoundary>
+              </section>
+            ) : null}
           </div>
 
           <aside className="secondary-column">
-            <ErrorBoundary label="Assessment">
-              <AssessmentCard
-                matter={selectedMatter}
-                onGoToIntake={() => scrollToSection('intake')}
-                onGoToCases={() => scrollToSection('cases')}
-              />
-            </ErrorBoundary>
+            {selectedMatter &&
+            'submissionId' in selectedMatter &&
+            selectedMatter.submissionId === null ? null : (
+              <ErrorBoundary label="Assessment">
+                <AssessmentCard
+                  matter={selectedMatter}
+                  onGoToIntake={() => scrollToSection('intake')}
+                  onGoToCases={() => scrollToSection('cases')}
+                />
+              </ErrorBoundary>
+            )}
 
             <CaseWorkspace
               api={api}
               selectedCaseId={selectedCaseId}
               onSelectCase={handleSelectCase}
               onChanged={loadWorkspace}
+              canEdit={currentUser.permissions.includes('matters.write')}
             />
 
             <section
