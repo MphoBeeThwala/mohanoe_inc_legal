@@ -8,6 +8,8 @@
 //
 //   npm run firm -w apps/api -- invite --slug nkosi --email it@nkosilaw.co.za \
 //       --name "IT Admin"
+//   npm run firm -w apps/api -- export --slug nkosi --out nkosi-export.json
+//       (full data export, decrypted, for a firm leaving the platform)
 //
 // Uses DATABASE_URL (or local PGlite) like the server, with the same secrets.
 // Run `npm run build` first. --admin-email / invite print an invitation link
@@ -15,7 +17,9 @@
 // their own password and authenticator app when they accept it.
 
 import '../load-env';
+import { writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
+import { exportFirm } from '../services/firm-export.service';
 import { closeDb, initDb } from '../db/client';
 import { createFirm, findFirmBySlug, inviteFirmAdmin, listFirms } from '../services/firm.service';
 import type { FirmRow } from '../db/schema';
@@ -103,8 +107,31 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === 'export') {
+    const { values } = parseArgs({
+      args: rest,
+      options: { slug: { type: 'string' }, out: { type: 'string' } },
+    });
+    if (!values.slug || !values.out) {
+      throw new Error('export needs --slug and --out');
+    }
+    const firm = await findFirmBySlug(values.slug);
+    if (!firm) {
+      throw new Error(`No firm with slug ${values.slug}`);
+    }
+    const data = await exportFirm(firm);
+    // Contains decrypted personal information: owner-only permissions.
+    writeFileSync(values.out, JSON.stringify(data, null, 2), { mode: 0o600, flag: 'wx' });
+    const counts = Object.entries(data.tables)
+      .map(([name, rows]) => `${name}=${rows.length}`)
+      .join(' ');
+    console.log(`Exported ${firm.slug} to ${values.out}: ${counts}`);
+    console.log('The file contains decrypted client data: transfer it securely, then delete it.');
+    return;
+  }
+
   throw new Error(
-    'Usage: firm list | firm create --slug <slug> --name <legal name> [options] | firm invite --slug <slug> --email <email> [--name <name>]',
+    'Usage: firm list | firm create --slug <slug> --name <legal name> [options] | firm invite --slug <slug> --email <email> [--name <name>] | firm export --slug <slug> --out <file>',
   );
 }
 

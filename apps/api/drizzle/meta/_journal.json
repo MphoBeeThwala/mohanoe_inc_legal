@@ -22,6 +22,27 @@
       "when": 1794226874199,
       "tag": "0002_identity_and_matter_access",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794230696174,
+      "tag": "0003_encryption_and_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794231187742,
+      "tag": "0004_support_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794231651591,
+      "tag": "0005_firm_sso",
+      "breakpoints": true
     }
   ]
 }

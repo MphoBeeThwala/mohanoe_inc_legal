@@ -10,6 +10,8 @@ import notificationsRoutes from './notifications.routes';
 import reportsRoutes from './reports.routes';
 import intakeRoutes from './intake.routes';
 import usersRoutes from './users.routes';
+import firmRoutes from './firm.routes';
+import supportRoutes from './support.routes';
 
 const router = express.Router();
 
@@ -24,5 +26,7 @@ router.use('/notifications', notificationsRoutes);
 router.use('/reports', reportsRoutes);
 router.use('/intake', intakeRoutes);
 router.use('/users', usersRoutes);
+router.use('/firm', firmRoutes);
+router.use('/support', supportRoutes);
 
 export default router;

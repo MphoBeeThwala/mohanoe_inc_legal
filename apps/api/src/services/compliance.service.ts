@@ -38,6 +38,7 @@ import { ensureStringArray } from './ai.service';
 import * as intakeService from './intake.service';
 import * as notificationsService from './notifications.service';
 import * as auditService from './audit.service';
+import { currentFirm } from '../db/tenant-context';
 
 /** Statuses that mean a matter is finished and its retention clock runs. */
 const CLOSED_STATUSES = ['closed', 'resolved', 'completed'];
@@ -47,8 +48,13 @@ function toDays(value: unknown, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-export function getRetentionDays(): number {
+export function defaultRetentionDays(): number {
   return toDays(process.env.CLIENT_DATA_RETENTION_DAYS, 3650);
+}
+
+/** The current firm's retention period (its own setting, else the platform default). */
+export function getRetentionDays(): number {
+  return currentFirm().retentionDays ?? defaultRetentionDays();
 }
 
 function retentionThreshold(): Date {

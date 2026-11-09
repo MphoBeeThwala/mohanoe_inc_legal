@@ -4,7 +4,7 @@
 - Any PostgreSQL 15+ reached through `DATABASE_URL` (the app uses Drizzle ORM over node-postgres; no vendor SDK).
 - Target: Azure Database for PostgreSQL Flexible Server, South Africa North (see `docs/ROADMAP.md` §4). Interim: any managed Postgres, e.g. a Supabase project's Postgres connection string.
 - Migrations live in `apps/api/drizzle/` and are applied on start (or by `npm run db:migrate -w apps/api` with `DB_MIGRATE_ON_START=false`).
-- `INTAKE_ENCRYPTION_KEY` and `AUDIT_CHAIN_SECRET` must be backed up with the database: without the first, client data cannot be decrypted; without the second, the audit chain cannot be verified.
+- `INTAKE_ENCRYPTION_KEY` and `AUDIT_CHAIN_SECRET` must be backed up with the database: without the first, client data cannot be decrypted (it wraps firm keys when `KEY_PROVIDER=local`, and decrypts pre-epic-6 data); without the second, the audit chain cannot be verified. With Key Vault, enable soft-delete and purge protection: deleting the Key Vault key makes every firm's data unreadable.
 
 ## Tenancy and the `app_tenant` role
 - Every request runs inside a transaction as the `app_tenant` role, with `app.firm_id` set; row-level security is forced on every tenant table, so a missing or wrong firm returns no rows.
@@ -17,6 +17,32 @@
 - `npm run firm -w apps/api -- create --slug <slug> --name "<legal name>" [--prefix ABC] [--domain host] [--admin-email … --admin-name …]`
 - The CLI needs the same `DATABASE_URL`, `JWT_SECRET`, `INTAKE_ENCRYPTION_KEY` and `AUDIT_CHAIN_SECRET` as the server; it refuses to run without them. Otherwise the admin's email would be encrypted with the wrong key and the audit chain would break.
 - Point the firm's DNS (subdomain or custom domain) at the app; the host name selects the firm.
+
+## Microsoft 365 sign-in for firms
+- Register one **multi-tenant** app in Ahava's Entra ID (accounts in any organizational directory), with a client secret, and set `ENTRA_WORKFORCE_CLIENT_ID` and `ENTRA_WORKFORCE_CLIENT_SECRET`.
+- For every firm address, add a redirect URI `https://<firm address>/api/auth/oidc/callback`.
+- The firm's administrators do the rest in the app. Recommend that their IT enforces MFA with Conditional Access for this app.
+
+## Platform support
+- Create operators only for named Ahava on 88 staff: `npm run ops -w apps/api -- operator create --email … --name "…"`. Hand over the printed password and authenticator key in person or through a password manager.
+- Disable leavers the same day: `operator disable --email …`. Operators lock for 15 minutes after 5 failed attempts.
+- Support work starts with the firm granting access in the app. Never ask a firm for a staff password. The firm sees the grant and every support request in its audit trail.
+
+## Encryption keys
+- **After upgrading to epic 6:** run `npm run ops -w apps/api -- keys reencrypt` once. It moves existing data to per-firm keys and is safe to re-run. Check with `keys status`.
+- **Moving to Azure Key Vault:** create an RSA key (HSM-backed in production) and give the app's managed identity *Key Vault Crypto User* on it. Set `KEY_PROVIDER=azure-keyvault` and `AZURE_KEY_VAULT_KEY_ID`, keep `INTAKE_ENCRYPTION_KEY`, deploy, then run `keys rewrap`.
+- **Rotating a firm's data key** (yearly, or after an incident): `keys rotate --slug <firm>`, `keys reencrypt --slug <firm>`, `keys prune --slug <firm>`.
+- **Rotating the Key Vault key:** create a new version in Key Vault, then run `keys rewrap`. Old versions must stay enabled until the rewrap finishes.
+- **Rotating `INTAKE_ENCRYPTION_KEY`** (local KEK): first run `keys reencrypt` so no `v1:` data is left. Then set the new value, put the old one in `INTAKE_ENCRYPTION_KEY_PREVIOUS`, run `keys rewrap`, and remove the previous value.
+
+## Audit anchors and storage
+- **Production storage:** `OBJECT_STORE=azure-blob` with `AZURE_STORAGE_ACCOUNT_URL`; the managed identity needs *Storage Blob Data Contributor*. Firms' document containers are created on first use.
+- **The anchor container** (`AUDIT_ANCHOR_CONTAINER`) needs a locked, time-based immutability policy (e.g. 10 years) and versioning. Set both in infrastructure, not in the app.
+- **Daily anchoring:** schedule `npm run ops -w apps/api -- anchor` (Container Apps job), or set `AUDIT_ANCHOR_INTERVAL_HOURS=24`.
+
+## Firm exit
+- `npm run firm -w apps/api -- export --slug <firm> --out <file.json>` produces a full decrypted export (owner-only file permissions).
+- Hand it over securely, then delete the file. The export is recorded in the firm's audit trail.
 
 ## Backups
 - Use the provider's managed backups with point-in-time recovery as the primary recovery path.

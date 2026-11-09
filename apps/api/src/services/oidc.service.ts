@@ -9,10 +9,10 @@
 // An Entra identity is linked to a staff account only through an invite
 // (/api/auth/oidc/start?invite=…). After that, sign-in finds the account by
 // issuer + subject; email addresses are never used to match accounts.
-import { eq, and } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import type { Request, Response } from 'express';
-import { oidcSettings, authSettings, type OidcSettings } from '../config/auth';
+import { authSettings, oidcSettings, workforceSettings, type OidcSettings } from '../config/auth';
 import { requireSecret } from '../config/env';
 import { db } from '../db/client';
 import { currentFirm } from '../db/tenant-context';
@@ -23,14 +23,21 @@ import { firmOrigin } from './firm.service';
 import * as authService from './auth.service';
 import * as sessionService from './session.service';
 import * as userService from './user.service';
+import * as auditService from './audit.service';
 
 type OidcLib = typeof import('openid-client');
 type Configuration = import('openid-client').Configuration;
 
 const STATE_MINUTES = 10;
 let libPromise: Promise<OidcLib> | null = null;
-let configPromise: Promise<Configuration> | null = null;
-let configKey = '';
+const configs = new Map<string, Promise<Configuration>>();
+
+/**
+ * 'external': the platform's Entra External ID (OIDC_ISSUER).
+ * 'microsoft': the firm's own Microsoft 365 directory (Entra ID workforce),
+ * set up by the firm's administrators (firm-settings.service.ts).
+ */
+export type OidcProvider = 'external' | 'microsoft';
 
 function lib(): Promise<OidcLib> {
   // openid-client is ESM-only; load it once from this CommonJS module.
@@ -38,8 +45,8 @@ function lib(): Promise<OidcLib> {
   return libPromise;
 }
 
-function requireSettings(): OidcSettings {
-  const settings = oidcSettings();
+function requireSettings(provider: OidcProvider): OidcSettings {
+  const settings = provider === 'microsoft' ? workforceSettings(currentFirm()) : oidcSettings();
   if (!settings) {
     throw httpError('Microsoft sign-in is not configured', 404);
   }
@@ -48,9 +55,9 @@ function requireSettings(): OidcSettings {
 
 async function configuration(settings: OidcSettings): Promise<Configuration> {
   const key = `${settings.issuer}|${settings.clientId}`;
-  if (!configPromise || key !== configKey) {
-    configKey = key;
-    configPromise = lib().then((client) =>
+  let config = configs.get(key);
+  if (!config) {
+    config = lib().then((client) =>
       client.discovery(
         new URL(settings.issuer),
         settings.clientId,
@@ -59,16 +66,15 @@ async function configuration(settings: OidcSettings): Promise<Configuration> {
         settings.allowInsecure ? { execute: [client.allowInsecureRequests] } : undefined,
       ),
     );
-    configPromise.catch(() => {
-      configPromise = null;
-    });
+    configs.set(key, config);
+    config.catch(() => configs.delete(key));
   }
-  return configPromise;
+  return config;
 }
 
-/** Test helper: forget the discovered provider configuration. */
+/** Test helper: forget the discovered provider configurations. */
 export function resetOidcCache(): void {
-  configPromise = null;
+  configs.clear();
 }
 
 function redirectUri(): string {
@@ -85,11 +91,13 @@ interface StateClaims extends JwtPayload {
   verifier: string;
   firmId: string;
   invite?: string;
+  provider?: OidcProvider;
 }
 
 /** Redirects the browser to Entra. */
 export async function start(req: Request, res: Response): Promise<void> {
-  const settings = requireSettings();
+  const provider: OidcProvider = req.query.provider === 'microsoft' ? 'microsoft' : 'external';
+  const settings = requireSettings(provider);
   const client = await lib();
   const config = await configuration(settings);
   const verifier = client.randomPKCECodeVerifier();
@@ -98,7 +106,7 @@ export async function start(req: Request, res: Response): Promise<void> {
   const invite = typeof req.query.invite === 'string' ? req.query.invite.slice(0, 200) : undefined;
 
   const signed = jwt.sign(
-    { state, nonce, verifier, firmId: currentFirm().id, invite },
+    { state, nonce, verifier, firmId: currentFirm().id, invite, provider },
     stateSecret(),
     { algorithm: 'HS256', audience: 'oidc-state', expiresIn: STATE_MINUTES * 60 },
   );
@@ -148,13 +156,49 @@ async function findLinkedUser(issuer: string, subject: string): Promise<UserRow 
   return user ?? null;
 }
 
+/**
+ * First Microsoft 365 sign-in of an existing staff member: the firm's own
+ * directory vouches for its members' work addresses, so an active account
+ * with that address (on a domain the firm listed) is linked. Guests
+ * (#EXT#) are never linked, and no account is ever created this way:
+ * accounts still come only from invites.
+ */
+async function linkWorkforceAccount(claims: Record<string, unknown>): Promise<UserRow | null> {
+  const username = String(claims.preferred_username ?? claims.upn ?? '')
+    .trim()
+    .toLowerCase();
+  const domain = username.split('@')[1] ?? '';
+  if (!username || username.includes('#ext#') || !currentFirm().ssoDomains.includes(domain)) {
+    return null;
+  }
+  const [user] = await db()
+    .update(users)
+    .set({ oidcIssuer: String(claims.iss), oidcSubject: String(claims.sub) })
+    .where(and(eq(users.email, username), eq(users.isActive, true), isNull(users.oidcSubject)))
+    .returning();
+  if (!user) {
+    return null;
+  }
+  await auditService.logEvent(
+    {
+      entityType: 'user',
+      entityId: user.id,
+      action: 'microsoft_sign_in_linked',
+      summary: 'Microsoft 365 sign-in linked to a staff account',
+    },
+    authService.actorFor(user),
+  );
+  return user;
+}
+
 /** Handles Entra's redirect back: exchanges the code, signs the user in, redirects to the app. */
 export async function callback(req: Request, res: Response): Promise<void> {
   const cookie = authSettings();
   clearCookie(res, cookie.oidcCookie, { secure: cookie.secureCookies, sameSite: 'Lax' });
   try {
-    const settings = requireSettings();
     const stateClaims = readState(req);
+    const provider = stateClaims.provider ?? 'external';
+    const settings = requireSettings(provider);
     const client = await lib();
     const config = await configuration(settings);
     const query = req.originalUrl.includes('?')
@@ -177,7 +221,14 @@ export async function callback(req: Request, res: Response): Promise<void> {
       }
     }
 
+    if (provider === 'microsoft' && claims.tid !== currentFirm().ssoTenantId) {
+      throw httpError('wrong_directory', 403);
+    }
+
     let user = await findLinkedUser(claims.iss, claims.sub);
+    if (!user && provider === 'microsoft') {
+      user = await linkWorkforceAccount(claims);
+    }
     if (!user && stateClaims.invite) {
       user = await userService.acceptInviteWithOidc(stateClaims.invite, {
         issuer: claims.iss,

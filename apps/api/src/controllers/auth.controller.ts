@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import type { SignInResult } from '@ahava88/shared';
+import type { MeResponse, SignInResult } from '@ahava88/shared';
 import { httpError, sendError } from '../lib/http';
 import * as authService from '../services/auth.service';
 import * as sessionService from '../services/session.service';
@@ -58,11 +58,16 @@ export const logout = handle(async (req, res) => {
 });
 
 export const me = handle(async (req, res) => {
-  const user = await authService.getSessionUser(signedIn(req).userId);
+  const auth = signedIn(req);
+  const user = await authService.getSessionUser(auth.userId);
   if (!user) {
     throw httpError('Not signed in', 401);
   }
-  res.status(200).json({ user });
+  const body: MeResponse = {
+    user,
+    session: { method: auth.method, expiresAt: auth.sessionExpiresAt.toISOString() },
+  };
+  res.status(200).json(body);
 });
 
 export const listSessions = handle(async (req, res) => {

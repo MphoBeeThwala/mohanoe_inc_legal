@@ -268,7 +268,7 @@ export async function directory(): Promise<StaffDirectoryEntry[]> {
   const rows = await db()
     .select({ id: users.id, fullName: users.fullName, role: users.role })
     .from(users)
-    .where(eq(users.isActive, true))
+    .where(and(eq(users.isActive, true), ne(users.role, 'support')))
     .orderBy(asc(users.fullName))
     .limit(1_000);
   return rows.map((row) => ({ ...row, role: row.role as UserRole }));
@@ -293,6 +293,9 @@ async function otherActiveAdmins(userId: string): Promise<number> {
 export async function updateUser(id: string, input: unknown, actor: Actor): Promise<StaffUser> {
   const changes = parse(userUpdateSchema, input);
   const user = await requireUser(id);
+  if (user.role === 'support') {
+    throw httpError('Platform support accounts are controlled by support grants', 400);
+  }
   if (user.id === actor.userId) {
     throw httpError('You cannot change your own role or deactivate yourself', 400);
   }

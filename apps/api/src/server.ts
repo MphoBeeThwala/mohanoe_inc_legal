@@ -10,6 +10,8 @@ import { getPublicBranding } from './config/brand';
 import { closeDb, dbDriver, initDb, pingDb } from './db/client';
 import { tenantContext } from './middleware/tenant';
 import { ensureDefaultFirm } from './services/firm.service';
+import { scheduleAnchoring } from './services/audit-anchor.service';
+import * as supportService from './services/support.service';
 import { createRateLimiter, requestLogger, securityHeaders } from './middleware/security';
 
 const app = express();
@@ -74,6 +76,16 @@ app.get('/ready', async (req, res) => {
     retentionDays: Number(process.env.CLIENT_DATA_RETENTION_DAYS || 3650),
     timestamp: new Date().toISOString(),
   });
+});
+
+// Platform support sign-in checks the operator outside any firm's transaction,
+// then the firm's grant inside it (support.service.ts).
+const supportSignInLimiter = createRateLimiter({
+  windowMs: 60_000,
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX || 20),
+});
+app.post('/api/support/sign-in', supportSignInLimiter, (req, res) => {
+  supportService.signInHandler(req, res);
 });
 
 // Every /api request belongs to one firm, resolved from the host name, and
@@ -142,6 +154,7 @@ if (require.main === module) {
         console.log(`Default firm: ${defaultFirm.slug} (${defaultFirm.legalName})`);
       }
 
+      scheduleAnchoring();
       const server = app.listen(port, () => {
         console.log(`Legal practice API listening at http://localhost:${port}`);
       });

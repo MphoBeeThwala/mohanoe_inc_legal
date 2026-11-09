@@ -1,7 +1,7 @@
 // Client intake: encrypted submissions, de-identified AI triage, and the
 // matter (case) each assessed intake becomes.
 
-import { count, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, or, sql, type SQL } from 'drizzle-orm';
 import type {
   IntakeSummary,
   MatterCase,
@@ -9,12 +9,14 @@ import type {
   PublicSubmission,
 } from '@ahava88/shared';
 import { db } from '../db/client';
-import { currentFirm } from '../db/tenant-context';
+import { afterCommit, currentFirm } from '../db/tenant-context';
+import { firmContainer, objectStore } from './object-store';
 import { nextValue } from '../db/sequences';
 import {
   assessments,
   caseMembers,
   cases,
+  documents,
   submissions,
   type AssessmentRow,
   type CaseRow,
@@ -28,6 +30,7 @@ import { intakeSubmissionSchema, parse, type IntakeSubmission } from '../validat
 import { assessMatter, ensureStringArray, type MatterBrief } from './ai.service';
 import {
   blindIndex,
+  blindIndexCandidates,
   decryptJson,
   encryptJson,
   redactMatterForAi,
@@ -125,7 +128,7 @@ function toPublicSubmission(
 }
 
 /** Submissions joined with their assessment and case, newest first. */
-async function selectSubmissions(where?: ReturnType<typeof eq>, limit = 100) {
+async function selectSubmissions(where?: SQL, limit = 100) {
   return db()
     .select({ submission: submissions, assessment: assessments, matterCase: cases })
     .from(submissions)
@@ -149,8 +152,8 @@ export async function createSubmission(input: unknown): Promise<PublicSubmission
       urgencyHint: submission.urgencyHint,
       status: 'received',
       summaryRedacted: brief.matterSummary ?? '',
-      rawPayloadEncrypted: encryptJson(submission),
-      emailLookup: blindIndex(submission.email),
+      rawPayloadEncrypted: await encryptJson(submission),
+      emailLookup: await blindIndex(submission.email),
       consentToAi: submission.consentToAi,
       consentToStorage: submission.consentToStorage,
     })
@@ -197,7 +200,7 @@ export async function getPrivateSubmission(id: string): Promise<PrivateSubmissio
   }
   return {
     submission: row.submission,
-    raw: decryptJson<IntakeSubmission>(row.submission.rawPayloadEncrypted),
+    raw: await decryptJson<IntakeSubmission>(row.submission.rawPayloadEncrypted),
     assessment: row.assessment,
     caseRecord: row.matterCase,
   };
@@ -209,7 +212,10 @@ export async function findSubmissionsByEmail(email: string): Promise<PublicSubmi
   if (!normalized) {
     return [];
   }
-  const rows = await selectSubmissions(eq(submissions.emailLookup, blindIndex(normalized)), 1_000);
+  const rows = await selectSubmissions(
+    inArray(submissions.emailLookup, await blindIndexCandidates(normalized)),
+    1_000,
+  );
   return rows.map((row) => toPublicSubmission(row.submission, row.assessment, row.matterCase));
 }
 
@@ -223,7 +229,7 @@ export async function assessSubmission(id: string, actor: Actor = {}): Promise<P
     throw httpError('Intake submission not found', 404);
   }
 
-  const raw = decryptJson<IntakeSubmission>(existing.submission.rawPayloadEncrypted);
+  const raw = await decryptJson<IntakeSubmission>(existing.submission.rawPayloadEncrypted);
   if (!raw) {
     throw httpError('Intake submission could not be decrypted', 500);
   }
@@ -410,6 +416,22 @@ export async function deleteSubmissions(submissionIds: string[]): Promise<string
     .select({ id: cases.id })
     .from(cases)
     .where(inArray(cases.intakeSubmissionId, submissionIds));
+  const caseIds = removedCases.map((row) => row.id);
+  const stored = caseIds.length
+    ? await db()
+        .select({ firmId: documents.firmId, storageKey: documents.storageKey })
+        .from(documents)
+        .where(and(inArray(documents.caseId, caseIds), isNotNull(documents.storageKey)))
+    : [];
   await db().delete(submissions).where(inArray(submissions.id, submissionIds));
-  return removedCases.map((row) => row.id);
+  // Document bodies in the object store go once the deletion has committed.
+  if (stored.length) {
+    afterCommit(async () => {
+      const store = objectStore();
+      for (const item of stored) {
+        await store?.delete(firmContainer(item.firmId), item.storageKey!);
+      }
+    });
+  }
+  return caseIds;
 }
