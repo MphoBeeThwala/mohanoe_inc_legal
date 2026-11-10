@@ -72,7 +72,22 @@ async function connect(): Promise<NonNullable<typeof current>> {
   }
   const client = new PGlite(dataDir);
   const db = drizzle({ client, schema });
-  await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+  try {
+    await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+  } catch (error) {
+    // A local database made by an older PGlite (an older PostgreSQL major)
+    // can't be opened by a newer one. Development data only: say how to reset.
+    const versionFile = path.join(dataDir, 'PG_VERSION');
+    if (!dataDir.startsWith('memory://') && fs.existsSync(versionFile)) {
+      const version = fs.readFileSync(versionFile, 'utf8').trim();
+      throw new Error(
+        `The local development database in ${dataDir} (PostgreSQL ${version}) could not be opened, ` +
+          'probably because it was made by an older PGlite. Move or delete that folder to start ' +
+          `a fresh one, or set PGLITE_DATA_DIR. (${error instanceof Error ? error.message : String(error)})`,
+      );
+    }
+    throw error;
+  }
   return { db: db as unknown as Db, close: () => client.close(), driver: 'pglite' };
 }
 
