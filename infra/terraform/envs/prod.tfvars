@@ -14,4 +14,5 @@ mail_from                  = "no-reply@mail.example-legal.co.za" # replace
 mail_custom_domain         = "mail.example-legal.co.za"          # replace
 
 # PayFast: sandbox until the merchant account is approved and tested.
-payfast_sandbox = true # set false for live payments
+payfast_sandbox       = true # set false for live payments
+platform_console_host = ""   # e.g. console.<platform domain>

@@ -17,7 +17,7 @@ import { parseArgs } from 'node:util';
 import { eq } from 'drizzle-orm';
 import { closeDb, initDb, rootDb } from '../db/client';
 import { withTenant } from '../db/tenant';
-import { firms, type FirmRow } from '../db/schema';
+import { firms, platformOperators, type FirmRow } from '../db/schema';
 import { describeError } from '../lib/http';
 import { findFirmBySlug, listFirms } from '../services/firm.service';
 import { listKeys, rewrapKeys, rotateDataKey } from '../services/keys.service';
@@ -127,7 +127,9 @@ async function keys(action: string, slug?: string): Promise<void> {
 async function operators(action: string, email?: string, name?: string): Promise<void> {
   if (action === 'list') {
     for (const op of await listOperators()) {
-      console.log(`${op.email.padEnd(36)} ${op.isActive ? 'active  ' : 'disabled'} ${op.fullName}`);
+      console.log(
+        `${op.email.padEnd(36)} ${op.isActive ? 'active  ' : 'disabled'} console:${op.consoleRole.padEnd(6)} ${op.fullName}`,
+      );
     }
     return;
   }
@@ -143,6 +145,13 @@ async function operators(action: string, email?: string, name?: string): Promise
     console.log(
       'Hand these over in person or through a password manager; they are not shown again.',
     );
+  } else if (action === 'console-admin' || action === 'console-viewer') {
+    const rows = await rootDb()
+      .update(platformOperators)
+      .set({ consoleRole: action === 'console-admin' ? 'admin' : 'viewer' })
+      .where(eq(platformOperators.email, email.trim().toLowerCase()))
+      .returning({ email: platformOperators.email });
+    console.log(rows.length ? `${email}: console ${action.slice(8)}` : `No operator ${email}`);
   } else if (action === 'disable' || action === 'enable') {
     const found = await setOperatorActive(email, action === 'enable');
     console.log(found ? `${email}: ${action}d` : `No operator ${email}`);

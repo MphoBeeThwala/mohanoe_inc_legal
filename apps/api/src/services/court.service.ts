@@ -158,3 +158,5 @@ export async function setRollWatchers(input: unknown, actor: Actor): Promise<Cou
   );
   return { userIds: unique };
 }
+
+export { courtOnlineCourts as courtOnlineTable };
