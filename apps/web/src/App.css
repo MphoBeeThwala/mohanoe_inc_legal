@@ -1527,3 +1527,19 @@
   gap: 8px;
   align-items: center;
 }
+
+/* Trust accounting */
+.trust-list {
+  display: grid;
+  gap: 8px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.trust-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}

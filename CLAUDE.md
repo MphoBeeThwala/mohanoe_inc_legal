@@ -20,6 +20,11 @@ Owner: Ahava on 88 (Pty) Ltd. The product is licensed to individual law firms. T
 - **Court rolls:** roll documents/entries are platform tables (no `app_tenant` access) holding case numbers, courtrooms, times and judges only, never party names. Matches go to staff to confirm; a roll never changes the calendar by itself. Fetch politely (`court-roll-sources.ts`).
 - **White label:** firm-visible names, colours, logo, prefixes and domains come from the `firms` row and `firm_assets`; never hard-code them. A custom domain is used (email links, `firmOrigin`) only once `white-label.service` has verified its TXT record and HTTPS routing. No SVG uploads.
 - **Subscriptions** (the firm paying the platform) go through PayFast (`payfast.ts`, `subscription.service.ts`). An ITN changes nothing until its signature, source address, merchant and PayFast's own confirmation check out; amounts must match what we expect. Keep no payer details or card data. Unpaid past the grace period means read-only, never locked out (firms must still read and export their records). Plans are a platform table that requests may only read.
+- **Trust accounting** (`trust.service.ts`, behind `firms.features.trustAccounting`, which only the platform sets):
+  - Posted trust entries never change or get deleted (reversals only).
+  - No matter's ledger may go into debit: check it under the account lock (`atomically` + `for('update')`).
+  - Money out needs `trust.authorise` by someone other than the requester.
+  - Totals across matters use `withSystemScope` but never reveal a restricted matter's details.
 - **Time** is whole 6-minute units with the rate fixed when recorded (`time.service.ts`); narratives are encrypted; billed or written-off time never changes.
 - **Production fails fast:** `apps/api/src/config/env.ts` refuses to boot without real secrets. Don't add silent fallbacks that run in production.
 - **Infrastructure** lives in `infra/terraform` (format with `terraform fmt`); a new env var for production goes in `containerapps.tf` (`app_env`, or a Key Vault secret for secrets). A new scheduled task is an `ops` command plus a scheduled job there. Errors sent to Sentry go through `lib/monitoring.ts`, which strips personal information.

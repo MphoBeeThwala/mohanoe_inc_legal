@@ -16,6 +16,7 @@ import timeRoutes from './time.routes';
 import courtRollRoutes from './court-roll.routes';
 import subscriptionRoutes from './subscription.routes';
 import researchRoutes from './research.routes';
+import trustRoutes from './trust.routes';
 import { clients, conflicts, partiesRouter } from './clients.routes';
 
 const router = express.Router();
@@ -36,6 +37,7 @@ router.use('/support', supportRoutes);
 router.use('/time', timeRoutes);
 router.use('/court-rolls', courtRollRoutes);
 router.use('/subscription', subscriptionRoutes);
+router.use('/trust', trustRoutes);
 router.use('/', researchRoutes);
 router.use('/clients', clients);
 router.use('/parties', partiesRouter);

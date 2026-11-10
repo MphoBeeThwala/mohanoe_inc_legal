@@ -119,7 +119,10 @@ export type Permission =
   | 'rates.manage'
   | 'subscription.manage'
   | 'research.use'
-  | 'research.approve';
+  | 'research.approve'
+  | 'trust.read'
+  | 'trust.record'
+  | 'trust.authorise';
 
 const FEE_EARNER: readonly Permission[] = [
   'clients.read',
@@ -167,9 +170,13 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     // The firm's own subscription to the platform (plan, seats, payment).
     'subscription.manage',
     'research.approve',
+    'trust.read',
+    'trust.record',
+    'trust.authorise',
   ],
   // Attorneys sign off research memos and precedents (paralegals prepare them).
-  attorney: [...FEE_EARNER, 'research.approve'],
+  // Practitioners authorise trust payments and sign off reconciliations.
+  attorney: [...FEE_EARNER, 'research.approve', 'trust.read', 'trust.authorise'],
   paralegal: FEE_EARNER,
   secretary: [
     'clients.read',
@@ -197,6 +204,9 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'billing.write',
     'reports.read',
     'notifications.read',
+    // Records trust receipts, requests payments, reconciles (never authorises).
+    'trust.read',
+    'trust.record',
   ],
   // Platform support, while the firm allows it: read-only, and still subject
   // to restricted matters and ethical walls.
@@ -1837,4 +1847,91 @@ export interface AiUsage {
   failures: number;
   byPurpose: Array<{ purpose: string; calls: number; tokens: number }>;
   configured: boolean;
+}
+
+// ---------------------------------------------------------- trust accounting
+
+/** s86(2) trust current account, or an s86(3) / s86(4) investment. */
+export type TrustAccountKind = 'trust' | 'investment_86_3' | 'investment_86_4';
+
+export interface TrustAccount {
+  id: string;
+  name: string;
+  kind: TrustAccountKind;
+  bankName: string;
+  accountLast4: string;
+  isActive: boolean;
+  balanceCents: number;
+}
+
+export const TRUST_ENTRY_KINDS = [
+  'receipt',
+  'payment',
+  'transfer_to_business',
+  'transfer_out',
+  'transfer_in',
+  'opening_balance',
+  'interest',
+  'reversal',
+] as const;
+export type TrustEntryKind = (typeof TRUST_ENTRY_KINDS)[number];
+
+export type TrustEntryStatus = 'pending' | 'posted' | 'rejected';
+
+export interface TrustEntry {
+  id: string;
+  accountId: string;
+  caseNumber: string;
+  kind: TrustEntryKind;
+  /** Into the matter's trust ledger (+) or out of it (-). */
+  amountCents: number;
+  entryDate: string;
+  reference: string;
+  description: string;
+  status: TrustEntryStatus;
+  invoiceNumber: string | null;
+  requestedBy: string | null;
+  authorisedBy: string | null;
+  authorisedAt: string | null;
+  rejectedReason: string | null;
+  reversesId: string | null;
+  reversedBy: string | null;
+  clearedOn: string | null;
+  groupId: string | null;
+}
+
+export interface TrustLedgerLine {
+  caseNumber: string;
+  caseId: string;
+  balanceCents: number;
+}
+
+export interface TrustLedger {
+  caseNumber: string;
+  accountId: string;
+  balanceCents: number;
+  entries: TrustEntry[];
+}
+
+export interface TrustReconciliation {
+  id: string;
+  accountId: string;
+  periodEnd: string;
+  bankBalanceCents: number;
+  cashbookCents: number;
+  ledgerTotalCents: number;
+  unclearedReceiptsCents: number;
+  unclearedPaymentsCents: number;
+  /** bank + uncleared receipts - uncleared payments - cash book. */
+  differenceCents: number;
+  /** Cash book minus the sum of client ledgers (must be 0). */
+  ledgerDifferenceCents: number;
+  /** Client ledgers in debit at period end (must be none). */
+  debitLedgers: number;
+  balanced: boolean;
+  notes: string;
+  preparedBy: string | null;
+  preparedAt: string;
+  signedOffBy: string | null;
+  signedOffAt: string | null;
 }

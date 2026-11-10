@@ -98,6 +98,11 @@ export interface FirmProfile {
 }
 
 /** Progress through the onboarding wizard. */
+export interface FirmFeatures {
+  /** Trust accounting (pilots first, after auditor review). */
+  trustAccounting?: boolean;
+}
+
 export interface FirmOnboarding {
   done?: string[];
   completedAt?: string;
@@ -139,6 +144,8 @@ export const firms = pgTable(
     billingSettings: jsonb('billing_settings').$type<FirmBillingSettings>().notNull().default({}),
     profile: jsonb('profile').$type<FirmProfile>().notNull().default({}),
     onboarding: jsonb('onboarding').$type<FirmOnboarding>().notNull().default({}),
+    /** Platform-controlled feature flags (requests cannot change them). */
+    features: jsonb('features').$type<FirmFeatures>().notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -527,6 +534,106 @@ export const precedentPassages = pgTable(
 export type LegalSourceRow = typeof legalSources.$inferSelect;
 export type LegalDocumentRow = typeof legalDocuments.$inferSelect;
 export type FirmPrecedentRow = typeof firmPrecedents.$inferSelect;
+
+// -------------------------------------------------------- trust accounting
+//
+// Trust money held for clients (Legal Practice Act s86). One ledger per
+// matter per trust bank account; entries are never changed or deleted once
+// posted (corrections are reversals), and no matter's ledger may go into
+// debit. Money out needs a practitioner's authorisation by someone other
+// than the requester.
+
+export const trustAccounts = pgTable(
+  'trust_accounts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    name: text('name').notNull(),
+    /** 'trust' (s86(2)) | 'investment_86_3' | 'investment_86_4' */
+    kind: text('kind').notNull().default('trust'),
+    bankName: text('bank_name').notNull(),
+    accountNumberEncrypted: text('account_number_encrypted').notNull(),
+    accountLast4: text('account_last4').notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    ...updatable,
+  },
+  (t) => [tenantPolicy('trust_accounts')],
+);
+
+export const trustEntries = pgTable(
+  'trust_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => trustAccounts.id),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id),
+    /** TrustEntryKind */
+    kind: text('kind').notNull(),
+    /** Signed cents: + into the matter's ledger, - out of it. */
+    amountCents: bigint('amount_cents', { mode: 'number' }).notNull(),
+    entryDate: date('entry_date', { mode: 'string' }).notNull(),
+    /** Encrypted bank reference (often carries a payer's name). */
+    referenceEncrypted: text('reference_encrypted').notNull(),
+    descriptionEncrypted: text('description_encrypted').notNull(),
+    /** 'pending' | 'posted' | 'rejected' */
+    status: text('status').notNull(),
+    invoiceId: uuid('invoice_id').references(() => invoices.id),
+    /** The two legs of a matter-to-matter transfer share a group. */
+    groupId: uuid('group_id'),
+    reversesId: uuid('reverses_id'),
+    requestedBy: uuid('requested_by').references(() => users.id, { onDelete: 'set null' }),
+    authorisedBy: uuid('authorised_by').references(() => users.id, { onDelete: 'set null' }),
+    authorisedAt: timestamp('authorised_at', { withTimezone: true }),
+    rejectedReason: text('rejected_reason'),
+    /** Date the entry appeared on the bank statement. */
+    clearedOn: date('cleared_on', { mode: 'string' }),
+    ...timestamps,
+  },
+  (t) => [
+    index('trust_entries_ledger_idx').on(t.accountId, t.caseId, t.status),
+    index('trust_entries_date_idx').on(t.accountId, t.entryDate),
+    uniqueIndex('trust_entries_reversal_idx')
+      .on(t.reversesId)
+      .where(sql`${t.reversesId} is not null and ${t.status} <> 'rejected'`),
+    tenantPolicy('trust_entries'),
+    matterPolicy('trust_entries'),
+  ],
+);
+
+export const trustReconciliations = pgTable(
+  'trust_reconciliations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => trustAccounts.id),
+    periodEnd: date('period_end', { mode: 'string' }).notNull(),
+    bankBalanceCents: bigint('bank_balance_cents', { mode: 'number' }).notNull(),
+    cashbookCents: bigint('cashbook_cents', { mode: 'number' }).notNull(),
+    ledgerTotalCents: bigint('ledger_total_cents', { mode: 'number' }).notNull(),
+    unclearedReceiptsCents: bigint('uncleared_receipts_cents', { mode: 'number' }).notNull(),
+    unclearedPaymentsCents: bigint('uncleared_payments_cents', { mode: 'number' }).notNull(),
+    debitLedgers: integer('debit_ledgers').notNull(),
+    notesEncrypted: text('notes_encrypted'),
+    preparedBy: uuid('prepared_by').references(() => users.id, { onDelete: 'set null' }),
+    signedOffBy: uuid('signed_off_by').references(() => users.id, { onDelete: 'set null' }),
+    signedOffAt: timestamp('signed_off_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    index('trust_reconciliations_account_idx').on(t.accountId, t.periodEnd),
+    tenantPolicy('trust_reconciliations'),
+  ],
+);
+
+export type TrustAccountRow = typeof trustAccounts.$inferSelect;
+export type TrustEntryRow = typeof trustEntries.$inferSelect;
+export type TrustReconciliationRow = typeof trustReconciliations.$inferSelect;
 
 export type AiCallRow = typeof aiCalls.$inferSelect;
 export type ResearchRequestRow = typeof researchRequests.$inferSelect;

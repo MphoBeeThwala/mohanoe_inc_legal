@@ -46,6 +46,7 @@ import OnboardingWizard from './components/OnboardingWizard';
 import SubscriptionBanner from './components/SubscriptionBanner';
 import SubscriptionPanel from './components/SubscriptionPanel';
 import PrecedentsPanel from './components/PrecedentsPanel';
+import TrustPanel from './components/TrustPanel';
 import './App.css';
 
 const sampleMatter: Omit<IntakeSubmissionInput, 'consentToAi' | 'consentToStorage'> = {
@@ -64,7 +65,8 @@ const sampleMatter: Omit<IntakeSubmissionInput, 'consentToAi' | 'consentToStorag
   preferredLanguage: 'English',
 };
 
-type SectionId = 'overview' | 'intake' | 'clients' | 'cases' | 'time' | 'operations' | 'account';
+type SectionId =
+  'overview' | 'intake' | 'clients' | 'cases' | 'time' | 'trust' | 'operations' | 'account';
 
 const NAV_SECTIONS: Array<{ id: SectionId; label: string; permission?: Permission }> = [
   { id: 'overview', label: 'Overview' },
@@ -72,6 +74,7 @@ const NAV_SECTIONS: Array<{ id: SectionId; label: string; permission?: Permissio
   { id: 'clients', label: 'Clients', permission: 'clients.read' },
   { id: 'cases', label: 'Cases' },
   { id: 'time', label: 'Time', permission: 'time.read' },
+  { id: 'trust', label: 'Trust', permission: 'trust.read' },
   { id: 'operations', label: 'Operations' },
   { id: 'account', label: 'Account & team' },
 ];
@@ -659,6 +662,21 @@ function App() {
                     cases={cases}
                     selectedCaseId={selectedCaseId}
                   />
+                </ErrorBoundary>
+              </section>
+            ) : null}
+
+            {currentUser.permissions.includes('trust.read') ? (
+              <section
+                id="section-trust"
+                className="dashboard-section"
+                data-section="trust"
+                ref={(node) => {
+                  sectionRefs.current.trust = node;
+                }}
+              >
+                <ErrorBoundary label="Trust accounting">
+                  <TrustPanel currentUser={currentUser} cases={cases} />
                 </ErrorBoundary>
               </section>
             ) : null}
