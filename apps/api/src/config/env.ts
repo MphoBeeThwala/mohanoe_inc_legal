@@ -96,6 +96,22 @@ function validateConfig(env: NodeJS.ProcessEnv = process.env): string[] {
       'PayFast needs PAYFAST_MERCHANT_ID, PAYFAST_MERCHANT_KEY and PAYFAST_PASSPHRASE together',
     );
   }
+  if (payfast.length === 3) {
+    // Every payment gets an invoice (VAT Act s20(4); Companies Act s32(4)).
+    for (const name of ['PLATFORM_ADDRESS', 'PLATFORM_REGISTRATION_NUMBER']) {
+      if (!String(env[name] || '').trim()) {
+        problems.push(`PayFast is configured: ${name} is needed for invoices to firms`);
+      }
+    }
+    if (
+      Number(env.PLATFORM_VAT_RATE ?? 0.15) > 0 &&
+      !String(env.PLATFORM_VAT_NUMBER || '').trim()
+    ) {
+      problems.push(
+        'PLATFORM_VAT_RATE charges VAT but PLATFORM_VAT_NUMBER is not set (set the VAT number, or PLATFORM_VAT_RATE=0 if the platform is not a VAT vendor)',
+      );
+    }
+  }
   if (String(env.SESSION_COOKIE_SECURE || '').toLowerCase() === 'false') {
     problems.push('SESSION_COOKIE_SECURE cannot be false in production');
   }

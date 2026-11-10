@@ -148,6 +148,13 @@
       "when": 1794297699111,
       "tag": "0020_support_desk",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794299071394,
+      "tag": "0021_platform_invoices",
+      "breakpoints": true
     }
   ]
 }

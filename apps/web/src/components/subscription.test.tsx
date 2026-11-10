@@ -36,11 +36,20 @@ const status = (over: Partial<SubscriptionStatus> = {}): SubscriptionStatus => (
   ...over,
 });
 
-afterEach(() => vi.restoreAllMocks());
+let invoices: unknown[] = [];
+afterEach(() => {
+  vi.restoreAllMocks();
+  invoices = [];
+});
 
 function mockGet(current: SubscriptionStatus) {
   vi.spyOn(api, 'get').mockImplementation(async (url: string) => ({
-    data: url === '/subscription/plans' ? [plan] : current,
+    data:
+      url === '/subscription/plans'
+        ? [plan]
+        : url === '/subscription/invoices'
+          ? invoices
+          : current,
   }));
 }
 
@@ -122,4 +131,22 @@ test('the banner stays quiet early in the trial', async () => {
   const { container } = render(<SubscriptionBanner canManage />);
   await vi.waitFor(() => expect(get).toHaveBeenCalled());
   expect(container.textContent).toBe('');
+});
+
+test('lists the platform’s tax invoices with a PDF link', async () => {
+  invoices = [
+    {
+      id: 'inv-1',
+      number: 'PI-000001',
+      taxInvoice: true,
+      issuedAt: '2026-11-09T10:00:00.000Z',
+      totalCents: 155_250,
+      vatCents: 20_250,
+    },
+  ];
+  mockGet(status({ effectiveStatus: 'active', state: 'active', planCode: 'practice' }));
+  render(<SubscriptionPanel />);
+  const link = await screen.findByText('Tax invoice PI-000001');
+  expect(link.getAttribute('href')).toBe('/api/subscription/invoices/inv-1/pdf');
+  expect(screen.getByText('R 202.50')).toBeTruthy();
 });

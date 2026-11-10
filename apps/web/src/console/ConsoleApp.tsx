@@ -5,6 +5,7 @@ import type {
   ConsoleTicket,
   ConsoleTicketSummary,
   HelpArticle,
+  ConsolePlatformInvoice,
   ConsoleAuditEntry,
   ConsoleFirm,
   ConsoleFirmInput,
@@ -822,6 +823,59 @@ function Articles({ admin }: { admin: boolean }) {
   );
 }
 
+function Invoices() {
+  const [invoices, setInvoices] = useState<ConsolePlatformInvoice[]>([]);
+  useEffect(() => {
+    api.get<ConsolePlatformInvoice[]>('/platform/invoices').then(({ data }) => setInvoices(data));
+  }, []);
+  const total = invoices.reduce((sum, i) => sum + i.totalCents, 0);
+  const vat = invoices.reduce((sum, i) => sum + i.vatCents, 0);
+  return (
+    <section aria-label="Invoices to firms">
+      <h2>Invoices to firms</h2>
+      <p className="field-hint">
+        One for each subscription payment PayFast confirmed. Listed: {rand(total)} including{' '}
+        {rand(vat)} VAT.
+      </p>
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Invoice</th>
+            <th>Firm</th>
+            <th>Date</th>
+            <th>Excl. VAT</th>
+            <th>VAT</th>
+            <th>Total</th>
+            <th>PayFast reference</th>
+          </tr>
+        </thead>
+        <tbody>
+          {invoices.map((i) => (
+            <tr key={i.id}>
+              <td>
+                <a
+                  href={`/api/platform/invoices/${i.firmId}/${i.id}/pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {i.number}
+                </a>
+                {i.taxInvoice ? '' : ' (no VAT)'}
+              </td>
+              <td>{i.firmSlug}</td>
+              <td>{i.issuedAt.slice(0, 10)}</td>
+              <td>{rand(i.exclusiveCents)}</td>
+              <td>{rand(i.vatCents)}</td>
+              <td>{rand(i.totalCents)}</td>
+              <td>{i.paymentReference}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 function Audit() {
   const [entries, setEntries] = useState<ConsoleAuditEntry[]>([]);
   useEffect(() => {
@@ -858,6 +912,7 @@ const TABS = [
   'Support requests',
   'Firms',
   'Plans',
+  'Invoices',
   'Research sources',
   'Court Online',
   'Help articles',
@@ -938,6 +993,7 @@ export default function ConsoleApp() {
       {tab === 'Court Online' ? <CourtOnline admin={admin} /> : null}
       {tab === 'Support requests' ? <Tickets /> : null}
       {tab === 'Help articles' ? <Articles admin={admin} /> : null}
+      {tab === 'Invoices' ? <Invoices /> : null}
       {tab === 'Activity' ? <Audit /> : null}
     </main>
   );

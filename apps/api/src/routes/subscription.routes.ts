@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { sendError } from '../lib/http';
 import { authenticateRequest, requirePermission } from '../services/auth.service';
 import * as subscriptions from '../services/subscription.service';
+import * as invoices from '../services/platform-invoice.service';
 
 const router = express.Router();
 
@@ -47,5 +48,22 @@ router.post(
   '/cancel',
   handle((req) => subscriptions.cancel(req.auth ?? {})),
 );
+
+// The platform's (tax) invoices for the firm's subscription payments.
+router.get(
+  '/invoices',
+  handle(() => invoices.listForFirm()),
+);
+router.get('/invoices/:id/pdf', async (req: Request, res: Response) => {
+  try {
+    const { number, pdf } = await invoices.pdfForFirm(String(req.params.id));
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${number}.pdf"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).send(pdf);
+  } catch (error) {
+    sendError(res, error);
+  }
+});
 
 export default router;

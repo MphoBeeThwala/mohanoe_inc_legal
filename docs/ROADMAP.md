@@ -153,7 +153,7 @@ Environment setup:
 
 ### 5.6 SaaS operations
 - [x] Firm onboarding wizard (practice details, brand, invoicing, numbering, team); firm settings, uploaded logo and icon, colour contrast check, custom domains verified by DNS and HTTPS, emails in the firm's name
-- [x] ZAR subscriptions via PayFast (plans, seats, trial, dunning, read-only suspension): `subscription.service.ts`, `payfast.ts`, Account → Subscription, `ops plans` / `ops subscriptions`. Next: PayFast merchant account approval and a sandbox end-to-end test; platform tax invoices to firms.
+- [x] ZAR subscriptions via PayFast (plans, seats, trial, dunning, read-only suspension): `subscription.service.ts`, `payfast.ts`, Account → Subscription, `ops plans` / `ops subscriptions`. Platform tax invoices to firms, one per confirmed payment (`platform-invoice.service.ts`). Next: PayFast merchant account approval and a sandbox end-to-end test; credit notes for refunds.
 - [x] AI usage metering (`ai_calls`, per-firm monthly cap, `GET /api/ai/usage`)
 - [x] IaC, staging/prod, CI/CD, tested restores, Sentry, uptime alerts (`infra/terraform`, GitHub Actions, `ops restore-check`, `docs/runbooks`). Next: choose and set up the hosted status page; run the first restore test.
 - [x] Platform console for operators (`console.<platform domain>`, `PLATFORM_CONSOLE_HOST`): firms with counts only (never client data), create a firm and invite its first administrator, suspend, trust accounting, complimentary access, plans, research sources, Court Online courts; viewer and admin roles; every change in `platform_audit`

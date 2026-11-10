@@ -54,6 +54,9 @@ test('retired sign-up settings and missing SMTP are warnings, not blockers', () 
       PAYFAST_MERCHANT_ID: '10000100',
       PAYFAST_MERCHANT_KEY: 'key',
       PAYFAST_PASSPHRASE: 'passphrase',
+      PLATFORM_ADDRESS: '1 Platform Street',
+      PLATFORM_REGISTRATION_NUMBER: '2024/123456/07',
+      PLATFORM_VAT_NUMBER: '4123456789',
       AI_PROVIDER: 'foundry',
       AI_ENDPOINT: 'https://firm-ai.services.ai.azure.com/anthropic',
       AI_MODEL: 'claude-sonnet',
@@ -109,8 +112,17 @@ test('PayFast settings come as a set; sandbox and missing PayFast are warnings',
     PAYFAST_MERCHANT_ID: '10000100',
     PAYFAST_MERCHANT_KEY: 'key',
     PAYFAST_PASSPHRASE: 'passphrase',
+    PLATFORM_ADDRESS: '1 Platform Street',
+    PLATFORM_REGISTRATION_NUMBER: '2024/123456/07',
+    PLATFORM_VAT_NUMBER: '4123456789',
   };
   assert.deepEqual(validateConfig(payfast), []);
+  // Invoices to firms need the platform's details; VAT needs a VAT number.
+  const { PLATFORM_ADDRESS: _a, PLATFORM_VAT_NUMBER: _v, ...bare } = payfast;
+  const problems = validateConfig(bare);
+  assert.ok(problems.some((p) => /PLATFORM_ADDRESS is needed/.test(p)));
+  assert.ok(problems.some((p) => /PLATFORM_VAT_NUMBER is not set/.test(p)));
+  assert.deepEqual(validateConfig({ ...bare, PLATFORM_ADDRESS: 'x', PLATFORM_VAT_RATE: '0' }), []);
   assert.ok(configWarnings(goodProduction).some((w) => /PayFast is not configured/.test(w)));
   assert.ok(
     configWarnings({ ...payfast, PAYFAST_SANDBOX: 'true' }).some((w) => /PayFast sandbox/.test(w)),

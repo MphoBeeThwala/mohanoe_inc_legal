@@ -17,6 +17,7 @@ const PLATFORM_TABLES = [
   'platform_operators',
   'platform_sessions',
   'platform_audit',
+  'platform_counters',
   'court_roll_documents',
   'court_roll_entries',
 ];

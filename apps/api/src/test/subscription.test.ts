@@ -6,7 +6,10 @@ import request from 'supertest';
 import { eq } from 'drizzle-orm';
 import app from '../server';
 import { db } from '../db/client';
-import { firmSubscriptions, subscriptionPayments } from '../db/schema';
+import { firmSubscriptions, platformInvoices, subscriptionPayments } from '../db/schema';
+import { issueMissing, vatIncluded } from '../services/platform-invoice.service';
+import { createOperator } from '../services/support.service';
+import { codeForStep, timeStep } from '../lib/totp';
 import { createFirm } from '../services/firm.service';
 import { testOutbox } from '../services/mail.service';
 import { apiSignature, formSignature, paramString, setPayFastNetwork } from '../services/payfast';
@@ -34,6 +37,7 @@ let validateAnswer = 'VALID';
 
 let admin: TestStaff;
 let attorney: TestStaff;
+let outsider: TestStaff;
 
 function itn(fields: Array<[string, string]>, passphrase = PASSPHRASE): string {
   const signature = formSignature(fields, passphrase);
@@ -108,6 +112,9 @@ beforeAll(async () => {
   process.env.PAYFAST_MERCHANT_KEY = '46f0cd694581a';
   process.env.PAYFAST_PASSPHRASE = PASSPHRASE;
   process.env.PAYFAST_SANDBOX = 'true';
+  process.env.PLATFORM_ADDRESS = '1 Platform Street, Sandton, 2196';
+  process.env.PLATFORM_REGISTRATION_NUMBER = '2024/123456/07';
+  process.env.PLATFORM_VAT_NUMBER = '4123456789';
   setPayFastNetwork({
     payfastAddresses: async () => new Set([PAYFAST_IP]),
     fetch: (async (input: string | URL | Request, init?: RequestInit) => {
@@ -483,7 +490,7 @@ describe('isolation', () => {
       legalName: 'Other Subs Inc',
       domains: ['portal.subs-other.test'],
     });
-    const outsider = await createStaff({
+    outsider = await createStaff({
       email: 'admin@subs-other.example',
       role: 'admin',
       firm: other,
@@ -506,5 +513,144 @@ describe('isolation', () => {
       .set('Host', 'portal.subs-other.test')
       .set(outsider.auth);
     expect(otherStatus.body.state).toBe('trialing');
+  });
+});
+
+describe('the platform’s invoices to the firm', () => {
+  test('each confirmed payment gets a tax invoice with the VAT Act particulars', async () => {
+    const res = await request(app).get('/api/subscription/invoices').set(admin.auth);
+    expect(res.status).toBe(200);
+    const complete = (await inDefaultFirm(() => db().select().from(subscriptionPayments))).filter(
+      (p) => p.status === 'complete',
+    );
+    // One per confirmed payment, none for the mismatched ones; one gap-free series.
+    expect(res.body).toHaveLength(complete.length);
+    expect(res.body.map((i: { number: string }) => i.number).sort()).toEqual(
+      complete.map((_, n) => `PI-${String(n + 1).padStart(6, '0')}`),
+    );
+    const first = res.body.find(
+      (i: { paymentReference: string }) => i.paymentReference === 'pf-first',
+    );
+    expect(first).toMatchObject({
+      taxInvoice: true,
+      totalCents: 155_250,
+      vatCents: 20_250,
+      exclusiveCents: 135_000,
+      vatRate: 0.15,
+      supplier: {
+        address: '1 Platform Street, Sandton, 2196',
+        vatNumber: '4123456789',
+        registrationNumber: '2024/123456/07',
+      },
+      recipient: { name: (await defaultFirm()).legalName },
+    });
+    expect(first.lines[0]).toMatchObject({ quantity: 3, amountCents: 135_000 });
+    expect(first.lines[0].description).toMatch(/Practice subscription: 3 seats, billed monthly/);
+  });
+
+  test('administrators are emailed the PDF, and can download it', async () => {
+    const mail = testOutbox().find((m) => /^Tax invoice PI-000001/.test(m.subject));
+    expect(mail?.to).toBe('admin@subs.example');
+    expect(mail?.attachments?.[0]).toMatchObject({
+      filename: 'PI-000001.pdf',
+      contentType: 'application/pdf',
+    });
+    const list = await request(app).get('/api/subscription/invoices').set(admin.auth);
+    const pdf = await request(app)
+      .get(`/api/subscription/invoices/${list.body[0].id}/pdf`)
+      .set(admin.auth)
+      .buffer(true)
+      .parse((res, done) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => done(null, Buffer.concat(chunks)));
+      });
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers['content-type']).toBe('application/pdf');
+    expect((pdf.body as Buffer).subarray(0, 4).toString()).toBe('%PDF');
+    expect((await request(app).get('/api/subscription/invoices').set(attorney.auth)).status).toBe(
+      403,
+    );
+  });
+
+  test('firms read their invoices but can never write them', async () => {
+    await inDefaultFirm(async () => {
+      const [row] = await db().select().from(platformInvoices).limit(1);
+      await expect(
+        db()
+          .update(platformInvoices)
+          .set({ totalCents: 1 })
+          .where(eq(platformInvoices.id, row!.id)),
+      ).rejects.toThrow();
+    });
+  });
+
+  test('a payment left without an invoice is caught up; without a VAT number it is a plain invoice', async () => {
+    const saved = process.env.PLATFORM_VAT_NUMBER;
+    delete process.env.PLATFORM_VAT_NUMBER;
+    try {
+      await inDefaultFirm(() =>
+        db()
+          .insert(subscriptionPayments)
+          .values({ pfPaymentId: 'pf-missed', amountCents: 155_250, status: 'complete' }),
+      );
+      expect(await issueMissing()).toEqual({ issued: 1, failed: 0 });
+      expect(await issueMissing()).toEqual({ issued: 0, failed: 0 });
+      const list = await request(app).get('/api/subscription/invoices').set(admin.auth);
+      const missed = list.body.find(
+        (i: { paymentReference: string }) => i.paymentReference === 'pf-missed',
+      );
+      expect(missed).toMatchObject({ taxInvoice: false, vatCents: 0, exclusiveCents: 155_250 });
+    } finally {
+      process.env.PLATFORM_VAT_NUMBER = saved;
+    }
+  });
+
+  test('VAT is the tax fraction of the inclusive amount', () => {
+    expect(vatIncluded(115_00, 0.15)).toBe(15_00);
+    expect(vatIncluded(155_250, 0.15)).toBe(20_250);
+    expect(vatIncluded(1_00, 0)).toBe(0);
+  });
+
+  test('another firm sees none of them', async () => {
+    const res = await request(app)
+      .get('/api/subscription/invoices')
+      .set('Host', 'portal.subs-other.test')
+      .set(outsider.auth);
+    expect(res.body).toEqual([]);
+  });
+
+  test('operators see every firm’s invoices in the console', async () => {
+    process.env.PLATFORM_CONSOLE_HOST = 'console.subs.test';
+    const op = await createOperator({ email: 'ops@subs.example', fullName: 'Ops' });
+    const signIn = await request(app)
+      .post('/api/platform/sign-in')
+      .set('Host', 'console.subs.test')
+      .set('Origin', 'https://console.subs.test')
+      .send({ email: op.email, password: op.password, code: codeForStep(op.secret, timeStep()) });
+    const cookie = String(signIn.headers['set-cookie'] ?? '').split(';')[0]!;
+    const list = await request(app)
+      .get('/api/platform/invoices')
+      .set('Host', 'console.subs.test')
+      .set('Cookie', cookie);
+    expect(list.status).toBe(200);
+    const firm = await defaultFirm();
+    expect(list.body.length).toBeGreaterThan(0);
+    console.log(
+      'SLUGS',
+      firm.slug,
+      JSON.stringify(list.body.map((i: any) => [i.firmSlug, i.number, i.paymentReference])),
+    );
+    expect(list.body.every((i: { firmSlug: string }) => i.firmSlug === firm.slug)).toBe(true);
+    const pdf = await request(app)
+      .get(`/api/platform/invoices/${firm.id}/${list.body[0].id}/pdf`)
+      .set('Host', 'console.subs.test')
+      .set('Cookie', cookie);
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers['content-type']).toBe('application/pdf');
+    // Not from a firm's address.
+    expect((await request(app).get('/api/platform/invoices').set('Cookie', cookie)).status).toBe(
+      404,
+    );
   });
 });

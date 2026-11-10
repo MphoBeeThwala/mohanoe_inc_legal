@@ -2159,3 +2159,36 @@ export interface HelpCentre {
   statusPageUrl: string | null;
   supportEmail: string | null;
 }
+
+// -------------------------------------------------- Platform tax invoices
+
+export interface PlatformInvoiceParty {
+  name: string;
+  address: string;
+  vatNumber: string | null;
+  registrationNumber: string | null;
+}
+
+/** The platform's invoice to a firm for one subscription payment. */
+export interface PlatformInvoice {
+  id: string;
+  number: string;
+  taxInvoice: boolean;
+  issuedAt: string;
+  supplier: PlatformInvoiceParty;
+  recipient: PlatformInvoiceParty;
+  lines: Array<{ description: string; quantity: number; amountCents: number }>;
+  vatRate: number;
+  exclusiveCents: number;
+  vatCents: number;
+  totalCents: number;
+  paymentReference: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+}
+
+/** In the console: the invoice plus the firm it was issued to. */
+export interface ConsolePlatformInvoice extends PlatformInvoice {
+  firmId: string;
+  firmSlug: string;
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
   subscriptionPriceCents,
+  type PlatformInvoice,
   type SubscriptionCheckout,
   type SubscriptionInterval,
   type SubscriptionPlan,
@@ -59,6 +60,7 @@ function SubscriptionPanel({
   const [seatChange, setSeatChange] = useState(1);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [invoices, setInvoices] = useState<PlatformInvoice[]>([]);
 
   const load = useCallback(async () => {
     const [current, available] = await Promise.all([
@@ -67,6 +69,11 @@ function SubscriptionPanel({
     ]);
     setStatus(current.data);
     setPlans(available.data);
+    // Invoices are a nicety here: a failure must not hide the subscription.
+    api
+      .get<PlatformInvoice[]>('/subscription/invoices')
+      .then(({ data }) => setInvoices(data))
+      .catch(() => setInvoices([]));
     setPlanCode((code) => code || current.data.planCode || available.data[0]?.code || '');
     // New subscriptions start at the seats already in use (a trial's allowance isn't a choice).
     setSeats(
@@ -291,6 +298,38 @@ function SubscriptionPanel({
                   {payment.status !== 'complete' ? ` (${payment.status})` : ''}
                 </td>
                 <td>{payment.reference}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+
+      {invoices.length ? (
+        <table className="subscription-payments">
+          <caption>Invoices</caption>
+          <thead>
+            <tr>
+              <th>Invoice</th>
+              <th>Date</th>
+              <th>Total</th>
+              <th>VAT</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoices.map((invoice) => (
+              <tr key={invoice.id}>
+                <td>
+                  <a
+                    href={`/api/subscription/invoices/${invoice.id}/pdf`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {invoice.taxInvoice ? 'Tax invoice' : 'Invoice'} {invoice.number}
+                  </a>
+                </td>
+                <td>{day(invoice.issuedAt)}</td>
+                <td>{money(invoice.totalCents)}</td>
+                <td>{invoice.taxInvoice ? money(invoice.vatCents) : '—'}</td>
               </tr>
             ))}
           </tbody>
