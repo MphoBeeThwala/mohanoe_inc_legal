@@ -120,6 +120,13 @@
       "when": 1794289296131,
       "tag": "0016_trust_accounting",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794290795703,
+      "tag": "0017_client_portal",
+      "breakpoints": true
     }
   ]
 }

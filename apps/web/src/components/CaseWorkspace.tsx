@@ -7,6 +7,7 @@ import MatterAccessPanel from './MatterAccessPanel';
 import MatterPartiesPanel from './MatterPartiesPanel';
 import MatterCourtPanel from './MatterCourtPanel';
 import ResearchPanel from './ResearchPanel';
+import PortalStaffPanel from './PortalStaffPanel';
 
 interface CaseWorkspaceProps {
   api: ApiClient;
@@ -21,6 +22,10 @@ interface CaseWorkspaceProps {
   canResearch?: boolean;
   /** research.approve: sign off research memos. */
   canApproveResearch?: boolean;
+  /** portal.manage / matters.write / documents.write for the client portal panel. */
+  canManagePortal?: boolean;
+  canWriteMatter?: boolean;
+  canShareDocuments?: boolean;
 }
 
 function CaseWorkspace({
@@ -32,6 +37,9 @@ function CaseWorkspace({
   canEditCalendar = false,
   canResearch = false,
   canApproveResearch = false,
+  canManagePortal = false,
+  canWriteMatter = false,
+  canShareDocuments = false,
 }: CaseWorkspaceProps) {
   const [caseRecord, setCaseRecord] = useState<CaseDetail | null>(null);
   const [busy, setBusy] = useState(false);
@@ -317,6 +325,16 @@ function CaseWorkspace({
             canEditMatter={canEdit}
             canEditCalendar={canEditCalendar}
           />
+
+          {canManagePortal || canWriteMatter ? (
+            <PortalStaffPanel
+              key={`portal-${caseRecord.id}`}
+              caseId={caseRecord.id}
+              canManagePortal={canManagePortal}
+              canWriteMatter={canWriteMatter}
+              canShareDocuments={canShareDocuments}
+            />
+          ) : null}
 
           {canResearch ? (
             <ResearchPanel

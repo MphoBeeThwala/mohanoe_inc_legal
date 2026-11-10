@@ -25,6 +25,11 @@ Owner: Ahava on 88 (Pty) Ltd. The product is licensed to individual law firms. T
   - No matter's ledger may go into debit: check it under the account lock (`atomically` + `for('update')`).
   - Money out needs `trust.authorise` by someone other than the requester.
   - Totals across matters use `withSystemScope` but never reveal a restricted matter's details.
+- **Client portal** (`portal.service.ts`, `/api/portal`):
+  - Clients have no staff account and no staff session. Signing in takes an emailed one-time link plus an authenticator code.
+  - Every portal read goes through `asClient()`: matter restrictions are lifted, so each query must be limited to `clientCaseIds()` (the matters where the user's party is the client).
+  - Clients see documents only once staff share them, and only issued invoices.
+  - Emails to clients never carry message content.
 - **Time** is whole 6-minute units with the rate fixed when recorded (`time.service.ts`); narratives are encrypted; billed or written-off time never changes.
 - **Production fails fast:** `apps/api/src/config/env.ts` refuses to boot without real secrets. Don't add silent fallbacks that run in production.
 - **Infrastructure** lives in `infra/terraform` (format with `terraform fmt`); a new env var for production goes in `containerapps.tf` (`app_env`, or a Key Vault secret for secrets). A new scheduled task is an `ops` command plus a scheduled job there. Errors sent to Sentry go through `lib/monitoring.ts`, which strips personal information.

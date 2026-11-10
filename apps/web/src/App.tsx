@@ -704,6 +704,9 @@ function App() {
               canEditCalendar={currentUser.permissions.includes('calendar.write')}
               canResearch={hasPermission(currentUser.role, 'research.use')}
               canApproveResearch={hasPermission(currentUser.role, 'research.approve')}
+              canManagePortal={hasPermission(currentUser.role, 'portal.manage')}
+              canWriteMatter={hasPermission(currentUser.role, 'matters.write')}
+              canShareDocuments={hasPermission(currentUser.role, 'documents.write')}
             />
 
             <section

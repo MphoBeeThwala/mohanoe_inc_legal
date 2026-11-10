@@ -781,6 +781,8 @@ const ALWAYS_ALLOWED = [
   /^\/api\/auth(\/|$)/,
   /^\/api\/subscription(\/|$)/,
   /^\/api\/support(\/|$)/,
+  // A firm's unpaid subscription never locks its clients out of the portal.
+  /^\/api\/portal(\/|$)/,
 ];
 
 export function writeAllowedWhileSuspended(path: string): boolean {

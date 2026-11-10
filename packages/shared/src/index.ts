@@ -122,7 +122,8 @@ export type Permission =
   | 'research.approve'
   | 'trust.read'
   | 'trust.record'
-  | 'trust.authorise';
+  | 'trust.authorise'
+  | 'portal.manage';
 
 const FEE_EARNER: readonly Permission[] = [
   'clients.read',
@@ -173,10 +174,11 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'trust.read',
     'trust.record',
     'trust.authorise',
+    'portal.manage',
   ],
   // Attorneys sign off research memos and precedents (paralegals prepare them).
   // Practitioners authorise trust payments and sign off reconciliations.
-  attorney: [...FEE_EARNER, 'research.approve', 'trust.read', 'trust.authorise'],
+  attorney: [...FEE_EARNER, 'research.approve', 'trust.read', 'trust.authorise', 'portal.manage'],
   paralegal: FEE_EARNER,
   secretary: [
     'clients.read',
@@ -193,6 +195,8 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'calendar.read',
     'calendar.write',
     'notifications.read',
+    // Invites clients to the portal and answers their messages.
+    'portal.manage',
   ],
   bookkeeper: [
     'clients.read',
@@ -891,6 +895,8 @@ export interface DocumentRecord {
   createdAt: string;
   updatedAt: Nullable<string>;
   signedAt: Nullable<string>;
+  /** When staff shared it with the matter's client in the portal. */
+  sharedWithClientAt?: Nullable<string>;
   content: DocumentContent | null;
 }
 
@@ -1934,4 +1940,71 @@ export interface TrustReconciliation {
   preparedAt: string;
   signedOffBy: string | null;
   signedOffAt: string | null;
+}
+
+// ------------------------------------------------------------ client portal
+
+export type PortalUserStatus = 'invited' | 'active' | 'disabled';
+
+/** A client's portal access, as staff see it. */
+export interface PortalAccess {
+  id: string;
+  partyNumber: string;
+  status: PortalUserStatus;
+  invitedAt: string;
+  lastSignInAt: string | null;
+}
+
+export interface PortalMe {
+  name: string;
+  firmName: string;
+}
+
+export interface PortalMatter {
+  id: string;
+  caseNumber: string;
+  title: string;
+  status: string;
+  /** The attorney's update for the client. */
+  update: string | null;
+  updatedAt: string | null;
+  /** Null when the firm doesn't use trust accounting. */
+  trustBalanceCents: number | null;
+  unreadMessages: number;
+}
+
+export interface PortalDocument {
+  id: string;
+  caseNumber: string;
+  title: string;
+  documentType: string;
+  sharedAt: string;
+}
+
+export interface PortalInvoice {
+  id: string;
+  caseNumber: string;
+  invoiceNumber: string;
+  issuedOn: string | null;
+  dueOn: string | null;
+  totalCents: number;
+  paidCents: number;
+  status: string;
+}
+
+export interface PortalMessage {
+  id: string;
+  caseNumber: string;
+  from: 'client' | 'staff';
+  senderName: string;
+  body: string;
+  sentAt: string;
+}
+
+/** Step one of setting up an authenticator: scan this, then send a code. */
+export interface PortalEnrolment {
+  otpauthUrl: string;
+  qrCodeDataUrl: string;
+  secret: string;
+  name: string;
 }
