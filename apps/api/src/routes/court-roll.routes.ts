@@ -4,6 +4,7 @@ import type { Request, Response } from 'express';
 import { sendError } from '../lib/http';
 import { authenticateRequest, requirePermission } from '../services/auth.service';
 import * as courtRollService from '../services/court-roll.service';
+import * as courtService from '../services/court.service';
 
 type Handler = (req: Request) => Promise<unknown>;
 
@@ -22,6 +23,23 @@ const id = (req: Request) => String(req.params.id);
 
 const router = express.Router();
 router.use(authenticateRequest);
+
+// Who else gets every court roll notice (e.g. the office manager).
+router.get(
+  '/watchers',
+  requirePermission('calendar.read'),
+  handle(() => courtService.rollWatchers()),
+);
+router.put(
+  '/watchers',
+  requirePermission('users.manage'),
+  handle((req) => courtService.setRollWatchers(req.body, req.auth ?? {})),
+);
+router.get(
+  '/court-online',
+  requirePermission('calendar.read'),
+  handle(() => courtService.listCourtOnlineCourts()),
+);
 
 router.get(
   '/matches',

@@ -517,6 +517,8 @@ export interface TeamNotice {
   entityType: string;
   entityId: string;
   assigneeUserId?: string | null;
+  /** Others to tell as well (e.g. the firm's court roll watchers), deduplicated. */
+  alsoUserIds?: string[];
 }
 
 /** Tells a matter's team in the app and by email. Returns the emails sent. */
@@ -525,7 +527,15 @@ export async function notifyMatterTeam(notice: TeamNotice): Promise<number> {
   const brand = getFirmBrand(firm);
   const link = `${firmOrigin(firm)}/`;
   let emails = 0;
-  for (const person of await matterTeam(notice.caseId, notice.assigneeUserId ?? null)) {
+  const team = await matterTeam(notice.caseId, notice.assigneeUserId ?? null);
+  const extra = (notice.alsoUserIds ?? []).filter((id) => !team.some((person) => person.id === id));
+  const others = extra.length
+    ? await db()
+        .select({ id: users.id, email: users.email, fullName: users.fullName, role: users.role })
+        .from(users)
+        .where(and(inArray(users.id, extra), eq(users.isActive, true), ne(users.role, 'support')))
+    : [];
+  for (const person of [...team, ...others]) {
     await db().insert(notifications).values({
       title: notice.subject,
       body: notice.body,

@@ -372,6 +372,14 @@ export const matterCourtSchema = z.object({
     .regex(/^[A-Za-z0-9 ./-]*$/, 'use the number as the court gives it, e.g. 12345/2025')
     .nullable()
     .transform((value) => value || null),
+  courtOnlineReference: z
+    .string()
+    .trim()
+    .max(40)
+    .regex(/^[A-Za-z0-9 ./-]*$/, 'use the number Court Online gives, e.g. 2025-012345')
+    .nullable()
+    .optional()
+    .transform((value) => value || null),
 });
 
 // ---------------------------------------------------------------- notifications

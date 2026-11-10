@@ -13,7 +13,7 @@
 //   events stay, for a person to check with the registrar.
 // - A roll a firm uploads (e.g. one emailed by a registrar) is matched only
 //   with that firm's matters and is not stored.
-import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import {
   COURT_DIVISIONS,
   type CourtRollMatch,
@@ -24,6 +24,7 @@ import { db, rootDb } from '../db/client';
 import { withTenant } from '../db/tenant';
 import {
   calendarEvents,
+  caseMembers,
   cases,
   courtRollDocuments,
   courtRollEntries,
@@ -51,7 +52,13 @@ import {
   type CourtRollSource,
   type Fetcher,
 } from './court-roll-sources';
-import { insertEvent, notifyMatterTeam, startOfLocalDay } from './calendar.service';
+import {
+  insertEvent,
+  notifyMatterTeam,
+  startOfLocalDay,
+  type TeamNotice,
+} from './calendar.service';
+import { currentFirm } from '../db/tenant-context';
 import * as auditService from './audit.service';
 
 const DAY_MS = 86_400_000;
@@ -250,15 +257,30 @@ async function matchForFirm(
       caseNumber: cases.caseNumber,
       division: cases.courtDivision,
       key: cases.courtCaseKey,
+      onlineKey: cases.courtOnlineKey,
     })
     .from(cases)
-    .where(and(inArray(cases.courtDivision, divisions), inArray(cases.courtCaseKey, keys)));
+    .where(
+      and(
+        inArray(cases.courtDivision, divisions),
+        or(inArray(cases.courtCaseKey, keys), inArray(cases.courtOnlineKey, keys)),
+      ),
+    );
   if (!matters.length) return { run, rows };
+  // The court's case number or the Court Online number.
+  const on = (listing: Listing) =>
+    matters.filter(
+      (candidate) =>
+        candidate.division === listing.division &&
+        (candidate.key === listing.caseKey || candidate.onlineKey === listing.caseKey),
+    );
+  // Per matter: what newly appeared and what an amended roll dropped, so a
+  // moved hearing is one "listing changed" notice rather than two.
+  const appeared = new Map<string, Array<{ listing: Listing; id: string }>>();
+  const vanished = new Map<string, Array<{ listing: Listing; id: string; hadEvent: boolean }>>();
 
   for (const listing of listings) {
-    for (const matter of matters.filter(
-      (candidate) => candidate.division === listing.division && candidate.key === listing.caseKey,
-    )) {
+    for (const matter of on(listing)) {
       const key = listingKey(listing);
       const [before] = await db()
         .select()
@@ -298,22 +320,13 @@ async function matchForFirm(
       rows.push(saved);
       if (!before || before.status === 'removed') {
         run.matched += 1;
-        run.emails += await notifyMatterTeam({
-          caseId: matter.id,
-          subject: `${matter.caseNumber} is on a court roll`,
-          body: `Matter ${matter.caseNumber} appears on the ${hearingText(listing)}. Check the roll and put it on the calendar (Operations → Calendar → Court rolls).`,
-          priority: 'high',
-          entityType: 'court_roll_match',
-          entityId: saved.id,
-        });
+        appeared.set(matter.id, [...(appeared.get(matter.id) ?? []), { listing, id: saved.id }]);
       }
     }
   }
 
   for (const listing of dropped) {
-    for (const matter of matters.filter(
-      (candidate) => candidate.division === listing.division && candidate.key === listing.caseKey,
-    )) {
+    for (const matter of on(listing)) {
       const gone = await db()
         .update(courtRollMatches)
         .set({ status: 'removed', updatedAt: new Date() })
@@ -327,18 +340,118 @@ async function matchForFirm(
         .returning();
       for (const row of gone) {
         run.removed += 1;
-        run.emails += await notifyMatterTeam({
-          caseId: matter.id,
-          subject: `${matter.caseNumber} is no longer on an amended roll`,
-          body: `Matter ${matter.caseNumber} was on the ${hearingText(listing)}, but is not on the amended roll. ${row.eventId ? 'Its calendar entry has been kept. ' : ''}Check with the registrar before changing the calendar.`,
-          priority: 'high',
-          entityType: 'court_roll_match',
-          entityId: row.id,
-        });
+        vanished.set(matter.id, [
+          ...(vanished.get(matter.id) ?? []),
+          { listing, id: row.id, hadEvent: Boolean(row.eventId) },
+        ]);
       }
     }
   }
+
+  for (const matter of matters) {
+    const added = appeared.get(matter.id) ?? [];
+    const removed = vanished.get(matter.id) ?? [];
+    if (added.length && removed.length) {
+      run.emails += await notifyRollTeam({
+        caseId: matter.id,
+        subject: `${matter.caseNumber}: court roll listing changed`,
+        body: `The amended roll moves matter ${matter.caseNumber}. It was on the ${removed.map((r) => hearingText(r.listing)).join('; ')}. It is now on the ${added.map((a) => hearingText(a.listing)).join('; ')}. ${removed.some((r) => r.hadEvent) ? 'The calendar still shows the old listing until someone accepts the new one. ' : ''}Check the roll (Operations → Calendar → Court rolls).`,
+        priority: 'high',
+        entityType: 'court_roll_match',
+        entityId: added[0]!.id,
+      });
+      continue;
+    }
+    for (const { listing, id } of added) {
+      run.emails += await notifyRollTeam({
+        caseId: matter.id,
+        subject: `${matter.caseNumber} is on a court roll`,
+        body: `Matter ${matter.caseNumber} appears on the ${hearingText(listing)}. Check the roll and put it on the calendar (Operations → Calendar → Court rolls).`,
+        priority: 'high',
+        entityType: 'court_roll_match',
+        entityId: id,
+      });
+    }
+    for (const { listing, id, hadEvent } of removed) {
+      run.emails += await notifyRollTeam({
+        caseId: matter.id,
+        subject: `${matter.caseNumber} is no longer on an amended roll`,
+        body: `Matter ${matter.caseNumber} was on the ${hearingText(listing)}, but is not on the amended roll. ${hadEvent ? 'Its calendar entry has been kept. ' : ''}Check with the registrar before changing the calendar.`,
+        priority: 'high',
+        entityType: 'court_roll_match',
+        entityId: id,
+      });
+    }
+  }
   return { run, rows };
+}
+
+/** Staff who also get every court roll notice (Operations → Court rolls). */
+async function rollWatchers(): Promise<string[]> {
+  return currentFirm().notificationSettings?.courtRollWatcherIds ?? [];
+}
+
+/** The matter's team plus the firm's court roll watchers who may see the matter. */
+async function notifyRollTeam(notice: TeamNotice): Promise<number> {
+  const [matter] = await db()
+    .select({ access: cases.access })
+    .from(cases)
+    .where(eq(cases.id, notice.caseId));
+  let watchers = await rollWatchers();
+  if (matter?.access !== 'firm' && watchers.length) {
+    // A restricted matter's number goes only to watchers on the matter.
+    const members = await db()
+      .select({ userId: caseMembers.userId })
+      .from(caseMembers)
+      .where(eq(caseMembers.caseId, notice.caseId));
+    const allowed = new Set(members.map((m) => m.userId));
+    watchers = watchers.filter((id) => allowed.has(id));
+  }
+  return notifyMatterTeam({ ...notice, alsoUserIds: watchers });
+}
+
+/**
+ * Daily: listings in the next two days that nobody has confirmed yet get a
+ * reminder to the matter's team and watchers (once per listing).
+ */
+export async function remindUnconfirmed(now = new Date()): Promise<number> {
+  const today = localDate(now);
+  const soon = localDate(new Date(now.getTime() + 2 * 86_400_000));
+  const due = await db()
+    .select({ match: courtRollMatches, caseNumber: cases.caseNumber })
+    .from(courtRollMatches)
+    .innerJoin(cases, eq(cases.id, courtRollMatches.caseId))
+    .where(
+      and(
+        eq(courtRollMatches.status, 'new'),
+        isNull(courtRollMatches.remindedAt),
+        sql`${courtRollMatches.hearingDate} between ${today} and ${soon}`,
+      ),
+    );
+  let emails = 0;
+  for (const { match, caseNumber } of due) {
+    emails += await notifyRollTeam({
+      caseId: match.caseId,
+      subject: `${caseNumber}: court roll listing not yet confirmed`,
+      body: `Matter ${caseNumber} is on the ${hearingText({
+        caseKey: '',
+        division: match.division,
+        hearingDate: match.hearingDate,
+        hearingTime: match.hearingTime,
+        courtroom: match.courtroom,
+        judge: match.judge,
+        section: match.section,
+      })}, and nobody has confirmed it on the calendar yet. Check the roll and accept or dismiss the match.`,
+      priority: 'high',
+      entityType: 'court_roll_match',
+      entityId: match.id,
+    });
+    await db()
+      .update(courtRollMatches)
+      .set({ remindedAt: now })
+      .where(eq(courtRollMatches.id, match.id));
+  }
+  return emails;
 }
 
 const toListing = (entry: CourtRollEntryRow): Listing => ({
@@ -795,4 +908,14 @@ export function scheduleCourtRollSync(): NodeJS.Timeout | null {
   }, hours * 3_600_000);
   timer.unref();
   return timer;
+}
+
+/** The daily reminder for every active firm (run with `ops reminders`). */
+export async function remindUnconfirmedForAllFirms(now = new Date()) {
+  const all = await rootDb().select().from(firms).where(eq(firms.status, 'active'));
+  let emails = 0;
+  for (const firm of all) {
+    emails += await withTenant(firm, () => remindUnconfirmed(now), { system: true });
+  }
+  return emails;
 }

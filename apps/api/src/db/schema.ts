@@ -98,6 +98,11 @@ export interface FirmProfile {
 }
 
 /** Progress through the onboarding wizard. */
+export interface FirmNotificationSettings {
+  /** Staff told about every court roll match, change and reminder (e.g. the office manager). */
+  courtRollWatcherIds?: string[];
+}
+
 export interface FirmFeatures {
   /** Trust accounting (pilots first, after auditor review). */
   trustAccounting?: boolean;
@@ -144,6 +149,11 @@ export const firms = pgTable(
     billingSettings: jsonb('billing_settings').$type<FirmBillingSettings>().notNull().default({}),
     profile: jsonb('profile').$type<FirmProfile>().notNull().default({}),
     onboarding: jsonb('onboarding').$type<FirmOnboarding>().notNull().default({}),
+    /** Who else is told about court rolls (firm administrators set it). */
+    notificationSettings: jsonb('notification_settings')
+      .$type<FirmNotificationSettings>()
+      .notNull()
+      .default({}),
     /** Platform-controlled feature flags (requests cannot change them). */
     features: jsonb('features').$type<FirmFeatures>().notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -1073,11 +1083,16 @@ export const cases = pgTable(
     courtCaseNumber: text('court_case_number'),
     /** courtCaseNumber normalised (number/yyyy) for matching court rolls. */
     courtCaseKey: text('court_case_key'),
+    /** Court Online case number (court case numbers are not personal information). */
+    courtOnlineReference: text('court_online_reference'),
+    /** Normalised Court Online number: rolls are matched against it too. */
+    courtOnlineKey: text('court_online_key'),
     ...updatable,
   },
   (t) => [
     index('cases_created_at_idx').on(t.createdAt),
     index('cases_court_case_key_idx').on(t.courtDivision, t.courtCaseKey),
+    index('cases_court_online_key_idx').on(t.courtDivision, t.courtOnlineKey),
     uniqueIndex('cases_firm_case_number_idx').on(t.firmId, t.caseNumber),
     tenantPolicy('cases'),
     pgPolicy('cases_matter_access', {
@@ -1754,6 +1769,20 @@ export const notifications = pgTable(
  * public and shared by every firm, and requests (app_tenant) can't read them.
  * Only case numbers, courtrooms, times and judges are kept, never party names.
  */
+/**
+ * Courts that use Court Online (the Office of the Chief Justice's e-filing
+ * and case management system). Platform table: requests may only read it;
+ * operators keep it current (`ops courts`).
+ */
+export const courtOnlineCourts = pgTable('court_online_courts', {
+  division: text('division').primaryKey(),
+  /** From when (as the source states it). */
+  since: text('since').notNull(),
+  /** Where this comes from (directive, notice, parliamentary reply). */
+  source: text('source').notNull(),
+  ...updatable,
+});
+
 export const courtRollDocuments = pgTable(
   'court_roll_documents',
   {
@@ -1827,6 +1856,8 @@ export const courtRollMatches = pgTable(
     eventId: uuid('event_id').references(() => calendarEvents.id, { onDelete: 'set null' }),
     reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    /** When the team was reminded that an unconfirmed listing is close. */
+    remindedAt: timestamp('reminded_at', { withTimezone: true }),
     ...updatable,
   },
   (t) => [

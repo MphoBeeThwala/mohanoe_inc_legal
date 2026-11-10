@@ -29,6 +29,12 @@ import {
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { sendRemindersForAllFirms } from '../services/calendar.service';
+import { remindUnconfirmedForAllFirms } from '../services/court-roll.service';
+import {
+  listCourtOnlineCourts,
+  removeCourtOnlineCourt,
+  setCourtOnlineCourt,
+} from '../services/court.service';
 import { restoreCheck } from '../services/restore-check.service';
 import { importRollFile, syncCourtRolls } from '../services/court-roll.service';
 import { checkPendingDomains } from '../services/white-label.service';
@@ -275,6 +281,8 @@ async function main(): Promise<void> {
       order: { type: 'string' },
       until: { type: 'string' },
       kind: { type: 'string' },
+      since: { type: 'string' },
+      source: { type: 'string' },
       publisher: { type: 'string' },
       url: { type: 'string' },
       licence: { type: 'string' },
@@ -298,6 +306,28 @@ async function main(): Promise<void> {
     await keys(positionals[0] ?? 'status', values.slug);
   } else if (command === 'plans') {
     await plans(positionals[0] ?? 'list', values as Record<string, string | undefined>);
+  } else if (command === 'courts') {
+    const action = positionals[0] ?? 'list';
+    if (action === 'list') {
+      await withTenant((await listFirms())[0]!, async () => {
+        for (const court of await listCourtOnlineCourts()) {
+          console.log(`${court.division.padEnd(10)} since ${court.since}: ${court.source}`);
+        }
+      });
+    } else if (action === 'set') {
+      if (!values.division) throw new Error('courts set needs --division, --since and --source');
+      await setCourtOnlineCourt(values.division, values.since ?? '', values.source ?? '');
+      console.log(`${values.division}: on Court Online since ${values.since}`);
+    } else if (action === 'remove') {
+      if (!values.division) throw new Error('courts remove needs --division');
+      console.log(
+        (await removeCourtOnlineCourt(values.division))
+          ? `${values.division}: removed`
+          : 'Not listed',
+      );
+    } else {
+      throw new Error('Usage: ops courts list|set|remove');
+    }
   } else if (command === 'trust') {
     const action = positionals[0];
     if ((action !== 'enable' && action !== 'disable') || !values.slug) {
@@ -375,9 +405,13 @@ async function main(): Promise<void> {
     for (const result of await sendRemindersForAllFirms()) {
       console.log(`${result.firm}: ${result.events} event(s), ${result.emails} email(s)`);
     }
+    // Court roll listings in the next two days nobody has confirmed (once each).
+    console.log(
+      `Unconfirmed court roll reminders: ${await remindUnconfirmedForAllFirms()} email(s)`,
+    );
   } else {
     throw new Error(
-      'Usage: ops keys status|rotate|reencrypt|rewrap|prune [--slug <slug>] | ops anchor | ops reminders | ops domains | ops restore-check | ops subscriptions | ops trust enable|disable --slug <slug> | ops sources list|add|suspend|approve|import|sync-laws-africa | ops plans list|set|disable | ops subscription comp --slug <slug> | ops court-rolls [--file <roll> --division <code> --title <title>] | ops operator create|list|disable|enable',
+      'Usage: ops keys status|rotate|reencrypt|rewrap|prune [--slug <slug>] | ops anchor | ops reminders | ops domains | ops restore-check | ops subscriptions | ops courts list|set|remove | ops trust enable|disable --slug <slug> | ops sources list|add|suspend|approve|import|sync-laws-africa | ops plans list|set|disable | ops subscription comp --slug <slug> | ops court-rolls [--file <roll> --division <code> --title <title>] | ops operator create|list|disable|enable',
     );
   }
 }

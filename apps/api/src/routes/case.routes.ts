@@ -18,6 +18,14 @@ router.post(
   caseController.completeTask,
 );
 router.post('/:caseId/status', requirePermission('matters.write'), caseController.updateStatus);
+router.get('/:caseId/court-online', requirePermission('matters.read'), async (req, res) => {
+  try {
+    res.json(await courtService.courtOnlineFor(String(req.params.caseId)));
+  } catch (error) {
+    sendError(res, error);
+  }
+});
+
 router.put('/:caseId/court', requirePermission('matters.write'), async (req, res) => {
   try {
     res.json(await courtService.setMatterCourt(String(req.params.caseId), req.body, req.auth));

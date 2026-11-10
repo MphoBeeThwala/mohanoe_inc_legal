@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ChangeEvent } from 'react';
 import {
+  type CourtRollWatchers,
   COURT_DIVISIONS,
   hasPermission,
   type CourtRollMatch,
@@ -40,11 +41,24 @@ function CourtRollPanel({ currentUser, onChanged }: Props) {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const canChooseWatchers = hasPermission(currentUser.role, 'users.manage');
+  const [watchers, setWatchers] = useState<string[]>([]);
+  const [staff, setStaff] = useState<
+    Array<{ id: string; fullName: string; role: string; isActive: boolean }>
+  >([]);
 
   const load = useCallback(async () => {
     const { data } = await api.get<CourtRollMatch[]>('/court-rolls/matches');
     setMatches(data);
-  }, []);
+    if (canChooseWatchers) {
+      const [chosen, people] = await Promise.all([
+        api.get<CourtRollWatchers>('/court-rolls/watchers'),
+        api.get<Array<{ id: string; fullName: string; role: string; isActive: boolean }>>('/users'),
+      ]);
+      setWatchers(chosen.data.userIds);
+      setStaff(people.data.filter((person) => person.isActive && person.role !== 'support'));
+    }
+  }, [canChooseWatchers]);
 
   useEffect(() => {
     load().catch((err) => setError(apiErrorMessage(err, 'Court rolls could not be loaded.')));
@@ -191,6 +205,37 @@ function CourtRollPanel({ currentUser, onChanged }: Props) {
       ) : (
         <p className="field-hint">No new court roll listings for your matters.</p>
       )}
+
+      {canChooseWatchers ? (
+        <fieldset className="plan-options" aria-label="Court roll notices">
+          <legend>
+            Also tell these people about every court roll listing, change and reminder
+          </legend>
+          <p className="field-hint">
+            The matter&apos;s team (including the responsible attorney) is always told. Add the
+            office manager or anyone else who keeps the diary. Restricted matters only go to people
+            on them.
+          </p>
+          {staff.map((person) => (
+            <label key={person.id} className="inline-check">
+              <input
+                type="checkbox"
+                checked={watchers.includes(person.id)}
+                onChange={(event) => {
+                  const next = event.target.checked
+                    ? [...watchers, person.id]
+                    : watchers.filter((id) => id !== person.id);
+                  run(async () => {
+                    await api.put('/court-rolls/watchers', { userIds: next });
+                    setMessage('Saved: they will get court roll notices.');
+                  });
+                }}
+              />
+              {person.fullName}
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
 
       {canWrite ? (
         <form

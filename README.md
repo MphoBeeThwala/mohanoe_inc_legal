@@ -110,6 +110,10 @@ When the firms table is empty, the server creates a `default` firm from these va
   - **Evaluation.** `npm run eval -w apps/api` runs the evaluation set before model or prompt changes.
 - Interim hosting is Render (`render.yaml`: `npm ci --include=dev && npm run build`, then `npm start`).
 - **Azure** (South Africa North, DR South Africa West): Terraform in `infra/terraform`, the container image from `Dockerfile`, GitHub Actions for CI (`ci.yml`, including an image smoke test and `terraform validate`), infrastructure (`infra.yml`) and releases (`deploy.yml`). See [`docs/runbooks/deployment.md`](docs/runbooks/deployment.md).
+- **Court rolls and Court Online:**
+  - **Matching.** Matters carry the court's case number and, where different, their Court Online number; rolls are matched against both.
+  - **Who is told.** The matter's team, and the staff an administrator adds under Operations → Court rolls (e.g. the office manager). They hear about new listings, a hearing that an amended roll moves (one "listing changed" notice), and listings in the next two days that nobody has confirmed (during `ops reminders`).
+  - **Court Online courts.** Matters in a court that uses Court Online show it, with a link (`COURT_ONLINE_URL`). The list of courts is kept with `npm run ops -w apps/api -- courts list|set|remove`.
 - **Client portal** at `/portal`:
   - **Access.** Staff with `portal.manage` (admins, attorneys, secretaries) invite a client from the matter page. The client sets up an authenticator app and from then on signs in with an emailed one-time link plus the app's code.
   - **What the client sees.** Their own matters only: the attorney's update, the trust balance (when trust accounting is on), documents staff shared, issued invoices, and a message thread. They can also upload FICA documents, which staff still verify.
