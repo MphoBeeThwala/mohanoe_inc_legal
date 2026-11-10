@@ -28,7 +28,7 @@
     "@azure/storage-blob": "^12.34.0",
     "@sentry/node": "^11.11.0",
     "cors": "^2.8.6",
-    "dotenv": "^17.4.1",
+    "dotenv": "^18.0.9",
     "drizzle-orm": "^0.45.4",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.2",
@@ -42,7 +42,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.3.16",
+    "@electric-sql/pglite": "^0.5.15",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.7",
@@ -51,12 +51,12 @@
     "@types/pdfkit": "^0.17.7",
     "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
-    "@types/supertest": "^6.0.2",
+    "@types/supertest": "^7.2.1",
     "drizzle-kit": "^0.31.11",
     "jose": "^6.2.16",
     "supertest": "^7.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.9.0",
+    "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   },
   "files": [

@@ -13,6 +13,10 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # Types follow the Node runtime in the Dockerfile (22): move both together.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -31,3 +35,7 @@ updates:
       interval: weekly
       day: monday
       timezone: Africa/Johannesburg
+    ignore:
+      # azurerm 5 is a major provider upgrade: plan it on staging deliberately.
+      - dependency-name: hashicorp/azurerm
+        update-types: ['version-update:semver-major']

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { api } from '../api';
 import PortalApp from './PortalApp';
@@ -51,14 +51,14 @@ test('an invite link sets up the authenticator, then shows the client’s matter
     target: { value: '123456' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-  await vi.waitFor(() =>
+  await waitFor(() =>
     expect(post).toHaveBeenCalledWith('/portal/invite/complete', {
       token: 'tok123',
       code: '123456',
     }),
   );
   expect(await screen.findByText('Hello, Ayanda')).toBeTruthy();
-  expect(screen.getByText(/Lodged at the deeds office/)).toBeTruthy();
+  expect(await screen.findByText(/Lodged at the deeds office/)).toBeTruthy();
   expect(screen.getByText(/Held in trust for this matter: R 15/)).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Messages (2 new)' })).toBeTruthy();
   expect(await screen.findByText(/Still needed: Proof of address/)).toBeTruthy();
@@ -74,9 +74,7 @@ test('signing in never says whether an address has access', async () => {
     target: { value: 'a@b.test' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Email me a sign-in link' }));
-  await vi.waitFor(() =>
-    expect(post).toHaveBeenCalledWith('/portal/sign-in', { email: 'a@b.test' }),
-  );
+  await waitFor(() => expect(post).toHaveBeenCalledWith('/portal/sign-in', { email: 'a@b.test' }));
   expect(await screen.findByText(/If that address has portal access/)).toBeTruthy();
 });
 
@@ -94,11 +92,9 @@ test('staff see portal access, share documents and reply only as their permissio
     <PortalStaffPanel caseId="c1" canManagePortal canWriteMatter canShareDocuments />,
   );
   fireEvent.click(await screen.findByRole('button', { name: 'Invite to the portal' }));
-  await vi.waitFor(() => expect(post).toHaveBeenCalledWith('/clients/p1/portal/invite', {}));
+  await waitFor(() => expect(post).toHaveBeenCalledWith('/clients/p1/portal/invite', {}));
   fireEvent.click(await screen.findByLabelText(/Offer — shared with the client/));
-  await vi.waitFor(() =>
-    expect(post).toHaveBeenCalledWith('/documents/d1/share', { shared: true }),
-  );
+  await waitFor(() => expect(post).toHaveBeenCalledWith('/documents/d1/share', { shared: true }));
   unmount();
 
   render(

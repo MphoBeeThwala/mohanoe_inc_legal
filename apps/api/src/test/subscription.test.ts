@@ -6,6 +6,7 @@ import request from 'supertest';
 import { eq } from 'drizzle-orm';
 import app from '../server';
 import { db } from '../db/client';
+import { atomically } from '../db/tenant';
 import { firmSubscriptions, platformInvoices, subscriptionPayments } from '../db/schema';
 import { issueMissing, vatIncluded } from '../services/platform-invoice.service';
 import { createOperator } from '../services/support.service';
@@ -576,12 +577,16 @@ describe('the platform’s invoices to the firm', () => {
   test('firms read their invoices but can never write them', async () => {
     await inDefaultFirm(async () => {
       const [row] = await db().select().from(platformInvoices).limit(1);
-      await expect(
+      // In a savepoint: the refused write must not abort the surrounding transaction.
+      const error = await atomically(() =>
         db()
           .update(platformInvoices)
           .set({ totalCents: 1 })
           .where(eq(platformInvoices.id, row!.id)),
-      ).rejects.toThrow();
+      ).catch((e: unknown) => e as { cause?: { message?: string } });
+      expect(String((error as { cause?: { message?: string } })?.cause?.message)).toMatch(
+        /permission denied/,
+      );
     });
   });
 

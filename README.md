@@ -23,7 +23,7 @@ An npm workspaces monorepo, all TypeScript (strict):
 ## Local development
 Requires Node 22+.
 
-1. Copy `.env.example` to `.env` at the repo root. Leave `DATABASE_URL` empty to use an embedded Postgres (PGlite) stored in `.data/pglite` — no database install needed. Delete that folder to start fresh.
+1. Copy `.env.example` to `.env` at the repo root. Leave `DATABASE_URL` empty to use an embedded Postgres (PGlite) stored in `.data/pglite` — no database install needed. Delete that folder to start fresh. After a PGlite upgrade that moves to a newer PostgreSQL (0.5 uses PostgreSQL 18), an older `.data/pglite` can't be opened: the server says so at start-up, and deleting the folder fixes it (it only holds local development data).
 2. `npm install` at the repo root (installs every workspace).
 3. `npm run build --workspace packages/shared` once (the API imports the compiled shared types).
 4. Create your first administrator: `npm run build -w apps/api && npm run firm -w apps/api -- invite --slug default --email you@example.com --name "Your Name"`, then open the printed link (set `APP_ORIGIN=http://localhost:3000` so it points at the dev web server). You'll choose a password and connect an authenticator app.
