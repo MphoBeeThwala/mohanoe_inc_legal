@@ -62,6 +62,7 @@ Requires Node 22+.
 ## Platform support access
 - Ahava on 88 support staff (*platform operators*) have no standing access to any firm. Create them with `npm run ops -w apps/api -- operator create --email … --name …`; it prints a one-time password and an authenticator key, and MFA is mandatory. List or disable them with `operator list`, `operator disable --email …`.
 - **Platform console.** Operators manage the platform at its own address (`PLATFORM_CONSOLE_HOST`, e.g. `console.<platform domain>`; the console answers nowhere else, and is off when unset). It lists firms with metadata and counts only, never client data, and manages plans, research sources and Court Online courts. Operators are read-only (`viewer`) unless made console administrators with `operator console-admin --email …` (`operator console-viewer` reverts). Every change is recorded in `platform_audit`. Console sign-in is the operator's password and authenticator code; it gives no access to any firm's data (that still needs a support grant).
+- **Help and support requests.** Staff read guides and raise requests under **Help**; operators answer them in the console (*Support requests*), and the platform's support mailbox (`PLATFORM_SUPPORT_EMAIL`) is told of each new request and reply by number only. Ask staff to leave client details out: subjects and messages are encrypted, but operators read them. Guides are edited in the console (*Help articles*).
 - A firm administrator opens access under **Account & team → Support access**, for 1 hour to 3 days and with a reason. While a grant is active, the operator signs in at that firm's address under `/support` (email, password, authenticator code).
 - Support sessions are **read-only** (role `support`). Restricted matters and ethical walls still apply, and the session ends when the grant expires or is revoked. **Every request** is written to the firm's audit trail, with the method and path.
 
@@ -94,6 +95,7 @@ When the firms table is empty, the server creates a `default` firm from these va
 | `FIRM_CASE_PREFIX` | `NKP` | Case numbers, e.g. `NKP-2026-0001` (2–8 letters/digits) |
 | `PRODUCT_NAME` | `Legal Practice Workspace` | Product name in the page title |
 | `PLATFORM_SUPPORT_EMAIL` | `support@…` | Platform support contact |
+| `PLATFORM_STATUS_URL` | `https://status.…` | Status page linked from Help (https only) |
 | `PLATFORM_CONSOLE_HOST` | `console.example.co.za` | Host of the operators' console (unset: console off) |
 
 ## Production

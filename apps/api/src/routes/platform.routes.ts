@@ -3,6 +3,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { httpError, sendError } from '../lib/http';
 import { createRateLimiter } from '../middleware/security';
+import * as helpdesk from '../services/helpdesk.service';
 import * as consoleService from '../services/platform-console.service';
 import type { PlatformOperatorRow } from '../db/schema';
 
@@ -117,6 +118,45 @@ router.put(
 router.delete(
   '/court-online/:division',
   op((operator, req) => consoleService.removeCourtOnline(operator, String(req.params.division))),
+);
+
+router.get(
+  '/tickets',
+  op((_operator, req) =>
+    helpdesk.consoleTickets(typeof req.query.status === 'string' ? req.query.status : undefined),
+  ),
+);
+router.get(
+  '/tickets/:firmId/:id',
+  op((_operator, req) => helpdesk.consoleTicket(String(req.params.firmId), String(req.params.id))),
+);
+router.post(
+  '/tickets/:firmId/:id/messages',
+  op((operator, req) =>
+    helpdesk.operatorReply(operator, String(req.params.firmId), String(req.params.id), req.body),
+  ),
+);
+router.post(
+  '/tickets/:firmId/:id/status',
+  op((operator, req) =>
+    helpdesk.setConsoleStatus(operator, String(req.params.firmId), String(req.params.id), req.body),
+  ),
+);
+
+router.get(
+  '/articles',
+  op(() => helpdesk.consoleArticles()),
+);
+router.put(
+  '/articles',
+  op((operator, req) => helpdesk.saveArticle(operator, req.body)),
+);
+router.delete(
+  '/articles/:slug',
+  op(async (operator, req) => {
+    await helpdesk.deleteArticle(operator, String(req.params.slug));
+    return { slug: String(req.params.slug) };
+  }),
 );
 
 router.get(

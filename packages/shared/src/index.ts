@@ -123,7 +123,9 @@ export type Permission =
   | 'trust.read'
   | 'trust.record'
   | 'trust.authorise'
-  | 'portal.manage';
+  | 'portal.manage'
+  | 'helpdesk.use'
+  | 'helpdesk.manage';
 
 const FEE_EARNER: readonly Permission[] = [
   'clients.read',
@@ -149,6 +151,7 @@ const FEE_EARNER: readonly Permission[] = [
   'notifications.write',
   // Prepares de-identified research briefs on matters they can see.
   'research.use',
+  'helpdesk.use',
 ];
 
 /** What each role may do within its firm. Matter-level access narrows this further. */
@@ -175,6 +178,8 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'trust.record',
     'trust.authorise',
     'portal.manage',
+    // Sees and answers every support request the firm has raised.
+    'helpdesk.manage',
   ],
   // Attorneys sign off research memos and precedents (paralegals prepare them).
   // Practitioners authorise trust payments and sign off reconciliations.
@@ -197,6 +202,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'notifications.read',
     // Invites clients to the portal and answers their messages.
     'portal.manage',
+    'helpdesk.use',
   ],
   bookkeeper: [
     'clients.read',
@@ -211,6 +217,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     // Records trust receipts, requests payments, reconciles (never authorises).
     'trust.read',
     'trust.record',
+    'helpdesk.use',
   ],
   // Platform support, while the firm allows it: read-only, and still subject
   // to restricted matters and ethical walls.
@@ -2081,4 +2088,74 @@ export interface ConsoleFirmInput {
   domains: string[];
   adminEmail: string;
   adminName: string;
+}
+
+// ----------------------------------------------------------- Support desk
+
+export type TicketCategory = 'question' | 'problem' | 'billing' | 'data_request' | 'security';
+export type TicketPriority = 'normal' | 'urgent';
+export type TicketStatus = 'open' | 'answered' | 'closed';
+
+export interface SupportTicketSummary {
+  id: string;
+  number: string;
+  subject: string;
+  category: TicketCategory;
+  priority: TicketPriority;
+  status: TicketStatus;
+  createdAt: string;
+  lastMessageAt: string;
+  /** Staff who raised it (null once they have left). */
+  createdBy: string | null;
+}
+
+export interface SupportTicketMessage {
+  id: string;
+  author: 'staff' | 'operator';
+  /** Staff member's or support operator's name. */
+  name: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface SupportTicket extends SupportTicketSummary {
+  messages: SupportTicketMessage[];
+}
+
+export interface NewSupportTicket {
+  subject: string;
+  body: string;
+  category: TicketCategory;
+  priority: TicketPriority;
+}
+
+/** In the console: the ticket plus the firm it belongs to. */
+export interface ConsoleTicketSummary extends SupportTicketSummary {
+  firmId: string;
+  firmSlug: string;
+  firstResponseAt: string | null;
+}
+
+export interface ConsoleTicket extends ConsoleTicketSummary {
+  messages: SupportTicketMessage[];
+}
+
+export interface HelpArticleSummary {
+  slug: string;
+  title: string;
+  category: string;
+}
+
+export interface HelpArticle extends HelpArticleSummary {
+  body: string;
+  published: boolean;
+  sortOrder: number;
+  updatedAt: string;
+}
+
+export interface HelpCentre {
+  articles: HelpArticleSummary[];
+  /** The platform's status page, when there is one. */
+  statusPageUrl: string | null;
+  supportEmail: string | null;
 }

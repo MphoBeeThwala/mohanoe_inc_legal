@@ -157,7 +157,7 @@ Environment setup:
 - [x] AI usage metering (`ai_calls`, per-firm monthly cap, `GET /api/ai/usage`)
 - [x] IaC, staging/prod, CI/CD, tested restores, Sentry, uptime alerts (`infra/terraform`, GitHub Actions, `ops restore-check`, `docs/runbooks`). Next: choose and set up the hosted status page; run the first restore test.
 - [x] Platform console for operators (`console.<platform domain>`, `PLATFORM_CONSOLE_HOST`): firms with counts only (never client data), create a firm and invite its first administrator, suspend, trust accounting, complimentary access, plans, research sources, Court Online courts; viewer and admin roles; every change in `platform_audit`
-- [ ] Support desk, help centre (incident runbook done: `docs/runbooks/incident-response.md`)
+- [x] Support desk and help centre: staff raise requests under Help (encrypted, numbered per firm, own requests only unless admin), operators answer from the console; emails carry the number and a link only; help articles kept in the console; status page link (`PLATFORM_STATUS_URL`). Incident runbook: `docs/runbooks/incident-response.md`. Next: choose the status page provider.
 
 ## 6. P1 (by GA) and P2 (after GA)
 

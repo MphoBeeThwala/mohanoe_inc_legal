@@ -150,6 +150,12 @@ variable "platform_console_host" {
   default     = ""
 }
 
+variable "platform_status_url" {
+  description = "The platform status page (https), linked from Help."
+  type        = string
+  default     = ""
+}
+
 variable "platform_support_email" {
   type    = string
   default = ""

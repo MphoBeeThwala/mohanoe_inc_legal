@@ -45,6 +45,7 @@ import FirmSettingsPanel from './components/FirmSettingsPanel';
 import OnboardingWizard from './components/OnboardingWizard';
 import SubscriptionBanner from './components/SubscriptionBanner';
 import SubscriptionPanel from './components/SubscriptionPanel';
+import HelpPanel from './components/HelpPanel';
 import PrecedentsPanel from './components/PrecedentsPanel';
 import TrustPanel from './components/TrustPanel';
 import './App.css';
@@ -66,7 +67,15 @@ const sampleMatter: Omit<IntakeSubmissionInput, 'consentToAi' | 'consentToStorag
 };
 
 type SectionId =
-  'overview' | 'intake' | 'clients' | 'cases' | 'time' | 'trust' | 'operations' | 'account';
+  | 'overview'
+  | 'intake'
+  | 'clients'
+  | 'cases'
+  | 'time'
+  | 'trust'
+  | 'operations'
+  | 'account'
+  | 'help';
 
 const NAV_SECTIONS: Array<{ id: SectionId; label: string; permission?: Permission }> = [
   { id: 'overview', label: 'Overview' },
@@ -77,6 +86,7 @@ const NAV_SECTIONS: Array<{ id: SectionId; label: string; permission?: Permissio
   { id: 'trust', label: 'Trust', permission: 'trust.read' },
   { id: 'operations', label: 'Operations' },
   { id: 'account', label: 'Account & team' },
+  { id: 'help', label: 'Help', permission: 'helpdesk.use' },
 ];
 
 /** Links from emails: /invite/<token> and /reset-password/<token>. */
@@ -780,6 +790,21 @@ function App() {
             </>
           ) : null}
         </section>
+
+        {hasPermission(currentUser.role, 'helpdesk.use') ? (
+          <section
+            id="section-help"
+            className="dashboard-section"
+            data-section="help"
+            ref={(node) => {
+              sectionRefs.current.help = node;
+            }}
+          >
+            <ErrorBoundary label="Help">
+              <HelpPanel />
+            </ErrorBoundary>
+          </section>
+        ) : null}
       </main>
     </div>
   );
