@@ -244,4 +244,11 @@ Trust accounting and AI research ship behind feature flags to pilots first.
       - Reminders for listings in the next two days that nobody has confirmed.
       - Next: turn Court Online notification emails into matter events, once a pilot firm shares samples.
 
+13. **Platform operations** — done:
+    - 13a, the operators' console (`console.<platform domain>`) and Dependabot.
+    - 13b, the support desk and help centre.
+    - 13c, platform tax invoices to firms, one per PayFast payment.
+
+**What is left, in order, with acceptance criteria: [`docs/HANDOFF.md`](HANDOFF.md)** (14 reporting, 15 drafting and e-signature, 16 Xero/Sage, 17 email filing, 18 pen test, then the smaller follow-ups, P2 and the Node 26 move).
+
 Open decisions: product name; Entra External ID vs Auth0/WorkOS; pilot firms and practice areas.
