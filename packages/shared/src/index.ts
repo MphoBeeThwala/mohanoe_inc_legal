@@ -2031,3 +2031,54 @@ export interface PortalEnrolment {
   secret: string;
   name: string;
 }
+
+// ---------------------------------------------------------- platform console
+
+export type ConsoleRole = 'viewer' | 'admin';
+
+export interface ConsoleOperator {
+  id: string;
+  email: string;
+  fullName: string;
+  consoleRole: ConsoleRole;
+}
+
+/** One firm as the platform sees it: metadata and counts, never client data. */
+export interface ConsoleFirm {
+  id: string;
+  slug: string;
+  legalName: string;
+  tradingName: string;
+  status: string;
+  domains: string[];
+  createdAt: string;
+  features: { trustAccounting: boolean };
+  staff: number;
+  matters: number;
+  subscription: {
+    state: string;
+    effectiveStatus: string;
+    planCode: string | null;
+    seats: number | null;
+    paidThrough: string | null;
+  };
+  aiTokensThisMonth: number;
+}
+
+export interface ConsoleAuditEntry {
+  id: string;
+  operator: string | null;
+  action: string;
+  firmSlug: string | null;
+  summary: string;
+  createdAt: string;
+}
+
+export interface ConsoleFirmInput {
+  slug: string;
+  legalName: string;
+  tradingName?: string;
+  domains: string[];
+  adminEmail: string;
+  adminName: string;
+}

@@ -144,6 +144,12 @@ variable "court_roll_user_agent" {
   default = ""
 }
 
+variable "platform_console_host" {
+  description = "Host name of the platform operators' console (for example console.example.co.za). Empty turns the console off."
+  type        = string
+  default     = ""
+}
+
 variable "platform_support_email" {
   type    = string
   default = ""

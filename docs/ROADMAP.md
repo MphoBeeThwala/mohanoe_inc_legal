@@ -115,7 +115,7 @@ Environment setup:
 - [x] `npm audit` clean on the backend
 - [x] Production refuses to start without real secrets; timing-safe password check; seed-admin and data-subject export/fulfilment restricted to admins
 - [x] TypeScript monorepo (`apps/api`, `apps/web`, `packages/shared`), Vite instead of CRA — epic 2
-- [ ] Dependabot and secret scanning enabled in GitHub settings
+- [ ] Dependabot and secret scanning: `.github/dependabot.yml` is in (npm, Actions, Docker, Terraform, weekly). Still to switch on in GitHub → Settings → Code security: Dependabot alerts and security updates, secret scanning with push protection
 
 ### 5.2 Multi-tenancy and data layer
 - [x] `firms` table; `firm_id NOT NULL` on all tables; backfill to the first firm
@@ -156,6 +156,7 @@ Environment setup:
 - [x] ZAR subscriptions via PayFast (plans, seats, trial, dunning, read-only suspension): `subscription.service.ts`, `payfast.ts`, Account → Subscription, `ops plans` / `ops subscriptions`. Next: PayFast merchant account approval and a sandbox end-to-end test; platform tax invoices to firms.
 - [x] AI usage metering (`ai_calls`, per-firm monthly cap, `GET /api/ai/usage`)
 - [x] IaC, staging/prod, CI/CD, tested restores, Sentry, uptime alerts (`infra/terraform`, GitHub Actions, `ops restore-check`, `docs/runbooks`). Next: choose and set up the hosted status page; run the first restore test.
+- [x] Platform console for operators (`console.<platform domain>`, `PLATFORM_CONSOLE_HOST`): firms with counts only (never client data), create a firm and invite its first administrator, suspend, trust accounting, complimentary access, plans, research sources, Court Online courts; viewer and admin roles; every change in `platform_audit`
 - [ ] Support desk, help centre (incident runbook done: `docs/runbooks/incident-response.md`)
 
 ## 6. P1 (by GA) and P2 (after GA)

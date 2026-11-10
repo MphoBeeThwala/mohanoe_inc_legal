@@ -13,7 +13,13 @@ import * as auditService from '../services/audit.service';
 import { createStaff, signInAgain, type TestStaff } from './helpers';
 
 /** Platform-level tables: no firm_id, and no access for app_tenant. */
-const PLATFORM_TABLES = ['platform_operators', 'court_roll_documents', 'court_roll_entries'];
+const PLATFORM_TABLES = [
+  'platform_operators',
+  'platform_sessions',
+  'platform_audit',
+  'court_roll_documents',
+  'court_roll_entries',
+];
 /** Platform-level tables requests may read but never change. */
 const PLATFORM_READ_TABLES = [
   'subscription_plans',

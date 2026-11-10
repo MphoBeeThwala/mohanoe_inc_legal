@@ -775,8 +775,43 @@ export const platformOperators = pgTable('platform_operators', {
   failedLoginCount: integer('failed_login_count').notNull().default(0),
   lockedUntil: timestamp('locked_until', { withTimezone: true }),
   isActive: boolean('is_active').notNull().default(true),
+  /** Platform console: 'viewer' (read only) or 'admin' (changes firms, plans, sources). */
+  consoleRole: text('console_role').notNull().default('viewer'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Platform console sessions (hashed tokens; platform table, no app_tenant access). */
+export const platformSessions = pgTable('platform_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  operatorId: uuid('operator_id')
+    .notNull()
+    .references(() => platformOperators.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull().unique(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Every platform console action (who, what, which firm). Metadata only: the
+ * console never shows or records a firm's client information.
+ */
+export const platformAudit = pgTable(
+  'platform_audit',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    operatorId: uuid('operator_id').references(() => platformOperators.id, {
+      onDelete: 'set null',
+    }),
+    action: text('action').notNull(),
+    firmId: uuid('firm_id'),
+    summary: text('summary').notNull(),
+    details: jsonb('details').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('platform_audit_created_idx').on(t.createdAt)],
+);
 
 /**
  * The plans firms can subscribe to. Platform-level: no firm_id; requests

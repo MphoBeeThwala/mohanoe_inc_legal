@@ -48,7 +48,7 @@ resource "azurerm_cdn_frontdoor_origin" "api" {
 }
 
 resource "azurerm_cdn_frontdoor_custom_domain" "hosts" {
-  for_each                 = toset(var.platform_hostnames)
+  for_each                 = toset(compact(concat(var.platform_hostnames, [var.platform_console_host])))
   name                     = replace(each.value, ".", "-")
   cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.main.id
   host_name                = each.value

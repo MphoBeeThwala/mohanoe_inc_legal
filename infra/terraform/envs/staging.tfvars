@@ -12,4 +12,5 @@ alert_emails               = ["ops@example.co.za"] # replace
 monthly_budget_zar         = 6000
 mail_from                  = "no-reply@REPLACE.azurecomm.net" # the Azure-managed domain's sender
 
-payfast_sandbox = true
+payfast_sandbox       = true
+platform_console_host = "" # e.g. console.staging.<platform domain>

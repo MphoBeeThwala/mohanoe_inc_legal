@@ -19,6 +19,8 @@ import { domainCheckValue, readAsset } from './services/white-label.service';
 import * as supportService from './services/support.service';
 import { createRateLimiter, requestLogger, securityHeaders } from './middleware/security';
 import { subscriptionGuard } from './middleware/subscription';
+import platformRoutes from './routes/platform.routes';
+import { isConsoleHost } from './services/platform-console.service';
 import { handleItn } from './services/subscription.service';
 import { frontDoorGuard } from './middleware/front-door';
 
@@ -125,6 +127,9 @@ app.get('/.well-known/firm-domain-check', (req, res) => {
   res.type('text/plain').send(domainCheckValue(req.hostname));
 });
 
+// The platform console (super-admin), on its own host and outside any firm.
+app.use('/api/platform', platformRoutes);
+
 // PayFast payment notifications (ITN) for firm subscriptions. Verified by
 // signature, source address and PayFast's own confirmation before anything
 // changes; the firm comes from the signed notification, not the host.
@@ -188,6 +193,11 @@ const frontendBuildCandidates = [
 ].filter((candidate): candidate is string => Boolean(candidate));
 const frontendBuildPath = frontendBuildCandidates.find((candidate) => fs.existsSync(candidate));
 if (frontendBuildPath) {
+  // The console host serves only the platform console.
+  app.get('/', (req, res, next) => {
+    if (isConsoleHost(req.hostname)) res.redirect(302, '/console');
+    else next();
+  });
   app.use(express.static(frontendBuildPath));
   app.get(/^\/(?!api).*/, (req, res) => {
     res.sendFile(path.join(frontendBuildPath, 'index.html'));

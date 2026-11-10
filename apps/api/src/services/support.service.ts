@@ -238,7 +238,7 @@ const signInSchema = z.object({
 const REFUSED =
   'Support sign-in refused: check your details, and that the firm has granted access.';
 
-async function authenticateOperator(input: unknown): Promise<PlatformOperatorRow> {
+export async function authenticateOperator(input: unknown): Promise<PlatformOperatorRow> {
   const { email: address, password, code } = parse(signInSchema, input);
   const [operator] = await rootDb()
     .select()

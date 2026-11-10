@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import PortalApp from './portal/PortalApp';
+import ConsoleApp from './console/ConsoleApp';
 
 const container = document.getElementById('root');
 if (!container) {
@@ -11,7 +12,13 @@ if (!container) {
 const root = ReactDOM.createRoot(container);
 root.render(
   <React.StrictMode>
-    {window.location.pathname.startsWith('/portal') ? <PortalApp /> : <App />}
+    {window.location.pathname.startsWith('/console') ? (
+      <ConsoleApp />
+    ) : window.location.pathname.startsWith('/portal') ? (
+      <PortalApp />
+    ) : (
+      <App />
+    )}
   </React.StrictMode>,
 );
 
