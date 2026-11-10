@@ -67,6 +67,7 @@ async function toPublicDocument(
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
     signedAt: isoOrNull(row.signedAt),
+    sharedWithClientAt: isoOrNull(row.sharedWithClientAt),
     content,
   };
 }

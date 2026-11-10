@@ -158,6 +158,46 @@ export async function exportFirm(firm: FirmRow): Promise<FirmExport> {
         })),
       );
       tables.precedentPassages = await db().select().from(schema.precedentPassages);
+      // Portal: who has access (no authenticator secrets or session tokens) and messages.
+      tables.portalUsers = await Promise.all(
+        (await db().select().from(schema.portalUsers)).map(
+          async ({
+            emailEncrypted,
+            totpSecretEncrypted: _secret,
+            lastTotpStep: _step,
+            emailIndex: _index,
+            ...rest
+          }) => ({
+            ...rest,
+            email: await decryptJson(emailEncrypted),
+          }),
+        ),
+      );
+      tables.portalMessages = await Promise.all(
+        (await db().select().from(schema.portalMessages)).map(
+          async ({ bodyEncrypted, ...rest }) => ({
+            ...rest,
+            body: await decryptJson(bodyEncrypted),
+          }),
+        ),
+      );
+      tables.clientUpdates = await Promise.all(
+        (
+          await db()
+            .select({
+              caseId: schema.cases.id,
+              value: schema.cases.clientUpdateEncrypted,
+              at: schema.cases.clientUpdateAt,
+            })
+            .from(schema.cases)
+        )
+          .filter((row) => row.value)
+          .map(async (row) => ({
+            caseId: row.caseId,
+            update: await decryptJson(row.value!),
+            updatedAt: row.at,
+          })),
+      );
       // Trust records (kept for the auditor and the Legal Practice Council).
       tables.trustAccounts = await Promise.all(
         (await db().select().from(schema.trustAccounts)).map(

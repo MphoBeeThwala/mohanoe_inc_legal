@@ -231,6 +231,10 @@ Trust accounting and AI research ship behind feature flags to pilots first.
       - Fee transfers against issued invoices; matter-to-matter transfers.
       - Three-way reconciliation with sign-off, and an auditor CSV (`docs/runbooks/trust-accounting.md`).
       - **Auditor review before live use.**
-    - Next: the client portal, then court roll follow-ups (CaseLines / Court Online).
+    - 12b, done on `feat/client-portal`: the client portal (`/portal`).
+      - Invite by staff; an emailed one-time link plus an authenticator code; separate server-side sessions.
+      - A client sees only their own matters: the attorney's update, the trust balance, shared documents, issued invoices, messages, and FICA uploads.
+      - Next: SMS codes as an alternative to an authenticator (needs an SMS provider), and invoice PDFs and payment links in the portal.
+    - Next: court roll follow-ups (CaseLines / Court Online).
 
 Open decisions: product name; Entra External ID vs Auth0/WorkOS; pilot firms and practice areas.

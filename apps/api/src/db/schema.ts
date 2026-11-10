@@ -635,6 +635,107 @@ export type TrustAccountRow = typeof trustAccounts.$inferSelect;
 export type TrustEntryRow = typeof trustEntries.$inferSelect;
 export type TrustReconciliationRow = typeof trustReconciliations.$inferSelect;
 
+// ------------------------------------------------------------ client portal
+//
+// Clients sign in to see their own matters: an emailed one-time link plus an
+// authenticator code (two factors), never a staff account. Every portal
+// query is filtered to the matters where the portal user's party is the
+// client.
+
+export const portalUsers = pgTable(
+  'portal_users',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    partyId: uuid('party_id')
+      .notNull()
+      .references(() => parties.id, { onDelete: 'cascade' }),
+    /** Blind index of the sign-in email (lookup without decrypting). */
+    emailIndex: text('email_index').notNull(),
+    emailEncrypted: text('email_encrypted').notNull(),
+    /** 'invited' | 'active' | 'disabled' */
+    status: text('status').notNull().default('invited'),
+    totpSecretEncrypted: text('totp_secret_encrypted'),
+    /** Last TOTP step accepted (no replays). */
+    lastTotpStep: integer('last_totp_step'),
+    invitedBy: uuid('invited_by').references(() => users.id, { onDelete: 'set null' }),
+    lastSignInAt: timestamp('last_sign_in_at', { withTimezone: true }),
+    ...updatable,
+  },
+  (t) => [
+    uniqueIndex('portal_users_party_idx').on(t.firmId, t.partyId),
+    uniqueIndex('portal_users_email_idx').on(t.firmId, t.emailIndex),
+    tenantPolicy('portal_users'),
+  ],
+);
+
+/** One-time links (invite, sign-in): only the token's hash is kept. */
+export const portalLinks = pgTable(
+  'portal_links',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    portalUserId: uuid('portal_user_id')
+      .notNull()
+      .references(() => portalUsers.id, { onDelete: 'cascade' }),
+    /** 'invite' | 'sign_in' */
+    purpose: text('purpose').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    /** Wrong authenticator codes against this link. */
+    attempts: integer('attempts').notNull().default(0),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('portal_links_token_idx').on(t.tokenHash), tenantPolicy('portal_links')],
+);
+
+export const portalSessions = pgTable(
+  'portal_sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    portalUserId: uuid('portal_user_id')
+      .notNull()
+      .references(() => portalUsers.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('portal_sessions_token_idx').on(t.tokenHash),
+    tenantPolicy('portal_sessions'),
+  ],
+);
+
+export const portalMessages = pgTable(
+  'portal_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => cases.id, { onDelete: 'cascade' }),
+    /** 'client' | 'staff' */
+    sender: text('sender').notNull(),
+    portalUserId: uuid('portal_user_id').references(() => portalUsers.id, { onDelete: 'set null' }),
+    staffUserId: uuid('staff_user_id').references(() => users.id, { onDelete: 'set null' }),
+    bodyEncrypted: text('body_encrypted').notNull(),
+    readByClientAt: timestamp('read_by_client_at', { withTimezone: true }),
+    readByStaffAt: timestamp('read_by_staff_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    index('portal_messages_case_idx').on(t.caseId, t.createdAt),
+    tenantPolicy('portal_messages'),
+    matterPolicy('portal_messages'),
+  ],
+);
+
+export type PortalUserRow = typeof portalUsers.$inferSelect;
+
 export type AiCallRow = typeof aiCalls.$inferSelect;
 export type ResearchRequestRow = typeof researchRequests.$inferSelect;
 
@@ -960,6 +1061,9 @@ export const cases = pgTable(
     practiceArea: text('practice_area').notNull(),
     urgency: text('urgency').notNull(),
     status: text('status').notNull().default('triage'),
+    /** Encrypted update for the client, shown in the portal. */
+    clientUpdateEncrypted: text('client_update_encrypted'),
+    clientUpdateAt: timestamp('client_update_at', { withTimezone: true }),
     nextAction: text('next_action').notNull(),
     /** 'firm': all staff with matter access; 'restricted': members (and admins) only. */
     access: text('access').notNull().default('firm'),
@@ -1259,6 +1363,8 @@ export const documents = pgTable(
     contentPreview: text('content_preview').notNull().default(''),
     createdBy: text('created_by').notNull(),
     signedAt: timestamp('signed_at', { withTimezone: true }),
+    /** Shown to the matter's client in the portal (staff choose). */
+    sharedWithClientAt: timestamp('shared_with_client_at', { withTimezone: true }),
     ...updatable,
   },
   (t) => [

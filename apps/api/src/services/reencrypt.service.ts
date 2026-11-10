@@ -28,6 +28,9 @@ import {
   trustAccounts,
   trustEntries,
   trustReconciliations,
+  portalUsers,
+  portalMessages,
+  cases,
   type FirmRow,
 } from '../db/schema';
 import { activeKey, deleteKey } from './keys.service';
@@ -154,6 +157,23 @@ function staleTrustEntries(version: number): SQL {
   ) as SQL;
 }
 
+function stalePortalUsers(version: number): SQL {
+  return or(
+    notOnVersion(portalUsers.emailEncrypted, version),
+    and(
+      isNotNull(portalUsers.totpSecretEncrypted),
+      notOnVersion(portalUsers.totpSecretEncrypted, version),
+    ),
+  ) as SQL;
+}
+
+function staleClientUpdates(version: number): SQL {
+  return and(
+    isNotNull(cases.clientUpdateEncrypted),
+    notOnVersion(cases.clientUpdateEncrypted, version),
+  ) as SQL;
+}
+
 function stalePrecedents(version: number): SQL {
   return or(
     notOnVersion(firmPrecedents.originalEncrypted, version),
@@ -187,6 +207,7 @@ export interface ReencryptCounts {
   calendar: number;
   research: number;
   trust: number;
+  portal: number;
 }
 
 export interface ReencryptStatus {
@@ -203,6 +224,7 @@ export interface ReencryptStatus {
     calendar: number;
     research: number;
     trust: number;
+    portal: number;
   };
 }
 
@@ -226,6 +248,14 @@ export async function pendingReencryption(): Promise<ReencryptStatus> {
   const [[rr], [ac]] = await Promise.all([
     db().select({ value: count() }).from(researchRequests).where(staleResearch(version)),
     db().select({ value: count() }).from(aiCalls).where(staleAiCalls(version)),
+  ]);
+  const [[pu], [pm], [cu]] = await Promise.all([
+    db().select({ value: count() }).from(portalUsers).where(stalePortalUsers(version)),
+    db()
+      .select({ value: count() })
+      .from(portalMessages)
+      .where(notOnVersion(portalMessages.bodyEncrypted, version)),
+    db().select({ value: count() }).from(cases).where(staleClientUpdates(version)),
   ]);
   const [[fpr], [ta], [tre], [tr]] = await Promise.all([
     db().select({ value: count() }).from(firmPrecedents).where(stalePrecedents(version)),
@@ -265,6 +295,7 @@ export async function pendingReencryption(): Promise<ReencryptStatus> {
       calendar: (ce?.value ?? 0) + (mp?.value ?? 0),
       research: (rr?.value ?? 0) + (ac?.value ?? 0) + (fpr?.value ?? 0),
       trust: (ta?.value ?? 0) + (tre?.value ?? 0) + (tr?.value ?? 0),
+      portal: (pu?.value ?? 0) + (pm?.value ?? 0) + (cu?.value ?? 0),
     },
   };
 }
@@ -528,6 +559,48 @@ async function reencryptBatch(): Promise<ReencryptCounts> {
       .where(eq(trustReconciliations.id, row.id));
   }
 
+  const portalRows = await db()
+    .select()
+    .from(portalUsers)
+    .where(stalePortalUsers(version))
+    .limit(BATCH);
+  for (const row of portalRows) {
+    const email = (await decryptJson<string>(row.emailEncrypted)) ?? '';
+    await db()
+      .update(portalUsers)
+      .set({
+        emailEncrypted: await encryptJson(email),
+        // The index key may have changed too.
+        emailIndex: await blindIndex(email),
+        totpSecretEncrypted: row.totpSecretEncrypted
+          ? await encryptJson(await decryptJson(row.totpSecretEncrypted))
+          : null,
+      })
+      .where(eq(portalUsers.id, row.id));
+  }
+  const messageRows = await db()
+    .select()
+    .from(portalMessages)
+    .where(notOnVersion(portalMessages.bodyEncrypted, version))
+    .limit(BATCH);
+  for (const row of messageRows) {
+    await db()
+      .update(portalMessages)
+      .set({ bodyEncrypted: await encryptJson(await decryptJson(row.bodyEncrypted)) })
+      .where(eq(portalMessages.id, row.id));
+  }
+  const updateRows = await db()
+    .select({ id: cases.id, value: cases.clientUpdateEncrypted })
+    .from(cases)
+    .where(staleClientUpdates(version))
+    .limit(BATCH);
+  for (const row of updateRows) {
+    await db()
+      .update(cases)
+      .set({ clientUpdateEncrypted: await encryptJson(await decryptJson(row.value!)) })
+      .where(eq(cases.id, row.id));
+  }
+
   return {
     submissions: subs.length,
     documents: docs.length,
@@ -540,6 +613,7 @@ async function reencryptBatch(): Promise<ReencryptCounts> {
     calendar: events.length + periods.length,
     research: briefs.length + calls.length + precedentRows.length,
     trust: trustAccountRows.length + trustRows.length + reconciliationRows.length,
+    portal: portalRows.length + messageRows.length + updateRows.length,
   };
 }
 
@@ -557,6 +631,7 @@ export async function reencryptFirm(firm: FirmRow) {
     calendar: 0,
     research: 0,
     trust: 0,
+    portal: 0,
   };
   for (;;) {
     const done = await withTenant(firm, () => reencryptBatch(), { system: true });
@@ -571,6 +646,7 @@ export async function reencryptFirm(firm: FirmRow) {
     total.calendar += done.calendar;
     total.research += done.research;
     total.trust += done.trust;
+    total.portal += done.portal;
     if (Object.values(done).every((value) => value === 0)) {
       return total;
     }
@@ -720,9 +796,49 @@ export async function pruneRetiredKeys(): Promise<number[]> {
         .from(trustReconciliations)
         .where(sql`${trustReconciliations.notesEncrypted} like ${prefix}`),
     ]);
-    const inUse = [s, d, u, p, c, fp, fd, te, tm, bi, bd, ce, mp, rr, ac, pr, tac, ten, trc].some(
-      (row) => row?.value,
-    );
+    const [[pou], [pom], [cup]] = await Promise.all([
+      db()
+        .select({ value: count() })
+        .from(portalUsers)
+        .where(
+          or(
+            sql`${portalUsers.emailEncrypted} like ${prefix}`,
+            sql`${portalUsers.totpSecretEncrypted} like ${prefix}`,
+          ),
+        ),
+      db()
+        .select({ value: count() })
+        .from(portalMessages)
+        .where(sql`${portalMessages.bodyEncrypted} like ${prefix}`),
+      db()
+        .select({ value: count() })
+        .from(cases)
+        .where(sql`${cases.clientUpdateEncrypted} like ${prefix}`),
+    ]);
+    const inUse = [
+      s,
+      d,
+      u,
+      p,
+      c,
+      fp,
+      fd,
+      te,
+      tm,
+      bi,
+      bd,
+      ce,
+      mp,
+      rr,
+      ac,
+      pr,
+      tac,
+      ten,
+      trc,
+      pou,
+      pom,
+      cup,
+    ].some((row) => row?.value);
     if (!inUse) {
       await deleteKey(key.id);
       pruned.push(key.version);

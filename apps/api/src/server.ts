@@ -69,6 +69,7 @@ const UPLOAD_PATHS = [
   /^\/api\/clients\/[^/]+\/fica\/documents\/?$/,
   /^\/api\/court-rolls\/upload\/?$/,
   /^\/api\/firm\/assets\/(logo|icon)\/?$/,
+  /^\/api\/portal\/fica\/?$/,
 ];
 app.use((req, res, next) =>
   (req.method === 'POST' || req.method === 'PUT') &&

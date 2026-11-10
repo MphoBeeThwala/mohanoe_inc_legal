@@ -1543,3 +1543,46 @@
   align-items: center;
   flex-wrap: wrap;
 }
+
+/* Client portal */
+.portal-app {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  display: grid;
+  gap: 20px;
+}
+
+.portal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.portal-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 16px;
+  background: var(--surface, #fff);
+}
+
+.portal-messages {
+  display: grid;
+  gap: 8px;
+}
+
+.portal-message {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.portal-message-client {
+  justify-self: end;
+  background: rgba(39, 70, 114, 0.08);
+}
