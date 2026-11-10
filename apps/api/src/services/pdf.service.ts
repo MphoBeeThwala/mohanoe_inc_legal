@@ -13,6 +13,7 @@ import type {
   FirmBrand,
   FirmProfileSettings,
   Invoice,
+  PlatformInvoice,
 } from '@ahava88/shared';
 
 type Doc = InstanceType<typeof PDFDocument>;
@@ -393,6 +394,90 @@ export async function statementPdf(
     doc.text(`Reference: ${statement.partyNumber}`);
   }
   pageNumbers(doc, `Statement ${statement.partyNumber}`);
+  doc.end();
+  return done;
+}
+
+/**
+ * The platform's invoice to a firm (its subscription). Headed "Tax invoice"
+ * with the s20(4) particulars when the platform is a VAT vendor; the company
+ * registration number is shown as the Companies Act (s32(4)) asks.
+ */
+export async function platformInvoicePdf(invoice: PlatformInvoice): Promise<Buffer> {
+  const heading = invoice.taxInvoice ? 'Tax invoice' : 'Invoice';
+  const doc = newDocument(`${heading} ${invoice.number}`);
+  const done = collect(doc);
+  const accent = '#1f2a33';
+
+  const { supplier, recipient } = invoice;
+  doc.fillColor(accent).font('Helvetica-Bold').fontSize(16).text(safe(supplier.name));
+  doc.font('Helvetica').fontSize(9).fillColor(MUTED);
+  if (supplier.address) doc.text(safe(supplier.address));
+  const supplierNumbers = [
+    supplier.registrationNumber ? `Reg. ${supplier.registrationNumber}` : '',
+    supplier.vatNumber ? `VAT ${supplier.vatNumber}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  if (supplierNumbers) doc.text(safe(supplierNumbers));
+  doc.moveDown(0.5);
+  const y = doc.y;
+  doc
+    .moveTo(MARGIN, y)
+    .lineTo(doc.page.width - MARGIN, y)
+    .lineWidth(1.5)
+    .strokeColor(accent)
+    .stroke();
+  doc.moveDown(1).fillColor('black');
+
+  doc.font('Helvetica-Bold').fontSize(16).text(heading.toUpperCase());
+  doc.moveDown(0.5);
+  twoColumns(
+    doc,
+    [
+      'To:',
+      recipient.name,
+      ...(recipient.address ? [recipient.address] : []),
+      ...(recipient.registrationNumber ? [`Reg. ${recipient.registrationNumber}`] : []),
+      ...(recipient.vatNumber ? [`VAT ${recipient.vatNumber}`] : []),
+    ],
+    [
+      [invoice.taxInvoice ? 'Tax invoice' : 'Invoice', invoice.number],
+      ['Date', day(invoice.issuedAt)],
+      ['Payment', invoice.paymentReference],
+      ...(invoice.periodStart && invoice.periodEnd
+        ? ([['Period', `${day(invoice.periodStart)} to ${day(invoice.periodEnd)}`]] as Array<
+            [string, string]
+          >)
+        : []),
+    ],
+  );
+
+  table(
+    doc,
+    [
+      { label: 'Description', width: 325 },
+      { label: 'Qty', width: 70, align: 'right' },
+      { label: 'Amount', width: 100, align: 'right' },
+    ],
+    invoice.lines.map((line) => [
+      line.description,
+      String(line.quantity),
+      rand(line.amountCents / 100),
+    ]),
+    accent,
+  );
+  const vatLabel = `VAT (${Math.round(invoice.vatRate * 10_000) / 100}%)`;
+  totalsBlock(doc, [
+    ['Value excluding VAT', rand(invoice.exclusiveCents / 100)],
+    ...(invoice.taxInvoice
+      ? ([[vatLabel, rand(invoice.vatCents / 100)]] as Array<[string, string]>)
+      : []),
+    [invoice.taxInvoice ? 'Total including VAT' : 'Total', rand(invoice.totalCents / 100), true],
+    ['Paid by PayFast', rand(-invoice.totalCents / 100)],
+    ['Balance due', rand(0), true],
+  ]);
+  pageNumbers(doc, `${heading} ${invoice.number}`);
   doc.end();
   return done;
 }

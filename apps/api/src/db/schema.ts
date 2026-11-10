@@ -2092,3 +2092,62 @@ export const helpArticles = pgTable('help_articles', {
 export type SupportTicketRow = typeof supportTickets.$inferSelect;
 export type SupportTicketMessageRow = typeof supportTicketMessages.$inferSelect;
 export type HelpArticleRow = typeof helpArticles.$inferSelect;
+
+// ------------------------------------------------- Platform tax invoices
+// The platform's invoices to firms, one per PayFast payment. Numbers are one
+// gap-free series across the platform (the supplier's serial numbers), taken
+// from platform_counters in the same transaction that stores the invoice.
+// Firms may read their own invoices; only platform work writes them.
+
+export const platformCounters = pgTable('platform_counters', {
+  name: text('name').primaryKey(),
+  value: integer('value').notNull(),
+});
+
+export interface InvoiceParty {
+  name: string;
+  address: string;
+  vatNumber: string | null;
+  registrationNumber: string | null;
+}
+
+export interface PlatformInvoiceLine {
+  description: string;
+  quantity: number;
+  /** Excluding VAT, cents. */
+  amountCents: number;
+}
+
+export const platformInvoices = pgTable(
+  'platform_invoices',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    paymentId: uuid('payment_id')
+      .notNull()
+      .unique()
+      .references(() => subscriptionPayments.id, { onDelete: 'restrict' }),
+    number: text('number').notNull().unique(),
+    /** A tax invoice when the platform is a VAT vendor; otherwise an invoice. */
+    taxInvoice: boolean('tax_invoice').notNull(),
+    issuedAt: timestamp('issued_at', { withTimezone: true }).notNull(),
+    supplier: jsonb('supplier').$type<InvoiceParty>().notNull(),
+    recipient: jsonb('recipient').$type<InvoiceParty>().notNull(),
+    lines: jsonb('lines').$type<PlatformInvoiceLine[]>().notNull(),
+    /** Basis points: 1500 = 15%. */
+    vatRateBp: integer('vat_rate_bp').notNull(),
+    exclusiveCents: integer('exclusive_cents').notNull(),
+    vatCents: integer('vat_cents').notNull(),
+    totalCents: integer('total_cents').notNull(),
+    pfPaymentId: text('pf_payment_id').notNull(),
+    periodStart: timestamp('period_start', { withTimezone: true }),
+    periodEnd: timestamp('period_end', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('platform_invoices_firm_idx').on(t.firmId, t.issuedAt),
+    tenantPolicy('platform_invoices'),
+  ],
+);
+
+export type PlatformInvoiceRow = typeof platformInvoices.$inferSelect;

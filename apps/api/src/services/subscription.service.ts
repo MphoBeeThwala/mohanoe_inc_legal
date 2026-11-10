@@ -46,6 +46,7 @@ import {
 } from '../validation/schemas';
 import { findFirmById, firmOrigin } from './firm.service';
 import { sendMail } from './mail.service';
+import * as platformInvoices from './platform-invoice.service';
 import * as payfast from './payfast';
 import * as auditService from './audit.service';
 
@@ -584,7 +585,12 @@ export async function handleItn(rawBody: string, sourceIp: string, now = new Dat
   if (!firm) {
     return { outcome: 'ignored' as const };
   }
-  return withTenant(firm, () => applyItn(fields, now), { system: true });
+  const result = await withTenant(firm, () => applyItn(fields, now), { system: true });
+  // Once the payment is committed: the firm's invoice (retried by `ops subscriptions`).
+  if (result.outcome === 'activated' || result.outcome === 'renewed') {
+    await platformInvoices.issueAfterItn(firm.id, fields.pf_payment_id || '');
+  }
+  return result;
 }
 
 // ------------------------------------------------------- seats and cancelling

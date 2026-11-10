@@ -181,6 +181,7 @@ export async function exportFirm(firm: FirmRow): Promise<FirmExport> {
           }),
         ),
       );
+      tables.platformInvoices = await db().select().from(schema.platformInvoices);
       tables.supportTickets = await Promise.all(
         (await db().select().from(schema.supportTickets)).map(
           async ({ subjectEncrypted, ...rest }) => ({

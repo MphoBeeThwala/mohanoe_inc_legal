@@ -41,6 +41,7 @@ import { checkPendingDomains } from '../services/white-label.service';
 import { anchorAllFirms } from '../services/audit-anchor.service';
 import { createOperator, listOperators, setOperatorActive } from '../services/support.service';
 import * as auditService from '../services/audit.service';
+import * as platformInvoices from '../services/platform-invoice.service';
 import * as subscriptions from '../services/subscription.service';
 import * as corpus from '../services/corpus.service';
 import { syncLawsAfrica } from '../services/laws-africa';
@@ -361,6 +362,10 @@ async function main(): Promise<void> {
         `${result.firm}: ${result.status}${result.changed ? ' (changed)' : ''}, ${result.emails} email(s)`,
       );
     }
+    // Invoices for confirmed payments that have none yet (an ITN-time failure).
+    const invoices = await platformInvoices.issueMissing();
+    console.log(`Invoices issued: ${invoices.issued}; failed: ${invoices.failed}`);
+    if (invoices.failed) process.exitCode = 1;
   } else if (command === 'subscription') {
     if (positionals[0] !== 'comp' || !values.slug) {
       throw new Error(

@@ -16,3 +16,8 @@ mail_custom_domain         = "mail.example-legal.co.za"          # replace
 # PayFast: sandbox until the merchant account is approved and tested.
 payfast_sandbox       = true # set false for live payments
 platform_console_host = ""   # e.g. console.<platform domain>
+platform_invoice_details = {
+  address             = "" # the company's registered address
+  registration_number = "" # CIPC number, e.g. 2024/123456/07
+  vat_number          = "" # empty until VAT-registered (then platform_vat_rate stays 0.15)
+}

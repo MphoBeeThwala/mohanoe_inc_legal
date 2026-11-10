@@ -14,3 +14,8 @@ mail_from                  = "no-reply@REPLACE.azurecomm.net" # the Azure-manage
 
 payfast_sandbox       = true
 platform_console_host = "" # e.g. console.staging.<platform domain>
+platform_invoice_details = {
+  address             = "" # the company's registered address
+  registration_number = "" # CIPC number, e.g. 2024/123456/07
+  vat_number          = "" # empty until VAT-registered (then platform_vat_rate stays 0.15)
+}

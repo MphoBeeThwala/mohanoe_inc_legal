@@ -54,6 +54,9 @@ locals {
       PAYFAST_SANDBOX                    = var.payfast_sandbox ? "true" : "false"
       SUBSCRIPTION_TRIAL_DAYS            = tostring(var.subscription_trial_days)
       PLATFORM_VAT_RATE                  = tostring(var.platform_vat_rate)
+      PLATFORM_ADDRESS                   = var.platform_invoice_details.address
+      PLATFORM_REGISTRATION_NUMBER       = var.platform_invoice_details.registration_number
+      PLATFORM_VAT_NUMBER                = var.platform_invoice_details.vat_number
       AI_PROVIDER                        = var.ai_endpoint == "" ? "none" : "foundry"
       AI_ENDPOINT                        = var.ai_endpoint
       AI_MODEL                           = var.ai_model

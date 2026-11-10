@@ -3,6 +3,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { httpError, sendError } from '../lib/http';
 import { createRateLimiter } from '../middleware/security';
+import * as invoices from '../services/platform-invoice.service';
 import * as helpdesk from '../services/helpdesk.service';
 import * as consoleService from '../services/platform-console.service';
 import type { PlatformOperatorRow } from '../db/schema';
@@ -158,6 +159,25 @@ router.delete(
     return { slug: String(req.params.slug) };
   }),
 );
+
+router.get(
+  '/invoices',
+  op(() => invoices.listAll()),
+);
+router.get('/invoices/:firmId/:id/pdf', async (req, res) => {
+  try {
+    await consoleService.requireOperator(req);
+    const { number, pdf } = await invoices.pdfForConsole(
+      String(req.params.firmId),
+      String(req.params.id),
+    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${number}.pdf"`);
+    res.status(200).send(pdf);
+  } catch (error) {
+    sendError(res, error);
+  }
+});
 
 router.get(
   '/audit',

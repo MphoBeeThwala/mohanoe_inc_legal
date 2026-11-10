@@ -202,6 +202,20 @@ variable "subscription_trial_days" {
   default = 30
 }
 
+variable "platform_invoice_details" {
+  description = "The platform's details on its invoices to firms (VAT Act s20(4), Companies Act s32(4)). vat_number empty means not a VAT vendor (set platform_vat_rate = 0)."
+  type = object({
+    address             = string
+    registration_number = string
+    vat_number          = string
+  })
+  default = {
+    address             = ""
+    registration_number = ""
+    vat_number          = ""
+  }
+}
+
 variable "platform_vat_rate" {
   description = "VAT the platform charges firms (0.15, or 0 if not VAT-registered)."
   type        = number
