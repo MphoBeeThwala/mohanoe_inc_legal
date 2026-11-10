@@ -1,0 +1,6 @@
+{
+  "id": "003-no-authority",
+  "practiceArea": "Tax",
+  "brief": "Research question:\nHow is income from cryptocurrency mining taxed for [Client], a sole proprietor?\n\nFacts:\n[Client] mines cryptocurrency at home.",
+  "expect": { "noAuthority": true }
+}

@@ -129,13 +129,35 @@ export async function exportFirm(firm: FirmRow): Promise<FirmExport> {
       // The research brief and what was sent to AI are the firm's records too.
       const research = await db().select().from(schema.researchRequests);
       tables.researchRequests = await Promise.all(
-        research.map(async ({ questionEncrypted, briefEncrypted, mappingEncrypted, ...rest }) => ({
+        research.map(
+          async ({
+            questionEncrypted,
+            briefEncrypted,
+            mappingEncrypted,
+            answerEncrypted,
+            sourcesEncrypted,
+            approvalNoteEncrypted,
+            ...rest
+          }) => ({
+            ...rest,
+            question: await decryptJson(questionEncrypted),
+            brief: await decryptJson(briefEncrypted),
+            mapping: await decryptJson(mappingEncrypted),
+            answer: answerEncrypted ? await decryptJson(answerEncrypted) : null,
+            sources: sourcesEncrypted ? await decryptJson(sourcesEncrypted) : null,
+            approvalNote: approvalNoteEncrypted ? await decryptJson(approvalNoteEncrypted) : null,
+          }),
+        ),
+      );
+      const precedentRows = await db().select().from(schema.firmPrecedents);
+      tables.firmPrecedents = await Promise.all(
+        precedentRows.map(async ({ originalEncrypted, reviewEncrypted, ...rest }) => ({
           ...rest,
-          question: await decryptJson(questionEncrypted),
-          brief: await decryptJson(briefEncrypted),
-          mapping: await decryptJson(mappingEncrypted),
+          original: await decryptJson(originalEncrypted),
+          review: await decryptJson(reviewEncrypted),
         })),
       );
+      tables.precedentPassages = await db().select().from(schema.precedentPassages);
       const calls = await db().select().from(schema.aiCalls);
       tables.aiCalls = await Promise.all(
         calls.map(async ({ promptEncrypted, responseEncrypted, ...rest }) => ({

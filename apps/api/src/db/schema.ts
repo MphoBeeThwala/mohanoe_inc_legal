@@ -35,6 +35,11 @@ import {
 } from 'drizzle-orm/pg-core';
 
 /** Binary content (node-postgres gives a Buffer, PGlite a Uint8Array). */
+/** Full-text search vector (generated from a text column). */
+const tsvector = customType<{ data: string }>({
+  dataType: () => 'tsvector',
+});
+
 const bytea = customType<{ data: Buffer; driverData: Uint8Array | Buffer }>({
   dataType: () => 'bytea',
   fromDriver: (value) => (Buffer.isBuffer(value) ? value : Buffer.from(value)),
@@ -370,6 +375,17 @@ export const researchRequests = pgTable(
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
     confirmedBy: uuid('confirmed_by').references(() => users.id, { onDelete: 'set null' }),
     confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    /** Encrypted ResearchAnswer: verified claims, removed claims, gaps. */
+    answerEncrypted: text('answer_encrypted'),
+    /** Encrypted copy of every passage the answer could cite, as retrieved. */
+    sourcesEncrypted: text('sources_encrypted'),
+    answeredAt: timestamp('answered_at', { withTimezone: true }),
+    /** Our error message when the last run failed (no personal information). */
+    lastError: text('last_error'),
+    approvedBy: uuid('approved_by').references(() => users.id, { onDelete: 'set null' }),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    /** Encrypted note from the approving attorney. */
+    approvalNoteEncrypted: text('approval_note_encrypted'),
     ...updatable,
   },
   (t) => [
@@ -378,6 +394,139 @@ export const researchRequests = pgTable(
     matterPolicy('research_requests'),
   ],
 );
+
+// ------------------------------------------------------------ legal corpus
+//
+// The approved corpus (roadmap §7.4). Public sources are platform tables:
+// requests may read them, only platform operators (ops CLI) change them, and
+// a source is searchable only while its licence or permission is recorded
+// and it is approved. Firm precedents are each firm's own (tenant tables),
+// de-identified and reviewed before they can be searched.
+
+export const legalSources = pgTable('legal_sources', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  code: text('code').notNull().unique(),
+  name: text('name').notNull(),
+  /** SourceKind: legislation, case_law, regulation, rules, practice_directive, tribunal, guidance, journal, treatise, other */
+  kind: text('kind').notNull(),
+  publisher: text('publisher').notNull().default(''),
+  url: text('url').notNull().default(''),
+  /** The licence or terms that allow this use. */
+  licence: text('licence').notNull(),
+  /** The written permission or agreement relied on (reference, date). */
+  permission: text('permission').notNull().default(''),
+  /** 'approved' | 'suspended' */
+  status: text('status').notNull().default('approved'),
+  approvedBy: text('approved_by').notNull(),
+  approvedAt: timestamp('approved_at', { withTimezone: true }).notNull().defaultNow(),
+  ...updatable,
+});
+
+export const legalDocuments = pgTable(
+  'legal_documents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceId: uuid('source_id')
+      .notNull()
+      .references(() => legalSources.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    /** How lawyers cite it: "Act 50 of 1998", "[2019] ZACC 12". */
+    citation: text('citation').notNull(),
+    url: text('url').notNull().default(''),
+    jurisdiction: text('jurisdiction').notNull().default('South Africa'),
+    /** The version (point in time) the text is current at. */
+    versionDate: text('version_date'),
+    /**
+     * Hierarchy of authority (1 = strongest): 1 Constitutional Court, 2 SCA,
+     * 3 High Court and specialist courts, 4 statutes and regulations,
+     * 5 rules and practice directives, 6 tribunals, guidance and commentary.
+     */
+    authorityLevel: integer('authority_level').notNull().default(6),
+    /** Court or body: 'ZACC', 'ZASCA', 'ZAGPJHC', 'CCMA', 'Parliament'... */
+    court: text('court').notNull().default(''),
+    /** When it took effect (statutes: commencement). */
+    effectiveDate: text('effective_date'),
+    /** 'in_force' | 'amended' | 'repealed' | 'not_commenced' | 'overruled' */
+    validity: text('validity').notNull().default('in_force'),
+    repealedDate: text('repealed_date'),
+    contentHash: text('content_hash').notNull(),
+    ...updatable,
+  },
+  (t) => [uniqueIndex('legal_documents_source_citation_idx').on(t.sourceId, t.citation)],
+);
+
+export const legalPassages = pgTable(
+  'legal_passages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => legalDocuments.id, { onDelete: 'cascade' }),
+    ordinal: integer('ordinal').notNull(),
+    /** Pinpoint: "section 4(1)", "para 23". */
+    pinpoint: text('pinpoint').notNull().default(''),
+    text: text('text').notNull(),
+    /** A provision repealed within an act still in force. */
+    repealed: boolean('repealed').notNull().default(false),
+    search: tsvector('search').generatedAlwaysAs(
+      sql`to_tsvector('english', coalesce(pinpoint, '') || ' ' || text)`,
+    ),
+  },
+  (t) => [
+    index('legal_passages_document_idx').on(t.documentId, t.ordinal),
+    index('legal_passages_search_idx').using('gin', t.search),
+  ],
+);
+
+/** A firm's own precedent (opinion, heads, memo), de-identified for research. */
+export const firmPrecedents = pgTable(
+  'firm_precedents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    title: text('title').notNull(),
+    practiceArea: text('practice_area').notNull().default(''),
+    /** 'review' (not searchable yet) | 'approved' */
+    status: text('status').notNull().default('review'),
+    /** Encrypted original text as uploaded. */
+    originalEncrypted: text('original_encrypted').notNull(),
+    /** Encrypted {warnings, replacements} from de-identification. */
+    reviewEncrypted: text('review_encrypted').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    approvedBy: uuid('approved_by').references(() => users.id, { onDelete: 'set null' }),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    ...updatable,
+  },
+  (t) => [index('firm_precedents_status_idx').on(t.status), tenantPolicy('firm_precedents')],
+);
+
+/** De-identified passages of a firm precedent (what research can search and cite). */
+export const precedentPassages = pgTable(
+  'precedent_passages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    precedentId: uuid('precedent_id')
+      .notNull()
+      .references(() => firmPrecedents.id, { onDelete: 'cascade' }),
+    ordinal: integer('ordinal').notNull(),
+    pinpoint: text('pinpoint').notNull().default(''),
+    /** De-identified text (no client personal information). */
+    text: text('text').notNull(),
+    search: tsvector('search').generatedAlwaysAs(
+      sql`to_tsvector('english', coalesce(pinpoint, '') || ' ' || text)`,
+    ),
+  },
+  (t) => [
+    index('precedent_passages_precedent_idx').on(t.precedentId, t.ordinal),
+    index('precedent_passages_search_idx').using('gin', t.search),
+    tenantPolicy('precedent_passages'),
+  ],
+);
+
+export type LegalSourceRow = typeof legalSources.$inferSelect;
+export type LegalDocumentRow = typeof legalDocuments.$inferSelect;
+export type FirmPrecedentRow = typeof firmPrecedents.$inferSelect;
 
 export type AiCallRow = typeof aiCalls.$inferSelect;
 export type ResearchRequestRow = typeof researchRequests.$inferSelect;

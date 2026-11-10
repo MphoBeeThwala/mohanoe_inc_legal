@@ -118,7 +118,8 @@ export type Permission =
   | 'time.manage'
   | 'rates.manage'
   | 'subscription.manage'
-  | 'research.use';
+  | 'research.use'
+  | 'research.approve';
 
 const FEE_EARNER: readonly Permission[] = [
   'clients.read',
@@ -165,8 +166,10 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'billing.void',
     // The firm's own subscription to the platform (plan, seats, payment).
     'subscription.manage',
+    'research.approve',
   ],
-  attorney: FEE_EARNER,
+  // Attorneys sign off research memos and precedents (paralegals prepare them).
+  attorney: [...FEE_EARNER, 'research.approve'],
   paralegal: FEE_EARNER,
   secretary: [
     'clients.read',
@@ -1696,7 +1699,7 @@ export interface BriefReplacement {
   count: number;
 }
 
-export type ResearchStatus = 'draft' | 'confirmed';
+export type ResearchStatus = 'draft' | 'confirmed' | 'answered' | 'approved';
 
 /** A de-identified research brief on a matter (roadmap §7). */
 export interface ResearchRequest {
@@ -1714,6 +1717,105 @@ export interface ResearchRequest {
   createdBy: string | null;
   confirmedAt: string | null;
   confirmedBy: string | null;
+  answer: ResearchAnswer | null;
+  /** Why the last research run failed (it can be run again). */
+  lastError: string | null;
+  approvedAt: string | null;
+  approvedBy: string | null;
+  approvalNote: string | null;
+}
+
+export const SOURCE_KINDS = [
+  'legislation',
+  'regulation',
+  'case_law',
+  'rules',
+  'practice_directive',
+  'tribunal',
+  'guidance',
+  'journal',
+  'treatise',
+  'other',
+] as const;
+
+/** Public source kinds, plus the firm's own precedents. */
+export type SourceKind = (typeof SOURCE_KINDS)[number] | 'precedent';
+
+/** Hierarchy of authority (1 = strongest), used to rank and present sources. */
+export const AUTHORITY_LEVELS: Record<number, string> = {
+  1: 'Constitutional Court',
+  2: 'Supreme Court of Appeal',
+  3: 'High Court and specialist courts',
+  4: 'Statutes and regulations',
+  5: 'Rules and practice directives',
+  6: 'Tribunals, guidance and commentary',
+};
+
+export type SourceValidity = 'in_force' | 'amended' | 'repealed' | 'not_commenced' | 'overruled';
+
+/** A passage the answer could cite, as it was when retrieved. */
+export interface CitedSource {
+  /** S1, S2...: what the answer cites. */
+  ref: string;
+  kind: SourceKind;
+  sourceName: string;
+  title: string;
+  citation: string;
+  pinpoint: string;
+  url: string;
+  versionDate: string | null;
+  authorityLevel: number;
+  court: string;
+  validity: SourceValidity;
+  effectiveDate: string | null;
+  text: string;
+}
+
+export interface ResearchClaim {
+  text: string;
+  /** Refs of the sources that support it (all verified to exist). */
+  citations: string[];
+}
+
+export interface ResearchAnswer {
+  /** Nothing in the approved sources answered the question. */
+  noAuthority: boolean;
+  claims: ResearchClaim[];
+  /** Claims taken out because they cited nothing, or something not retrieved. */
+  removed: Array<{ text: string; reason: string }>;
+  /** What the sources did not cover, in the model's words. */
+  gaps: string[];
+  sources: CitedSource[];
+  queries: string[];
+  model: string | null;
+  generatedAt: string;
+  /** The claims with names put back, for staff who can see the matter. */
+  claimsNamed: ResearchClaim[];
+}
+
+export interface ApprovedSource {
+  code: string;
+  name: string;
+  kind: SourceKind;
+  publisher: string;
+  url: string;
+  licence: string;
+  documents: number;
+}
+
+export type PrecedentStatus = 'review' | 'approved';
+
+export interface Precedent {
+  id: string;
+  title: string;
+  practiceArea: string;
+  status: PrecedentStatus;
+  /** The de-identified text research will search and cite. */
+  text: string;
+  warnings: string[];
+  replacements: BriefReplacement[];
+  createdAt: string;
+  approvedAt: string | null;
 }
 
 export interface ResearchDraftInput {

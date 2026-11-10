@@ -18,7 +18,8 @@
     "db:studio": "drizzle-kit studio",
     "test:postgres": "vitest run --no-file-parallelism",
     "firm": "node dist/scripts/firm.js",
-    "ops": "node dist/scripts/ops.js"
+    "ops": "node dist/scripts/ops.js",
+    "eval": "vitest run --config vitest.eval.config.ts"
   },
   "dependencies": {
     "@ahava88/shared": "*",

@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import type { ResearchRequest } from '@ahava88/shared';
+import { AUTHORITY_LEVELS, type CitedSource, type ResearchRequest } from '@ahava88/shared';
 import { api, apiErrorMessage } from '../api';
+
+const STATUS_LABEL: Record<ResearchRequest['status'], string> = {
+  draft: 'Draft brief',
+  confirmed: 'Confirmed',
+  answered: 'Answered',
+  approved: 'Approved',
+};
 
 const KIND_LABEL: Record<string, string> = {
   person: 'names',
@@ -32,15 +39,121 @@ function removedSummary(request: ResearchRequest): string {
  * Research briefs on a matter: the attorney sees exactly what an AI model
  * would receive, de-identified, can edit it, and confirms it.
  */
+const VALIDITY_LABEL: Record<string, string> = {
+  in_force: 'In force',
+  amended: 'In force (amended)',
+  repealed: 'Repealed',
+  not_commenced: 'Not yet in force',
+  overruled: 'Overruled',
+};
+
+function SourceItem({ source }: { source: CitedSource }) {
+  return (
+    <li id={`source-${source.ref}`}>
+      <strong>[{source.ref}]</strong> {source.citation}
+      {source.pinpoint ? `, ${source.pinpoint}` : ''} — {source.title}
+      <div className="field-hint">
+        {source.kind === 'precedent'
+          ? 'Firm precedent (not authority)'
+          : `${AUTHORITY_LEVELS[source.authorityLevel] ?? 'Other'} · ${source.sourceName} · ${VALIDITY_LABEL[source.validity] ?? source.validity}${source.versionDate ? ` · text as at ${source.versionDate}` : ''}`}
+        {source.url ? (
+          <>
+            {' · '}
+            <a href={source.url} target="_blank" rel="noreferrer">
+              Open
+            </a>
+          </>
+        ) : null}
+      </div>
+      <details>
+        <summary>Passage</summary>
+        <p className="research-passage">{source.text}</p>
+      </details>
+    </li>
+  );
+}
+
+/** The verified answer: every claim cites retrieved passages, shown below it. */
+function ResearchAnswerView({ request }: { request: ResearchRequest }) {
+  const [named, setNamed] = useState(true);
+  const answer = request.answer!;
+  const claims = named ? answer.claimsNamed : answer.claims;
+  return (
+    <div className="research-answer">
+      {answer.noAuthority ? (
+        <p className="notice notice-warn">
+          No authority found in the approved sources for this question. Nothing was guessed.
+        </p>
+      ) : (
+        <>
+          <label className="inline-check">
+            <input type="checkbox" checked={named} onChange={(e) => setNamed(e.target.checked)} />
+            Show names (only staff on this matter see them; the AI never did)
+          </label>
+          <ol className="research-claims">
+            {claims.map((claim, index) => (
+              <li key={index}>
+                {claim.text}{' '}
+                {claim.citations.map((ref) => (
+                  <a key={ref} href={`#source-${ref}`} className="citation">
+                    [{ref}]
+                  </a>
+                ))}
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
+      {answer.gaps.length ? (
+        <p className="field-hint">
+          <strong>Not covered by the sources:</strong> {answer.gaps.join(' ')}
+        </p>
+      ) : null}
+      {answer.removed.length ? (
+        <details>
+          <summary>
+            {answer.removed.length} statement{answer.removed.length === 1 ? '' : 's'} removed by
+            citation checks
+          </summary>
+          <ul>
+            {answer.removed.map((item, index) => (
+              <li key={index}>
+                {item.text} <span className="field-hint">({item.reason})</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      {answer.sources.length ? (
+        <>
+          <h4>Sources</h4>
+          <ul className="research-sources">
+            {answer.sources.map((source) => (
+              <SourceItem key={source.ref} source={source} />
+            ))}
+          </ul>
+        </>
+      ) : null}
+      <p className="field-hint">
+        Research for the attorney to verify; it is not advice until an attorney approves it.
+        {answer.model ? ` Model: ${answer.model}.` : ''}
+      </p>
+    </div>
+  );
+}
+
 function ResearchBriefCard({
   request,
   onChange,
   onDelete,
+  canApprove,
 }: {
   request: ResearchRequest;
   onChange: (next: ResearchRequest) => void;
   onDelete: () => void;
+  canApprove: boolean;
 }) {
+  const [note, setNote] = useState('');
   const [text, setText] = useState(request.brief);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -64,7 +177,7 @@ function ResearchBriefCard({
       <header>
         <strong>{request.question}</strong>
         <span className={`status-pill status-${draft ? 'trialing' : 'active'}`}>
-          {draft ? 'Draft brief' : 'Confirmed'}
+          {STATUS_LABEL[request.status]}
         </span>
       </header>
       <p className="field-hint">{removedSummary(request)}</p>
@@ -134,14 +247,63 @@ function ResearchBriefCard({
         <p className="field-hint">
           Confirmed{' '}
           {request.confirmedAt ? new Date(request.confirmedAt).toLocaleString('en-ZA') : ''}. Only
-          this exact text will be sent for research.
+          this exact text is sent for research.
         </p>
       )}
+      {request.status === 'confirmed' || request.status === 'answered' ? (
+        <button
+          type="button"
+          className={request.answer ? 'secondary-button' : 'primary-button'}
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              const { data } = await api.post<ResearchRequest>(`/research/${request.id}/run`);
+              onChange(data);
+            })
+          }
+        >
+          {busy ? 'Researching…' : request.answer ? 'Research again' : 'Run research'}
+        </button>
+      ) : null}
+      {request.answer ? <ResearchAnswerView request={request} /> : null}
+      {request.status === 'answered' && canApprove ? (
+        <div className="research-approve">
+          <label>
+            Approval note (optional)
+            <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                const { data } = await api.post<ResearchRequest>(
+                  `/research/${request.id}/approve`,
+                  {
+                    note,
+                  },
+                );
+                onChange(data);
+              })
+            }
+          >
+            Approve memo
+          </button>
+        </div>
+      ) : null}
+      {request.status === 'approved' ? (
+        <p className="field-hint notice-success">
+          Approved {request.approvedAt ? new Date(request.approvedAt).toLocaleString('en-ZA') : ''}
+          {request.approvalNote ? `: ${request.approvalNote}` : '.'} The memo and its sources are
+          kept as they were.
+        </p>
+      ) : null}
     </article>
   );
 }
 
-function ResearchPanel({ caseId }: { caseId: string }) {
+function ResearchPanel({ caseId, canApprove = false }: { caseId: string; canApprove?: boolean }) {
   const [requests, setRequests] = useState<ResearchRequest[]>([]);
   const [question, setQuestion] = useState('');
   const [facts, setFacts] = useState('');
@@ -212,6 +374,7 @@ function ResearchPanel({ caseId }: { caseId: string }) {
         <ResearchBriefCard
           key={request.id}
           request={request}
+          canApprove={canApprove}
           onChange={(next) => setRequests((list) => list.map((r) => (r.id === next.id ? next : r)))}
           onDelete={() => setRequests((list) => list.filter((r) => r.id !== request.id))}
         />

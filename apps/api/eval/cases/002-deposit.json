@@ -1,0 +1,9 @@
+{
+  "id": "002-deposit",
+  "practiceArea": "Housing",
+  "brief": "Research question:\nWithin what period must [Opposing party] refund [Client]'s deposit, and is [Client] entitled to interest?\n\nFacts:\n[Client]'s occupation ended last month. No damage was found.",
+  "expect": {
+    "mustCite": [["Act 902 of 2099"]],
+    "mustSay": ["fourteen days|14 days", "interest"]
+  }
+}

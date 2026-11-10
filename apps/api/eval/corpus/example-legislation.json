@@ -1,0 +1,20 @@
+{
+  "source": {
+    "code": "eval-example",
+    "name": "Evaluation fixture (synthetic)",
+    "kind": "legislation",
+    "licence": "Synthetic text written for the evaluation harness; not law."
+  },
+  "documents": [
+    {
+      "title": "Example Residential Occupation Act (synthetic)",
+      "citation": "Act 901 of 2099",
+      "text": "1. Definitions\nIn this Act an occupier means a person who lives in a dwelling with the consent of the owner, and a lockout means any act that deprives an occupier of access to the dwelling.\n2. Lockouts prohibited\nNo owner may lock out an occupier, cut off water or electricity, or remove the occupier's belongings, without an order of a competent court.\n3. Notice to vacate\nAn owner who wishes to end a periodic occupation must give the occupier at least one calendar month's written notice.\n4. Restoration\nA court must order the owner to restore access to an occupier who was locked out in breach of section 2."
+    },
+    {
+      "title": "Example Deposit Act (synthetic)",
+      "citation": "Act 902 of 2099",
+      "text": "1. Interest on deposits\nAn owner must keep a deposit in an interest-bearing account and pay the interest to the occupier at the end of the occupation.\n2. Refund\nThe deposit, less amounts for proven damage, must be refunded within fourteen days after the occupation ends."
+    }
+  ]
+}

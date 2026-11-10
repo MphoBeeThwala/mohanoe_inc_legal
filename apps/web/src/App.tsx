@@ -45,6 +45,7 @@ import FirmSettingsPanel from './components/FirmSettingsPanel';
 import OnboardingWizard from './components/OnboardingWizard';
 import SubscriptionBanner from './components/SubscriptionBanner';
 import SubscriptionPanel from './components/SubscriptionPanel';
+import PrecedentsPanel from './components/PrecedentsPanel';
 import './App.css';
 
 const sampleMatter: Omit<IntakeSubmissionInput, 'consentToAi' | 'consentToStorage'> = {
@@ -684,6 +685,7 @@ function App() {
               canEdit={currentUser.permissions.includes('matters.write')}
               canEditCalendar={currentUser.permissions.includes('calendar.write')}
               canResearch={hasPermission(currentUser.role, 'research.use')}
+              canApproveResearch={hasPermission(currentUser.role, 'research.approve')}
             />
 
             <section
@@ -727,6 +729,11 @@ function App() {
           }}
         >
           <AccountPanel currentUser={currentUser} />
+          {hasPermission(currentUser.role, 'research.use') ? (
+            <ErrorBoundary label="Research sources">
+              <PrecedentsPanel canApprove={hasPermission(currentUser.role, 'research.approve')} />
+            </ErrorBoundary>
+          ) : null}
           {hasPermission(currentUser.role, 'subscription.manage') ? (
             <ErrorBoundary label="Subscription">
               <SubscriptionPanel />

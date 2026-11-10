@@ -1,0 +1,10 @@
+{
+  "id": "001-lockout",
+  "practiceArea": "Housing",
+  "brief": "Research question:\nMay [Opposing party] change the locks to remove [Client] without going to court?\n\nJurisdiction: South Africa\n\nFacts:\n[Client] rents a room monthly. [Opposing party] changed the locks while [Client] was at work.",
+  "expect": {
+    "mustCite": [["Act 901 of 2099"]],
+    "mustSay": ["court"],
+    "mustNotSay": ["may lock out the occupier without"]
+  }
+}

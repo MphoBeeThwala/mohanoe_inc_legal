@@ -63,11 +63,12 @@ locals {
 
   # Scheduled work (see README: calendar, court rolls, audit, domains).
   jobs = {
-    anchor        = { cron = "30 22 * * *", args = ["apps/api/dist/scripts/ops.js", "anchor"] }      # 00:30 SAST daily
-    reminders     = { cron = "*/15 * * * *", args = ["apps/api/dist/scripts/ops.js", "reminders"] }  # every 15 minutes
-    court-rolls   = { cron = "0 4 * * 1,4", args = ["apps/api/dist/scripts/ops.js", "court-rolls"] } # Mon and Thu 06:00 SAST
-    domains       = { cron = "0 * * * *", args = ["apps/api/dist/scripts/ops.js", "domains"] }       # hourly
-    subscriptions = { cron = "0 5 * * *", args = ["apps/api/dist/scripts/ops.js", "subscriptions"] } # 07:00 SAST daily
+    anchor        = { cron = "30 22 * * *", args = ["apps/api/dist/scripts/ops.js", "anchor"] }                    # 00:30 SAST daily
+    reminders     = { cron = "*/15 * * * *", args = ["apps/api/dist/scripts/ops.js", "reminders"] }                # every 15 minutes
+    court-rolls   = { cron = "0 4 * * 1,4", args = ["apps/api/dist/scripts/ops.js", "court-rolls"] }               # Mon and Thu 06:00 SAST
+    domains       = { cron = "0 * * * *", args = ["apps/api/dist/scripts/ops.js", "domains"] }                     # hourly
+    subscriptions = { cron = "0 5 * * *", args = ["apps/api/dist/scripts/ops.js", "subscriptions"] }               # 07:00 SAST daily
+    legislation   = { cron = "0 0 * * 0", args = ["apps/api/dist/scripts/ops.js", "sources", "sync-laws-africa"] } # Sun 02:00 SAST
   }
 }
 
