@@ -837,6 +837,8 @@ export interface MatterCase {
   courtDivision?: Nullable<string>;
   /** The court's case number, e.g. 12345/2025 or 2025-012345. */
   courtCaseNumber?: Nullable<string>;
+  /** Court Online case number, when it differs from courtCaseNumber. */
+  courtOnlineReference?: Nullable<string>;
   createdAt: string;
   updatedAt: Nullable<string>;
 }
@@ -1283,6 +1285,27 @@ export interface PrescriptionUpdate {
 export interface MatterCourtInput {
   courtDivision: CourtDivisionCode | null;
   courtCaseNumber: string | null;
+  /** The matter's Court Online case number, when it differs from the court's. */
+  courtOnlineReference?: string | null;
+}
+
+/** A court that uses Court Online (the OCJ's e-filing and case management system). */
+export interface CourtOnlineCourt {
+  division: string;
+  since: string;
+  source: string;
+}
+
+/** Court Online for one matter's court. */
+export interface CourtOnlineStatus {
+  /** Null when the matter's court isn't known to use Court Online. */
+  court: CourtOnlineCourt | null;
+  url: string;
+}
+
+/** Staff who also get every court roll notice (e.g. the office manager). */
+export interface CourtRollWatchers {
+  userIds: string[];
 }
 
 export interface NotificationRecord {

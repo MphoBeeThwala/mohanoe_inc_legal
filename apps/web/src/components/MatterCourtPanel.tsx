@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
+  type CourtOnlineStatus,
   COURT_DIVISIONS,
   PRESCRIPTION_RULES,
   type MatterCase,
@@ -23,7 +24,9 @@ function MatterCourtPanel({ matter, canEditMatter, canEditCalendar, onChanged }:
   const [court, setCourt] = useState({
     courtDivision: matter.courtDivision ?? '',
     courtCaseNumber: matter.courtCaseNumber ?? '',
+    courtOnlineReference: matter.courtOnlineReference ?? '',
   });
+  const [online, setOnline] = useState<CourtOnlineStatus | null>(null);
   const [periods, setPeriods] = useState<Prescription[]>([]);
   const [form, setForm] = useState({
     rule: 'general_3y' as PrescriptionRuleCode,
@@ -39,6 +42,7 @@ function MatterCourtPanel({ matter, canEditMatter, canEditCalendar, onChanged }:
       params: { caseId: matter.id },
     });
     setPeriods(data);
+    setOnline((await api.get<CourtOnlineStatus>(`/cases/${matter.id}/court-online`)).data);
   }, [matter.id]);
 
   useEffect(() => {
@@ -65,6 +69,7 @@ function MatterCourtPanel({ matter, canEditMatter, canEditCalendar, onChanged }:
       api.put(`/cases/${matter.id}/court`, {
         courtDivision: court.courtDivision || null,
         courtCaseNumber: court.courtCaseNumber.trim() || null,
+        courtOnlineReference: court.courtOnlineReference.trim() || null,
       }),
     );
   };
@@ -115,6 +120,12 @@ function MatterCourtPanel({ matter, canEditMatter, canEditCalendar, onChanged }:
             value={court.courtCaseNumber}
             onChange={(event) => setCourt({ ...court, courtCaseNumber: event.target.value })}
           />
+          <input
+            aria-label="Court Online case number"
+            placeholder="Court Online number, if different"
+            value={court.courtOnlineReference}
+            onChange={(event) => setCourt({ ...court, courtOnlineReference: event.target.value })}
+          />
           <button className="secondary-button" disabled={busy}>
             Save court details
           </button>
@@ -124,8 +135,20 @@ function MatterCourtPanel({ matter, canEditMatter, canEditCalendar, onChanged }:
           {COURT_DIVISIONS.find((division) => division.code === matter.courtDivision)?.name ??
             'Not in court yet'}
           {matter.courtCaseNumber ? ` · case ${matter.courtCaseNumber}` : ''}
+          {matter.courtOnlineReference ? ` · Court Online ${matter.courtOnlineReference}` : ''}
         </p>
       )}
+      {online?.court ? (
+        <p className="field-hint notice-info">
+          This court uses Court Online (since {online.court.since}): file and manage the matter
+          there, and check the division&apos;s current directives.{' '}
+          <a href={online.url} target="_blank" rel="noreferrer">
+            Open Court Online
+          </a>
+          <br />
+          <span className="field-hint">Source: {online.court.source}</span>
+        </p>
+      ) : null}
 
       {periods.length ? (
         <table className="time-table">

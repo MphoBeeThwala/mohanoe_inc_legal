@@ -119,6 +119,7 @@ test('the matter panel saves court details and records prescriptions', async () 
   expect(put).toHaveBeenCalledWith('/cases/c1/court', {
     courtDivision: 'ZAGPPHC',
     courtCaseNumber: '34660/2016',
+    courtOnlineReference: null,
   });
 
   fireEvent.change(screen.getByLabelText('Prescription rule'), {
@@ -148,4 +149,40 @@ test('read-only staff see the court details but no forms', async () => {
   ).toBeInTheDocument();
   expect(document.querySelectorAll('form')).toHaveLength(0);
   expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+});
+
+test('a court on Court Online says so, with its source and a link', async () => {
+  vi.spyOn(api, 'get').mockImplementation(async (url: string) =>
+    url.endsWith('/court-online')
+      ? {
+          data: {
+            court: {
+              division: 'ZAGPPHC',
+              since: '2022-02-23',
+              source: 'Acting Judge President notice',
+            },
+            url: 'https://www.judiciary.org.za/index.php/court-online',
+          },
+        }
+      : { data: [] },
+  );
+  render(
+    <MatterCourtPanel
+      matter={
+        {
+          id: 'c9',
+          courtDivision: 'ZAGPPHC',
+          courtCaseNumber: '1/2024',
+          courtOnlineReference: '2024-000001',
+        } as never
+      }
+      canEditMatter={false}
+      canEditCalendar={false}
+    />,
+  );
+  expect(await screen.findByText(/This court uses Court Online \(since 2022-02-23\)/)).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Open Court Online' }).getAttribute('href')).toMatch(
+    /judiciary/,
+  );
+  expect(screen.getByText(/Court Online 2024-000001/)).toBeTruthy();
 });

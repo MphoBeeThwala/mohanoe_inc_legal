@@ -235,6 +235,12 @@ Trust accounting and AI research ship behind feature flags to pilots first.
       - Invite by staff; an emailed one-time link plus an authenticator code; separate server-side sessions.
       - A client sees only their own matters: the attorney's update, the trust balance, shared documents, issued invoices, messages, and FICA uploads.
       - Next: SMS codes as an alternative to an authenticator (needs an SMS provider), and invoice PDFs and payment links in the portal.
-    - Next: court roll follow-ups (CaseLines / Court Online).
+    - 12c, done on `feat/court-online`: Court Online follow-ups. Court Online has no public API for practice software, so there is no direct filing or sync.
+      - Court Online case numbers on matters (rolls are matched against them too).
+      - A platform list of courts on Court Online, seeded from official sources (`ops courts`), with a matter banner and link.
+      - Court roll notices go to the matter team plus firm-chosen watchers such as the office manager (restricted matters only to people on them).
+      - One "listing changed" notice when an amended roll moves a hearing.
+      - Reminders for listings in the next two days that nobody has confirmed.
+      - Next: turn Court Online notification emails into matter events, once a pilot firm shares samples.
 
 Open decisions: product name; Entra External ID vs Auth0/WorkOS; pilot firms and practice areas.
