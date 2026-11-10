@@ -141,6 +141,13 @@
       "when": 1794296460396,
       "tag": "0019_platform_console",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794297699111,
+      "tag": "0020_support_desk",
+      "breakpoints": true
     }
   ]
 }

@@ -181,6 +181,22 @@ export async function exportFirm(firm: FirmRow): Promise<FirmExport> {
           }),
         ),
       );
+      tables.supportTickets = await Promise.all(
+        (await db().select().from(schema.supportTickets)).map(
+          async ({ subjectEncrypted, ...rest }) => ({
+            ...rest,
+            subject: await decryptJson(subjectEncrypted),
+          }),
+        ),
+      );
+      tables.supportTicketMessages = await Promise.all(
+        (await db().select().from(schema.supportTicketMessages)).map(
+          async ({ bodyEncrypted, ...rest }) => ({
+            ...rest,
+            body: await decryptJson(bodyEncrypted),
+          }),
+        ),
+      );
       tables.clientUpdates = await Promise.all(
         (
           await db()

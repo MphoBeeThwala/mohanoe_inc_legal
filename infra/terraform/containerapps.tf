@@ -49,6 +49,7 @@ locals {
       LOG_HTTP                           = "true"
       PLATFORM_SUPPORT_EMAIL             = var.platform_support_email
       PLATFORM_CONSOLE_HOST              = var.platform_console_host
+      PLATFORM_STATUS_URL                = var.platform_status_url
       PAYFAST_MERCHANT_ID                = var.payfast_merchant_id
       PAYFAST_SANDBOX                    = var.payfast_sandbox ? "true" : "false"
       SUBSCRIPTION_TRIAL_DAYS            = tostring(var.subscription_trial_days)

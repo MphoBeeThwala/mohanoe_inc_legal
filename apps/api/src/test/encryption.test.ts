@@ -173,6 +173,7 @@ describe('per-firm envelope encryption', () => {
       research: 0,
       trust: 0,
       portal: 0,
+      support: 0,
     });
   });
 

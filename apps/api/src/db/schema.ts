@@ -2020,3 +2020,75 @@ export type NotificationRow = typeof notifications.$inferSelect;
 export type AuditEventRow = typeof auditEvents.$inferSelect;
 export type ReportSnapshotRow = typeof reportSnapshots.$inferSelect;
 export type ComplianceRequestRow = typeof complianceRequests.$inferSelect;
+
+// ---------------------------------------------------------- Support desk
+// A firm's requests to the platform. Subjects and messages are encrypted with
+// the firm's key; operators read them in the console (staff are asked not to
+// include client details). Help articles are platform content every firm reads.
+
+export const supportTickets = pgTable(
+  'support_tickets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    /** Per firm: SUP-000001. */
+    number: text('number').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    /** 'question' | 'problem' | 'billing' | 'data_request' | 'security' */
+    category: text('category').notNull(),
+    /** 'normal' | 'urgent' */
+    priority: text('priority').notNull().default('normal'),
+    /** 'open' (waiting on the platform) | 'answered' (waiting on the firm) | 'closed' */
+    status: text('status').notNull().default('open'),
+    subjectEncrypted: text('subject_encrypted').notNull(),
+    lastMessageAt: timestamp('last_message_at', { withTimezone: true }).notNull().defaultNow(),
+    firstResponseAt: timestamp('first_response_at', { withTimezone: true }),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('support_tickets_number_idx').on(t.firmId, t.number),
+    index('support_tickets_status_idx').on(t.status, t.lastMessageAt),
+    tenantPolicy('support_tickets'),
+  ],
+);
+
+export const supportTicketMessages = pgTable(
+  'support_ticket_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    firmId: firmId(),
+    ticketId: uuid('ticket_id')
+      .notNull()
+      .references(() => supportTickets.id, { onDelete: 'cascade' }),
+    /** 'staff' | 'operator' */
+    author: text('author').notNull(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    /** The operator's id (a platform table, so no foreign key from here). */
+    operatorId: uuid('operator_id'),
+    /** Shown to the firm: the operator's name at the time. */
+    operatorName: text('operator_name'),
+    bodyEncrypted: text('body_encrypted').notNull(),
+    ...timestamps,
+  },
+  (t) => [
+    index('support_ticket_messages_ticket_idx').on(t.ticketId, t.createdAt),
+    tenantPolicy('support_ticket_messages'),
+  ],
+);
+
+export const helpArticles = pgTable('help_articles', {
+  slug: text('slug').primaryKey(),
+  title: text('title').notNull(),
+  /** Heading the article is listed under. */
+  category: text('category').notNull(),
+  /** Plain text with simple markup: '# ' headings, '- ' list items, blank-line paragraphs. */
+  body: text('body').notNull(),
+  published: boolean('published').notNull().default(true),
+  sortOrder: integer('sort_order').notNull().default(0),
+  ...updatable,
+});
+
+export type SupportTicketRow = typeof supportTickets.$inferSelect;
+export type SupportTicketMessageRow = typeof supportTicketMessages.$inferSelect;
+export type HelpArticleRow = typeof helpArticles.$inferSelect;

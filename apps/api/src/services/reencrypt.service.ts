@@ -30,6 +30,8 @@ import {
   trustReconciliations,
   portalUsers,
   portalMessages,
+  supportTickets,
+  supportTicketMessages,
   cases,
   type FirmRow,
 } from '../db/schema';
@@ -208,6 +210,7 @@ export interface ReencryptCounts {
   research: number;
   trust: number;
   portal: number;
+  support: number;
 }
 
 export interface ReencryptStatus {
@@ -225,6 +228,7 @@ export interface ReencryptStatus {
     research: number;
     trust: number;
     portal: number;
+    support: number;
   };
 }
 
@@ -256,6 +260,16 @@ export async function pendingReencryption(): Promise<ReencryptStatus> {
       .from(portalMessages)
       .where(notOnVersion(portalMessages.bodyEncrypted, version)),
     db().select({ value: count() }).from(cases).where(staleClientUpdates(version)),
+  ]);
+  const [[st], [sm]] = await Promise.all([
+    db()
+      .select({ value: count() })
+      .from(supportTickets)
+      .where(notOnVersion(supportTickets.subjectEncrypted, version)),
+    db()
+      .select({ value: count() })
+      .from(supportTicketMessages)
+      .where(notOnVersion(supportTicketMessages.bodyEncrypted, version)),
   ]);
   const [[fpr], [ta], [tre], [tr]] = await Promise.all([
     db().select({ value: count() }).from(firmPrecedents).where(stalePrecedents(version)),
@@ -296,6 +310,7 @@ export async function pendingReencryption(): Promise<ReencryptStatus> {
       research: (rr?.value ?? 0) + (ac?.value ?? 0) + (fpr?.value ?? 0),
       trust: (ta?.value ?? 0) + (tre?.value ?? 0) + (tr?.value ?? 0),
       portal: (pu?.value ?? 0) + (pm?.value ?? 0) + (cu?.value ?? 0),
+      support: (st?.value ?? 0) + (sm?.value ?? 0),
     },
   };
 }
@@ -600,6 +615,28 @@ async function reencryptBatch(): Promise<ReencryptCounts> {
       .set({ clientUpdateEncrypted: await encryptJson(await decryptJson(row.value!)) })
       .where(eq(cases.id, row.id));
   }
+  const ticketRows = await db()
+    .select({ id: supportTickets.id, value: supportTickets.subjectEncrypted })
+    .from(supportTickets)
+    .where(notOnVersion(supportTickets.subjectEncrypted, version))
+    .limit(BATCH);
+  for (const row of ticketRows) {
+    await db()
+      .update(supportTickets)
+      .set({ subjectEncrypted: await encryptJson(await decryptJson(row.value)) })
+      .where(eq(supportTickets.id, row.id));
+  }
+  const ticketMessageRows = await db()
+    .select({ id: supportTicketMessages.id, value: supportTicketMessages.bodyEncrypted })
+    .from(supportTicketMessages)
+    .where(notOnVersion(supportTicketMessages.bodyEncrypted, version))
+    .limit(BATCH);
+  for (const row of ticketMessageRows) {
+    await db()
+      .update(supportTicketMessages)
+      .set({ bodyEncrypted: await encryptJson(await decryptJson(row.value)) })
+      .where(eq(supportTicketMessages.id, row.id));
+  }
 
   return {
     submissions: subs.length,
@@ -614,6 +651,7 @@ async function reencryptBatch(): Promise<ReencryptCounts> {
     research: briefs.length + calls.length + precedentRows.length,
     trust: trustAccountRows.length + trustRows.length + reconciliationRows.length,
     portal: portalRows.length + messageRows.length + updateRows.length,
+    support: ticketRows.length + ticketMessageRows.length,
   };
 }
 
@@ -815,6 +853,16 @@ export async function pruneRetiredKeys(): Promise<number[]> {
         .from(cases)
         .where(sql`${cases.clientUpdateEncrypted} like ${prefix}`),
     ]);
+    const [[stk], [stm]] = await Promise.all([
+      db()
+        .select({ value: count() })
+        .from(supportTickets)
+        .where(sql`${supportTickets.subjectEncrypted} like ${prefix}`),
+      db()
+        .select({ value: count() })
+        .from(supportTicketMessages)
+        .where(sql`${supportTicketMessages.bodyEncrypted} like ${prefix}`),
+    ]);
     const inUse = [
       s,
       d,
@@ -838,6 +886,8 @@ export async function pruneRetiredKeys(): Promise<number[]> {
       pou,
       pom,
       cup,
+      stk,
+      stm,
     ].some((row) => row?.value);
     if (!inUse) {
       await deleteKey(key.id);

@@ -2,12 +2,16 @@
 // answers 404 anywhere else). Shows firm metadata and counts, never client data.
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type {
+  ConsoleTicket,
+  ConsoleTicketSummary,
+  HelpArticle,
   ConsoleAuditEntry,
   ConsoleFirm,
   ConsoleFirmInput,
   ConsoleOperator,
 } from '@ahava88/shared';
 import { api, apiErrorMessage, apiStatus } from '../api';
+import { HelpText } from '../components/HelpPanel';
 import '../App.css';
 
 interface Plan {
@@ -558,6 +562,266 @@ function CourtOnline({ admin }: { admin: boolean }) {
   );
 }
 
+function Tickets() {
+  const [filter, setFilter] = useState<'' | 'open' | 'answered' | 'closed'>('');
+  const [tickets, setTickets] = useState<ConsoleTicketSummary[]>([]);
+  const [open, setOpen] = useState<ConsoleTicket | null>(null);
+  const [reply, setReply] = useState('');
+  const [error, setError] = useState('');
+  const load = useCallback(() => {
+    api
+      .get<ConsoleTicketSummary[]>('/platform/tickets', {
+        params: filter ? { status: filter } : {},
+      })
+      .then(({ data }) => setTickets(data))
+      .catch((err) => setError(apiErrorMessage(err, 'Requests could not be loaded.')));
+  }, [filter]);
+  useEffect(load, [load]);
+  const show = (firmId: string, id: string) =>
+    api
+      .get<ConsoleTicket>(`/platform/tickets/${firmId}/${id}`)
+      .then(({ data }) => setOpen(data))
+      .catch((err) => setError(apiErrorMessage(err, 'The request could not be loaded.')));
+  useEffect(() => {
+    // Links from the support mailbox: /console#ticket-<firm>-<ticket>
+    const match = /^#ticket-([0-9a-f-]{36})-([0-9a-f-]{36})$/.exec(window.location.hash);
+    if (match) void show(match[1]!, match[2]!);
+  }, []);
+  const act = async (fn: () => Promise<{ data: ConsoleTicket }>) => {
+    setError('');
+    try {
+      const { data } = await fn();
+      setOpen(data);
+      setReply('');
+      load();
+    } catch (err) {
+      setError(apiErrorMessage(err, 'That did not go through.'));
+    }
+  };
+  return (
+    <section aria-label="Support requests">
+      <h2>Support requests</h2>
+      <label>
+        Show{' '}
+        <select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
+          <option value="">Not closed</option>
+          <option value="open">Waiting on support</option>
+          <option value="answered">Waiting on the firm</option>
+          <option value="closed">Closed</option>
+        </select>
+      </label>
+      {error ? <p className="notice notice-error">{error}</p> : null}
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Request</th>
+            <th>Firm</th>
+            <th>Kind</th>
+            <th>Status</th>
+            <th>Last message</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tickets.map((t) => (
+            <tr key={`${t.firmId}-${t.id}`}>
+              <td>
+                <button type="button" className="link-button" onClick={() => show(t.firmId, t.id)}>
+                  {t.priority === 'urgent' ? '⚠ ' : ''}
+                  {t.number}: {t.subject}
+                </button>
+              </td>
+              <td>{t.firmSlug}</td>
+              <td>{t.category}</td>
+              <td>{t.status}</td>
+              <td>{when(t.lastMessageAt)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {open ? (
+        <article className="ticket" aria-label={`Request ${open.number}`}>
+          <h3>
+            {open.firmSlug} {open.number}: {open.subject}
+          </h3>
+          <ol className="ticket-messages">
+            {open.messages.map((m) => (
+              <li key={m.id} className={`ticket-message ticket-${m.author}`}>
+                <strong>{m.name}</strong> <small>{when(m.createdAt)}</small>
+                <p>{m.body}</p>
+              </li>
+            ))}
+          </ol>
+          <form
+            className="panel-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void act(() =>
+                api.post(`/platform/tickets/${open.firmId}/${open.id}/messages`, { body: reply }),
+              );
+            }}
+          >
+            <label>
+              Reply to the firm
+              <textarea
+                required
+                rows={4}
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+              />
+            </label>
+            <div className="row-actions">
+              <button type="submit" className="primary-button">
+                Send reply
+              </button>
+              {open.status !== 'closed' ? (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() =>
+                    act(() =>
+                      api.post(`/platform/tickets/${open.firmId}/${open.id}/status`, {
+                        status: 'closed',
+                      }),
+                    )
+                  }
+                >
+                  Close
+                </button>
+              ) : null}
+            </div>
+          </form>
+        </article>
+      ) : null}
+    </section>
+  );
+}
+
+function Articles({ admin }: { admin: boolean }) {
+  const blank = { slug: '', title: '', category: '', body: '', published: true, sortOrder: 0 };
+  const [articles, setArticles] = useState<HelpArticle[]>([]);
+  const [form, setForm] = useState(blank);
+  const [error, setError] = useState('');
+  const load = useCallback(() => {
+    api.get<HelpArticle[]>('/platform/articles').then(({ data }) => setArticles(data));
+  }, []);
+  useEffect(load, [load]);
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError('');
+    try {
+      await api.put('/platform/articles', form);
+      setForm(blank);
+      load();
+    } catch (err) {
+      setError(apiErrorMessage(err, 'The article could not be saved.'));
+    }
+  };
+  return (
+    <section aria-label="Help articles">
+      <h2>Help articles</h2>
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Article</th>
+            <th>Category</th>
+            <th>Published</th>
+            {admin ? <th /> : null}
+          </tr>
+        </thead>
+        <tbody>
+          {articles.map((a) => (
+            <tr key={a.slug}>
+              <td>
+                {a.title} <small>({a.slug})</small>
+              </td>
+              <td>{a.category}</td>
+              <td>{a.published ? 'Yes' : 'No'}</td>
+              {admin ? (
+                <td>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() =>
+                      setForm({
+                        slug: a.slug,
+                        title: a.title,
+                        category: a.category,
+                        body: a.body,
+                        published: a.published,
+                        sortOrder: a.sortOrder,
+                      })
+                    }
+                  >
+                    Edit
+                  </button>
+                </td>
+              ) : null}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {error ? <p className="notice notice-error">{error}</p> : null}
+      {admin ? (
+        <form className="panel-form" onSubmit={save} aria-label="Save article">
+          <h3>
+            {form.slug && articles.some((a) => a.slug === form.slug) ? 'Edit' : 'New'} article
+          </h3>
+          <label>
+            Slug
+            <input
+              required
+              value={form.slug}
+              onChange={(e) => setForm({ ...form, slug: e.target.value })}
+            />
+          </label>
+          <label>
+            Title
+            <input
+              required
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+            />
+          </label>
+          <label>
+            Category
+            <input
+              required
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+            />
+          </label>
+          <label>
+            Text (# heading, - list item, blank line between paragraphs)
+            <textarea
+              required
+              rows={10}
+              value={form.body}
+              onChange={(e) => setForm({ ...form, body: e.target.value })}
+            />
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={form.published}
+              onChange={(e) => setForm({ ...form, published: e.target.checked })}
+            />
+            Published
+          </label>
+          <button type="submit" className="primary-button">
+            Save article
+          </button>
+          {form.body ? (
+            <div aria-label="Preview">
+              <h4>Preview</h4>
+              <HelpText body={form.body} />
+            </div>
+          ) : null}
+        </form>
+      ) : null}
+    </section>
+  );
+}
+
 function Audit() {
   const [entries, setEntries] = useState<ConsoleAuditEntry[]>([]);
   useEffect(() => {
@@ -590,13 +854,23 @@ function Audit() {
   );
 }
 
-const TABS = ['Firms', 'Plans', 'Research sources', 'Court Online', 'Activity'] as const;
+const TABS = [
+  'Support requests',
+  'Firms',
+  'Plans',
+  'Research sources',
+  'Court Online',
+  'Help articles',
+  'Activity',
+] as const;
 type Tab = (typeof TABS)[number];
 
 export default function ConsoleApp() {
   const [me, setMe] = useState<ConsoleOperator | null>(null);
   const [state, setState] = useState<'loading' | 'signed-out' | 'unavailable' | 'ready'>('loading');
-  const [tab, setTab] = useState<Tab>('Firms');
+  const [tab, setTab] = useState<Tab>(
+    window.location.hash.startsWith('#ticket-') ? 'Support requests' : 'Firms',
+  );
 
   useEffect(() => {
     document.title = 'Platform console';
@@ -662,6 +936,8 @@ export default function ConsoleApp() {
       {tab === 'Plans' ? <Plans admin={admin} /> : null}
       {tab === 'Research sources' ? <Sources admin={admin} /> : null}
       {tab === 'Court Online' ? <CourtOnline admin={admin} /> : null}
+      {tab === 'Support requests' ? <Tickets /> : null}
+      {tab === 'Help articles' ? <Articles admin={admin} /> : null}
       {tab === 'Activity' ? <Audit /> : null}
     </main>
   );

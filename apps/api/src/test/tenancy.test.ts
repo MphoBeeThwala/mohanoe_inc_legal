@@ -27,6 +27,7 @@ const PLATFORM_READ_TABLES = [
   'legal_documents',
   'legal_passages',
   'court_online_courts',
+  'help_articles',
 ];
 
 const HOST_A = 'portal.alpha-law.test';

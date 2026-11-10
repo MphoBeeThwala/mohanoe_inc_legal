@@ -133,7 +133,7 @@ export const me = (operator: PlatformOperatorRow) => toOperator(operator);
 
 // --------------------------------------------------------------------- audit
 
-async function record(
+export async function record(
   operator: PlatformOperatorRow,
   action: string,
   firmId: string | null,
