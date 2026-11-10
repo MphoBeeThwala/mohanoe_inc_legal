@@ -14,9 +14,10 @@
 // `npm run build` first.
 import '../load-env';
 import { parseArgs } from 'node:util';
-import { closeDb, initDb } from '../db/client';
+import { eq } from 'drizzle-orm';
+import { closeDb, initDb, rootDb } from '../db/client';
 import { withTenant } from '../db/tenant';
-import type { FirmRow } from '../db/schema';
+import { firms, type FirmRow } from '../db/schema';
 import { describeError } from '../lib/http';
 import { findFirmBySlug, listFirms } from '../services/firm.service';
 import { listKeys, rewrapKeys, rotateDataKey } from '../services/keys.service';
@@ -297,6 +298,22 @@ async function main(): Promise<void> {
     await keys(positionals[0] ?? 'status', values.slug);
   } else if (command === 'plans') {
     await plans(positionals[0] ?? 'list', values as Record<string, string | undefined>);
+  } else if (command === 'trust') {
+    const action = positionals[0];
+    if ((action !== 'enable' && action !== 'disable') || !values.slug) {
+      throw new Error('Usage: ops trust enable|disable --slug <slug>');
+    }
+    const [firm] = await targetFirms(values.slug);
+    await rootDb()
+      .update(firms)
+      .set({
+        features: { ...firm!.features, trustAccounting: action === 'enable' },
+        updatedAt: new Date(),
+      })
+      .where(eq(firms.id, firm!.id));
+    console.log(
+      `${firm!.slug}: trust accounting ${action === 'enable' ? 'enabled' : 'disabled'} (running instances pick it up within their firm cache period)`,
+    );
   } else if (command === 'sources') {
     await sources(positionals[0] ?? 'list', values as Record<string, string | undefined>);
   } else if (command === 'subscriptions') {
@@ -360,7 +377,7 @@ async function main(): Promise<void> {
     }
   } else {
     throw new Error(
-      'Usage: ops keys status|rotate|reencrypt|rewrap|prune [--slug <slug>] | ops anchor | ops reminders | ops domains | ops restore-check | ops subscriptions | ops sources list|add|suspend|approve|import|sync-laws-africa | ops plans list|set|disable | ops subscription comp --slug <slug> | ops court-rolls [--file <roll> --division <code> --title <title>] | ops operator create|list|disable|enable',
+      'Usage: ops keys status|rotate|reencrypt|rewrap|prune [--slug <slug>] | ops anchor | ops reminders | ops domains | ops restore-check | ops subscriptions | ops trust enable|disable --slug <slug> | ops sources list|add|suspend|approve|import|sync-laws-africa | ops plans list|set|disable | ops subscription comp --slug <slug> | ops court-rolls [--file <roll> --division <code> --title <title>] | ops operator create|list|disable|enable',
     );
   }
 }

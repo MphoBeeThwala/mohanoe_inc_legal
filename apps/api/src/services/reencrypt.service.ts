@@ -25,6 +25,9 @@ import {
   researchRequests,
   aiCalls,
   firmPrecedents,
+  trustAccounts,
+  trustEntries,
+  trustReconciliations,
   type FirmRow,
 } from '../db/schema';
 import { activeKey, deleteKey } from './keys.service';
@@ -144,6 +147,13 @@ function staleResearch(version: number): SQL {
   ) as SQL;
 }
 
+function staleTrustEntries(version: number): SQL {
+  return or(
+    notOnVersion(trustEntries.referenceEncrypted, version),
+    notOnVersion(trustEntries.descriptionEncrypted, version),
+  ) as SQL;
+}
+
 function stalePrecedents(version: number): SQL {
   return or(
     notOnVersion(firmPrecedents.originalEncrypted, version),
@@ -176,6 +186,7 @@ export interface ReencryptCounts {
   billing: number;
   calendar: number;
   research: number;
+  trust: number;
 }
 
 export interface ReencryptStatus {
@@ -191,6 +202,7 @@ export interface ReencryptStatus {
     billing: number;
     calendar: number;
     research: number;
+    trust: number;
   };
 }
 
@@ -215,8 +227,22 @@ export async function pendingReencryption(): Promise<ReencryptStatus> {
     db().select({ value: count() }).from(researchRequests).where(staleResearch(version)),
     db().select({ value: count() }).from(aiCalls).where(staleAiCalls(version)),
   ]);
-  const [[fpr]] = await Promise.all([
+  const [[fpr], [ta], [tre], [tr]] = await Promise.all([
     db().select({ value: count() }).from(firmPrecedents).where(stalePrecedents(version)),
+    db()
+      .select({ value: count() })
+      .from(trustAccounts)
+      .where(notOnVersion(trustAccounts.accountNumberEncrypted, version)),
+    db().select({ value: count() }).from(trustEntries).where(staleTrustEntries(version)),
+    db()
+      .select({ value: count() })
+      .from(trustReconciliations)
+      .where(
+        and(
+          isNotNull(trustReconciliations.notesEncrypted),
+          notOnVersion(trustReconciliations.notesEncrypted, version),
+        ),
+      ),
   ]);
   const [[s], [d], [u], [p], [c]] = await Promise.all([
     db().select({ value: count() }).from(submissions).where(staleSubmissions(version)),
@@ -238,6 +264,7 @@ export async function pendingReencryption(): Promise<ReencryptStatus> {
       billing: (bi?.value ?? 0) + (bd?.value ?? 0),
       calendar: (ce?.value ?? 0) + (mp?.value ?? 0),
       research: (rr?.value ?? 0) + (ac?.value ?? 0) + (fpr?.value ?? 0),
+      trust: (ta?.value ?? 0) + (tre?.value ?? 0) + (tr?.value ?? 0),
     },
   };
 }
@@ -456,6 +483,51 @@ async function reencryptBatch(): Promise<ReencryptCounts> {
       .where(eq(aiCalls.id, row.id));
   }
 
+  const trustAccountRows = await db()
+    .select()
+    .from(trustAccounts)
+    .where(notOnVersion(trustAccounts.accountNumberEncrypted, version))
+    .limit(BATCH);
+  for (const row of trustAccountRows) {
+    await db()
+      .update(trustAccounts)
+      .set({
+        accountNumberEncrypted: await encryptJson(await decryptJson(row.accountNumberEncrypted)),
+      })
+      .where(eq(trustAccounts.id, row.id));
+  }
+  const trustRows = await db()
+    .select()
+    .from(trustEntries)
+    .where(staleTrustEntries(version))
+    .limit(BATCH);
+  for (const row of trustRows) {
+    // Only the encrypted text is rewritten; amounts and status never change.
+    await db()
+      .update(trustEntries)
+      .set({
+        referenceEncrypted: await encryptJson(await decryptJson(row.referenceEncrypted)),
+        descriptionEncrypted: await encryptJson(await decryptJson(row.descriptionEncrypted)),
+      })
+      .where(eq(trustEntries.id, row.id));
+  }
+  const reconciliationRows = await db()
+    .select()
+    .from(trustReconciliations)
+    .where(
+      and(
+        isNotNull(trustReconciliations.notesEncrypted),
+        notOnVersion(trustReconciliations.notesEncrypted, version),
+      ),
+    )
+    .limit(BATCH);
+  for (const row of reconciliationRows) {
+    await db()
+      .update(trustReconciliations)
+      .set({ notesEncrypted: await encryptJson(await decryptJson(row.notesEncrypted!)) })
+      .where(eq(trustReconciliations.id, row.id));
+  }
+
   return {
     submissions: subs.length,
     documents: docs.length,
@@ -467,6 +539,7 @@ async function reencryptBatch(): Promise<ReencryptCounts> {
     billing: bills.length + costs.length,
     calendar: events.length + periods.length,
     research: briefs.length + calls.length + precedentRows.length,
+    trust: trustAccountRows.length + trustRows.length + reconciliationRows.length,
   };
 }
 
@@ -483,6 +556,7 @@ export async function reencryptFirm(firm: FirmRow) {
     billing: 0,
     calendar: 0,
     research: 0,
+    trust: 0,
   };
   for (;;) {
     const done = await withTenant(firm, () => reencryptBatch(), { system: true });
@@ -496,6 +570,7 @@ export async function reencryptFirm(firm: FirmRow) {
     total.billing += done.billing;
     total.calendar += done.calendar;
     total.research += done.research;
+    total.trust += done.trust;
     if (Object.values(done).every((value) => value === 0)) {
       return total;
     }
@@ -626,7 +701,26 @@ export async function pruneRetiredKeys(): Promise<number[]> {
           ),
         ),
     ]);
-    const inUse = [s, d, u, p, c, fp, fd, te, tm, bi, bd, ce, mp, rr, ac, pr].some(
+    const [[tac], [ten], [trc]] = await Promise.all([
+      db()
+        .select({ value: count() })
+        .from(trustAccounts)
+        .where(sql`${trustAccounts.accountNumberEncrypted} like ${prefix}`),
+      db()
+        .select({ value: count() })
+        .from(trustEntries)
+        .where(
+          or(
+            sql`${trustEntries.referenceEncrypted} like ${prefix}`,
+            sql`${trustEntries.descriptionEncrypted} like ${prefix}`,
+          ),
+        ),
+      db()
+        .select({ value: count() })
+        .from(trustReconciliations)
+        .where(sql`${trustReconciliations.notesEncrypted} like ${prefix}`),
+    ]);
+    const inUse = [s, d, u, p, c, fp, fd, te, tm, bi, bd, ce, mp, rr, ac, pr, tac, ten, trc].some(
       (row) => row?.value,
     );
     if (!inUse) {

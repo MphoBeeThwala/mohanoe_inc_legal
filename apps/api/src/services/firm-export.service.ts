@@ -158,6 +158,32 @@ export async function exportFirm(firm: FirmRow): Promise<FirmExport> {
         })),
       );
       tables.precedentPassages = await db().select().from(schema.precedentPassages);
+      // Trust records (kept for the auditor and the Legal Practice Council).
+      tables.trustAccounts = await Promise.all(
+        (await db().select().from(schema.trustAccounts)).map(
+          async ({ accountNumberEncrypted, ...rest }) => ({
+            ...rest,
+            accountNumber: await decryptJson(accountNumberEncrypted),
+          }),
+        ),
+      );
+      tables.trustEntries = await Promise.all(
+        (await db().select().from(schema.trustEntries)).map(
+          async ({ referenceEncrypted, descriptionEncrypted, ...rest }) => ({
+            ...rest,
+            reference: await decryptJson(referenceEncrypted),
+            description: await decryptJson(descriptionEncrypted),
+          }),
+        ),
+      );
+      tables.trustReconciliations = await Promise.all(
+        (await db().select().from(schema.trustReconciliations)).map(
+          async ({ notesEncrypted, ...rest }) => ({
+            ...rest,
+            notes: notesEncrypted ? await decryptJson(notesEncrypted) : null,
+          }),
+        ),
+      );
       const calls = await db().select().from(schema.aiCalls);
       tables.aiCalls = await Promise.all(
         calls.map(async ({ promptEncrypted, responseEncrypted, ...rest }) => ({

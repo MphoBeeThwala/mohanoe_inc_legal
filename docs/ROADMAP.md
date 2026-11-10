@@ -225,5 +225,12 @@ Trust accounting and AI research ship behind feature flags to pilots first.
       - Replace the synthetic evaluation set with 50–100 attorney-written cases.
       - Use the confirmed brief in drafting.
 12. **Trust accounting, court roll, client portal.**
+    - 12a, done on `feat/trust-accounting`:
+      - Per-matter trust ledgers behind a per-firm switch.
+      - No debit balances (checked under a lock); four-eyes authorisation; immutable entries with reversals.
+      - Fee transfers against issued invoices; matter-to-matter transfers.
+      - Three-way reconciliation with sign-off, and an auditor CSV (`docs/runbooks/trust-accounting.md`).
+      - **Auditor review before live use.**
+    - Next: the client portal, then court roll follow-ups (CaseLines / Court Online).
 
 Open decisions: product name; Entra External ID vs Auth0/WorkOS; pilot firms and practice areas.

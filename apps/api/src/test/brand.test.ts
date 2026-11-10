@@ -85,6 +85,7 @@ test('a firm row drives its public branding, with safe fallbacks', () => {
     billingSettings: {},
     profile: {},
     onboarding: {},
+    features: {},
     createdAt: new Date(),
     updatedAt: new Date(),
   };
