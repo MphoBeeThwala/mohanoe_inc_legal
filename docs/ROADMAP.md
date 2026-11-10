@@ -215,7 +215,15 @@ Trust accounting and AI research ship behind feature flags to pilots first.
 10. **Subscriptions** — done on `feat/subscriptions` with PayFast recurring billing (checkout, verified ITNs, seat changes and cancelling through the PayFast API, trial → past due → read-only).
 11. **AI research** — in progress on `feat/ai-research`:
     - 11a, done: one AI client (Foundry / Anthropic), de-identification, metering and caps, and attorney-confirmed research briefs.
-    - Next: corpus ingestion and retrieval (legislation and firm precedents first; SAFLII only with permission), cited answers with citation verification, attorney approval with a source snapshot, and the evaluation harness.
+    - 11b, done:
+      - Corpus: an approved-source register with licences, a hierarchy of authority, and validity tracking (repealed provisions excluded).
+      - Sources: a Laws.Africa adapter, file imports, and firm precedents with review.
+      - Answering: query planning, then authority-weighted full-text retrieval, then cited generation, then citation checks in code (`research-run.ts`).
+      - Sign-off and testing: attorney approval with a source snapshot, and the evaluation harness (`npm run eval`).
+    - Next:
+      - Register the sources whose licences are in place (`docs/runbooks/research-sources.md`).
+      - Replace the synthetic evaluation set with 50–100 attorney-written cases.
+      - Use the confirmed brief in drafting.
 12. **Trust accounting, court roll, client portal.**
 
 Open decisions: product name; Entra External ID vs Auth0/WorkOS; pilot firms and practice areas.

@@ -35,6 +35,9 @@ import { anchorAllFirms } from '../services/audit-anchor.service';
 import { createOperator, listOperators, setOperatorActive } from '../services/support.service';
 import * as auditService from '../services/audit.service';
 import * as subscriptions from '../services/subscription.service';
+import * as corpus from '../services/corpus.service';
+import { syncLawsAfrica } from '../services/laws-africa';
+import { extractText } from '../services/court-roll-sources';
 
 const OPERATOR = { fullName: 'Platform operations', role: 'system' };
 
@@ -174,6 +177,83 @@ async function plans(action: string, values: Record<string, string | undefined>)
   }
 }
 
+async function sources(action: string, values: Record<string, string | undefined>): Promise<void> {
+  if (action === 'list') {
+    for (const source of await corpus.listAllSources()) {
+      console.log(
+        `${source.code.padEnd(20)} ${source.status.padEnd(9)} ${source.kind.padEnd(18)} ${source.name} | licence: ${source.licence}${source.permission ? ` | permission: ${source.permission}` : ''}`,
+      );
+    }
+  } else if (action === 'add') {
+    const saved = await corpus.upsertSource({
+      code: values.code ?? '',
+      name: values.name ?? '',
+      kind: values.kind ?? '',
+      publisher: values.publisher,
+      url: values.url,
+      licence: values.licence ?? '',
+      permission: values.permission,
+      approvedBy: values['approved-by'] ?? '',
+    });
+    console.log(`Source ${saved.code} approved.`);
+  } else if (action === 'suspend' || action === 'approve') {
+    if (!values.code) throw new Error(`sources ${action} needs --code`);
+    const ok = await corpus.setSourceStatus(
+      values.code,
+      action === 'suspend' ? 'suspended' : 'approved',
+    );
+    console.log(
+      ok
+        ? `${values.code}: ${action === 'suspend' ? 'suspended' : 'approved'}`
+        : `No source ${values.code}`,
+    );
+  } else if (action === 'import') {
+    if (!values.code || !values.file || !values.title || !values.citation) {
+      throw new Error('sources import needs --code, --file, --title and --citation');
+    }
+    const body = await readFile(values.file);
+    const lower = values.file.toLowerCase();
+    const text = lower.endsWith('.pdf')
+      ? await extractText(body, 'pdf')
+      : lower.endsWith('.docx')
+        ? await extractText(body, 'docx')
+        : body.toString('utf8');
+    const result = await corpus.importDocument(values.code, {
+      title: values.title,
+      citation: values.citation,
+      url: values.url,
+      court: values.court,
+      authorityLevel: values.level ? Number(values.level) : undefined,
+      validity: values.validity as corpus.DocumentInput['validity'],
+      effectiveDate: values.effective ?? null,
+      repealedDate: values.repealed ?? null,
+      versionDate: values.version ?? null,
+      text,
+    });
+    console.log(
+      result.changed
+        ? `${values.citation}: imported ${result.passages} passages`
+        : `${values.citation}: unchanged`,
+    );
+  } else if (action === 'sync-laws-africa') {
+    const token = process.env.LAWS_AFRICA_TOKEN;
+    if (!token) {
+      console.log('LAWS_AFRICA_TOKEN is not set: skipped.');
+      return;
+    }
+    const result = await syncLawsAfrica({
+      token,
+      sourceCode: values.code ?? 'laws-africa',
+      place: values.place,
+      limit: values.limit ? Number(values.limit) : undefined,
+    });
+    console.log(JSON.stringify(result));
+    if (result.failed) process.exitCode = 1;
+  } else {
+    throw new Error(`Unknown sources action "${action}"`);
+  }
+}
+
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   const { values, positionals } = parseArgs({
@@ -193,6 +273,21 @@ async function main(): Promise<void> {
       'max-seats': { type: 'string' },
       order: { type: 'string' },
       until: { type: 'string' },
+      kind: { type: 'string' },
+      publisher: { type: 'string' },
+      url: { type: 'string' },
+      licence: { type: 'string' },
+      permission: { type: 'string' },
+      'approved-by': { type: 'string' },
+      citation: { type: 'string' },
+      court: { type: 'string' },
+      level: { type: 'string' },
+      validity: { type: 'string' },
+      effective: { type: 'string' },
+      repealed: { type: 'string' },
+      version: { type: 'string' },
+      place: { type: 'string' },
+      limit: { type: 'string' },
       seats: { type: 'string' },
     },
     allowPositionals: true,
@@ -202,6 +297,8 @@ async function main(): Promise<void> {
     await keys(positionals[0] ?? 'status', values.slug);
   } else if (command === 'plans') {
     await plans(positionals[0] ?? 'list', values as Record<string, string | undefined>);
+  } else if (command === 'sources') {
+    await sources(positionals[0] ?? 'list', values as Record<string, string | undefined>);
   } else if (command === 'subscriptions') {
     for (const result of await subscriptions.checkAllSubscriptions()) {
       console.log(
@@ -263,7 +360,7 @@ async function main(): Promise<void> {
     }
   } else {
     throw new Error(
-      'Usage: ops keys status|rotate|reencrypt|rewrap|prune [--slug <slug>] | ops anchor | ops reminders | ops domains | ops restore-check | ops subscriptions | ops plans list|set|disable | ops subscription comp --slug <slug> | ops court-rolls [--file <roll> --division <code> --title <title>] | ops operator create|list|disable|enable',
+      'Usage: ops keys status|rotate|reencrypt|rewrap|prune [--slug <slug>] | ops anchor | ops reminders | ops domains | ops restore-check | ops subscriptions | ops sources list|add|suspend|approve|import|sync-laws-africa | ops plans list|set|disable | ops subscription comp --slug <slug> | ops court-rolls [--file <roll> --division <code> --title <title>] | ops operator create|list|disable|enable',
     );
   }
 }

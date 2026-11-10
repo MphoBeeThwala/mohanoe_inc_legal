@@ -19,6 +19,8 @@ interface CaseWorkspaceProps {
   canEditCalendar?: boolean;
   /** research.use: prepare de-identified research briefs. */
   canResearch?: boolean;
+  /** research.approve: sign off research memos. */
+  canApproveResearch?: boolean;
 }
 
 function CaseWorkspace({
@@ -29,6 +31,7 @@ function CaseWorkspace({
   canEdit = true,
   canEditCalendar = false,
   canResearch = false,
+  canApproveResearch = false,
 }: CaseWorkspaceProps) {
   const [caseRecord, setCaseRecord] = useState<CaseDetail | null>(null);
   const [busy, setBusy] = useState(false);
@@ -316,7 +319,11 @@ function CaseWorkspace({
           />
 
           {canResearch ? (
-            <ResearchPanel key={`research-${caseRecord.id}`} caseId={caseRecord.id} />
+            <ResearchPanel
+              key={`research-${caseRecord.id}`}
+              caseId={caseRecord.id}
+              canApprove={canApproveResearch}
+            />
           ) : null}
 
           <MatterPartiesPanel

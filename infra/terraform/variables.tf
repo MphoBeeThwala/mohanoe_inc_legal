@@ -227,3 +227,10 @@ variable "ai_firm_monthly_tokens" {
   type        = number
   default     = 2000000
 }
+
+variable "laws_africa_token" {
+  description = "Laws.Africa Content API token (legislation source). Register the source with its terms first: ops sources add --code laws-africa."
+  type        = string
+  sensitive   = true
+  default     = ""
+}

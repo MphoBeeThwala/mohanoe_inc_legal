@@ -115,9 +115,10 @@ locals {
     "sentry-dsn"           = var.sentry_dsn
     "payfast-merchant-key" = var.payfast_merchant_key
     "payfast-passphrase"   = var.payfast_passphrase
+    "laws-africa-token"    = var.laws_africa_token
   }
   optional_secret_names = [
-    for name in ["smtp-url", "sentry-dsn", "payfast-merchant-key", "payfast-passphrase"] : name
+    for name in ["smtp-url", "sentry-dsn", "payfast-merchant-key", "payfast-passphrase", "laws-africa-token"] : name
     if nonsensitive(local.optional_secrets[name] != "")
   ]
   secret_names = concat(
@@ -135,6 +136,7 @@ locals {
     "sentry-dsn"            = "SENTRY_DSN"
     "payfast-merchant-key"  = "PAYFAST_MERCHANT_KEY"
     "payfast-passphrase"    = "PAYFAST_PASSPHRASE"
+    "laws-africa-token"     = "LAWS_AFRICA_TOKEN"
   }
 }
 

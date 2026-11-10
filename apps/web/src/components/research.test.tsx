@@ -22,6 +22,11 @@ const draft: ResearchRequest = {
   createdBy: 'u1',
   confirmedAt: null,
   confirmedBy: null,
+  answer: null,
+  lastError: null,
+  approvedAt: null,
+  approvedBy: null,
+  approvalNote: null,
 };
 
 test('prepares a brief and shows exactly what will be sent, with what was removed and what to check', async () => {
@@ -67,4 +72,65 @@ test('edits must be saved (and re-checked) before the brief can be confirmed', a
   await vi.waitFor(() => expect(post).toHaveBeenCalledWith('/research/r1/confirm'));
   expect(await screen.findByText('Confirmed')).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Save edits' })).toBeNull();
+});
+
+const answered: ResearchRequest = {
+  ...draft,
+  status: 'answered',
+  answer: {
+    noAuthority: false,
+    claims: [{ text: '[Client] may not be locked out without a court order.', citations: ['S1'] }],
+    claimsNamed: [
+      { text: 'Thandiwe may not be locked out without a court order.', citations: ['S1'] },
+    ],
+    removed: [{ text: 'Thirty days notice applies.', reason: 'Cited no source' }],
+    gaps: ['Whether a room is a dwelling.'],
+    sources: [
+      {
+        ref: 'S1',
+        kind: 'legislation',
+        sourceName: 'Laws.Africa',
+        title: 'Example Act',
+        citation: 'Act 19 of 1998',
+        pinpoint: 'section 8',
+        url: '',
+        versionDate: '2026-01-01',
+        authorityLevel: 4,
+        court: '',
+        validity: 'amended',
+        effectiveDate: null,
+        text: 'No person may be evicted without a court order.',
+      },
+    ],
+    queries: ['eviction court order'],
+    model: 'fake',
+    generatedAt: '2026-11-10T08:00:00Z',
+  },
+};
+
+test('an answer shows cited claims, names only for staff, removed statements, sources and approval', async () => {
+  vi.spyOn(api, 'get').mockResolvedValue({ data: [answered] });
+  const post = vi.spyOn(api, 'post').mockResolvedValue({
+    data: { ...answered, status: 'approved', approvedAt: '2026-11-10T09:00:00Z' },
+  });
+  render(<ResearchPanel caseId="c1" canApprove />);
+
+  expect(await screen.findByText(/Thandiwe may not be locked out/)).toBeTruthy();
+  fireEvent.click(screen.getByLabelText(/Show names/));
+  expect(screen.getByText(/\[Client\] may not be locked out/)).toBeTruthy();
+  expect(screen.getByText(/1 statement removed by citation checks/)).toBeTruthy();
+  expect(
+    screen.getByText(/Statutes and regulations · Laws.Africa · In force \(amended\)/),
+  ).toBeTruthy();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Approve memo' }));
+  await vi.waitFor(() => expect(post).toHaveBeenCalledWith('/research/r1/approve', { note: '' }));
+  expect(await screen.findByText(/memo and its sources are kept/)).toBeTruthy();
+});
+
+test('fee earners without research.approve cannot approve', async () => {
+  vi.spyOn(api, 'get').mockResolvedValue({ data: [answered] });
+  render(<ResearchPanel caseId="c1" />);
+  expect(await screen.findByText(/Thandiwe may not be locked out/)).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Approve memo' })).toBeNull();
 });

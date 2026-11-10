@@ -24,6 +24,7 @@ import {
   matterPrescriptions,
   researchRequests,
   aiCalls,
+  firmPrecedents,
   type FirmRow,
 } from '../db/schema';
 import { activeKey, deleteKey } from './keys.service';
@@ -128,6 +129,25 @@ function staleResearch(version: number): SQL {
     notOnVersion(researchRequests.questionEncrypted, version),
     notOnVersion(researchRequests.briefEncrypted, version),
     notOnVersion(researchRequests.mappingEncrypted, version),
+    and(
+      isNotNull(researchRequests.answerEncrypted),
+      notOnVersion(researchRequests.answerEncrypted, version),
+    ),
+    and(
+      isNotNull(researchRequests.sourcesEncrypted),
+      notOnVersion(researchRequests.sourcesEncrypted, version),
+    ),
+    and(
+      isNotNull(researchRequests.approvalNoteEncrypted),
+      notOnVersion(researchRequests.approvalNoteEncrypted, version),
+    ),
+  ) as SQL;
+}
+
+function stalePrecedents(version: number): SQL {
+  return or(
+    notOnVersion(firmPrecedents.originalEncrypted, version),
+    notOnVersion(firmPrecedents.reviewEncrypted, version),
   ) as SQL;
 }
 
@@ -195,6 +215,9 @@ export async function pendingReencryption(): Promise<ReencryptStatus> {
     db().select({ value: count() }).from(researchRequests).where(staleResearch(version)),
     db().select({ value: count() }).from(aiCalls).where(staleAiCalls(version)),
   ]);
+  const [[fpr]] = await Promise.all([
+    db().select({ value: count() }).from(firmPrecedents).where(stalePrecedents(version)),
+  ]);
   const [[s], [d], [u], [p], [c]] = await Promise.all([
     db().select({ value: count() }).from(submissions).where(staleSubmissions(version)),
     db().select({ value: count() }).from(documents).where(staleDocuments(version)),
@@ -214,7 +237,7 @@ export async function pendingReencryption(): Promise<ReencryptStatus> {
       time: (te?.value ?? 0) + (tm?.value ?? 0),
       billing: (bi?.value ?? 0) + (bd?.value ?? 0),
       calendar: (ce?.value ?? 0) + (mp?.value ?? 0),
-      research: (rr?.value ?? 0) + (ac?.value ?? 0),
+      research: (rr?.value ?? 0) + (ac?.value ?? 0) + (fpr?.value ?? 0),
     },
   };
 }
@@ -392,8 +415,31 @@ async function reencryptBatch(): Promise<ReencryptCounts> {
         questionEncrypted: await encryptJson(await decryptJson(row.questionEncrypted)),
         briefEncrypted: await encryptJson(await decryptJson(row.briefEncrypted)),
         mappingEncrypted: await encryptJson(await decryptJson(row.mappingEncrypted)),
+        answerEncrypted: row.answerEncrypted
+          ? await encryptJson(await decryptJson(row.answerEncrypted))
+          : null,
+        sourcesEncrypted: row.sourcesEncrypted
+          ? await encryptJson(await decryptJson(row.sourcesEncrypted))
+          : null,
+        approvalNoteEncrypted: row.approvalNoteEncrypted
+          ? await encryptJson(await decryptJson(row.approvalNoteEncrypted))
+          : null,
       })
       .where(eq(researchRequests.id, row.id));
+  }
+  const precedentRows = await db()
+    .select()
+    .from(firmPrecedents)
+    .where(stalePrecedents(version))
+    .limit(BATCH);
+  for (const row of precedentRows) {
+    await db()
+      .update(firmPrecedents)
+      .set({
+        originalEncrypted: await encryptJson(await decryptJson(row.originalEncrypted)),
+        reviewEncrypted: await encryptJson(await decryptJson(row.reviewEncrypted)),
+      })
+      .where(eq(firmPrecedents.id, row.id));
   }
   const calls = await db().select().from(aiCalls).where(staleAiCalls(version)).limit(BATCH);
   for (const row of calls) {
@@ -420,7 +466,7 @@ async function reencryptBatch(): Promise<ReencryptCounts> {
     time: entries.length + running.length,
     billing: bills.length + costs.length,
     calendar: events.length + periods.length,
-    research: briefs.length + calls.length,
+    research: briefs.length + calls.length + precedentRows.length,
   };
 }
 
@@ -554,6 +600,9 @@ export async function pruneRetiredKeys(): Promise<number[]> {
             sql`${researchRequests.questionEncrypted} like ${prefix}`,
             sql`${researchRequests.briefEncrypted} like ${prefix}`,
             sql`${researchRequests.mappingEncrypted} like ${prefix}`,
+            sql`${researchRequests.answerEncrypted} like ${prefix}`,
+            sql`${researchRequests.sourcesEncrypted} like ${prefix}`,
+            sql`${researchRequests.approvalNoteEncrypted} like ${prefix}`,
           ),
         ),
       db()
@@ -566,7 +615,20 @@ export async function pruneRetiredKeys(): Promise<number[]> {
           ),
         ),
     ]);
-    const inUse = [s, d, u, p, c, fp, fd, te, tm, bi, bd, ce, mp, rr, ac].some((row) => row?.value);
+    const [[pr]] = await Promise.all([
+      db()
+        .select({ value: count() })
+        .from(firmPrecedents)
+        .where(
+          or(
+            sql`${firmPrecedents.originalEncrypted} like ${prefix}`,
+            sql`${firmPrecedents.reviewEncrypted} like ${prefix}`,
+          ),
+        ),
+    ]);
+    const inUse = [s, d, u, p, c, fp, fd, te, tm, bi, bd, ce, mp, rr, ac, pr].some(
+      (row) => row?.value,
+    );
     if (!inUse) {
       await deleteKey(key.id);
       pruned.push(key.version);

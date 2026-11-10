@@ -7,7 +7,7 @@
 // checked again: an edit that puts a name or identifier back is refused),
 // and confirms it. Only a confirmed brief is ever sent.
 import { and, desc, eq } from 'drizzle-orm';
-import type { ResearchRequest, ResearchStatus } from '@ahava88/shared';
+import type { ResearchAnswer, ResearchRequest, ResearchStatus } from '@ahava88/shared';
 import { db } from '../db/client';
 import { caseParties, parties, researchRequests, submissions, type CaseRow } from '../db/schema';
 import { httpError } from '../lib/http';
@@ -21,7 +21,15 @@ import {
   type IntakeSubmission,
 } from '../validation/schemas';
 import { decryptJson, encryptJson } from './privacy.service';
-import { deidentify, remainingIdentifiers, type KnownPerson, type PersonRole } from './deidentify';
+import {
+  deidentify,
+  reidentify,
+  remainingIdentifiers,
+  type KnownPerson,
+  type PersonRole,
+} from './deidentify';
+import { answerBrief } from './research-run';
+import { z } from 'zod';
 import { findCaseByRef } from './intake.service';
 import { partyDetails } from './party.service';
 import * as auditService from './audit.service';
@@ -114,10 +122,31 @@ async function toRequest(
     replacements: [],
     warnings: [],
   };
+  const stored = row.answerEncrypted
+    ? await decryptJson<Omit<ResearchAnswer, 'claimsNamed'>>(row.answerEncrypted)
+    : null;
+  let answer: ResearchAnswer | null = null;
+  if (stored) {
+    const mapping = (await decryptJson<Record<string, string>>(row.mappingEncrypted)) ?? {};
+    answer = {
+      ...stored,
+      claimsNamed: stored.claims.map((claim) => ({
+        ...claim,
+        text: reidentify(claim.text, mapping),
+      })),
+    };
+  }
   return {
     id: row.id,
     caseNumber,
     status: row.status as ResearchStatus,
+    answer,
+    lastError: row.lastError,
+    approvedAt: isoOrNull(row.approvedAt),
+    approvedBy: row.approvedBy,
+    approvalNote: row.approvalNoteEncrypted
+      ? ((await decryptJson<string>(row.approvalNoteEncrypted)) ?? null)
+      : null,
     question: (await decryptJson<string>(row.questionEncrypted)) ?? '',
     brief: brief.text,
     replacements: brief.replacements,
@@ -307,4 +336,87 @@ export async function deleteDraft(id: string, actor: Actor): Promise<void> {
     },
     actor,
   );
+}
+
+/**
+ * Researches a confirmed brief against the approved sources. Only the
+ * confirmed (de-identified) text is sent. Can be run again until approved.
+ */
+export async function run(id: string, actor: Actor): Promise<ResearchRequest> {
+  const { row, matter } = await requireRequest(id);
+  if (row.status === 'draft') {
+    throw httpError('Confirm the brief before running research.', 409);
+  }
+  if (row.status === 'approved') {
+    throw httpError(
+      'This research is approved and frozen; start a new brief to research again.',
+      409,
+    );
+  }
+  const stored = await decryptJson<StoredBrief>(row.briefEncrypted);
+  // The brief was clean when confirmed; matter parties may have been added since.
+  await assertClean(stored?.text ?? '', matter);
+  const answer = await answerBrief(stored!.text, { subjectId: row.id, actor });
+  const [saved] = await db()
+    .update(researchRequests)
+    .set({
+      status: 'answered',
+      answerEncrypted: await encryptJson(answer),
+      sourcesEncrypted: await encryptJson(answer.sources),
+      answeredAt: new Date(),
+      lastError: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(researchRequests.id, row.id))
+    .returning();
+  await auditService.logEvent(
+    {
+      entityType: 'research_request',
+      entityId: row.id,
+      action: 'research_answered',
+      summary: `Research answered on ${matter.caseNumber}`,
+      details: {
+        caseNumber: matter.caseNumber,
+        claims: answer.claims.length,
+        removedClaims: answer.removed.length,
+        sources: answer.sources.length,
+        noAuthority: answer.noAuthority,
+      },
+    },
+    actor,
+  );
+  return toRequest(saved!, matter.caseNumber);
+}
+
+const approvalSchema = z.object({ note: z.string().trim().max(4000).optional() });
+
+/** The attorney signs off the memo; it is frozen with its sources (research.approve). */
+export async function approve(id: string, input: unknown, actor: Actor): Promise<ResearchRequest> {
+  const { note } = parse(approvalSchema, input ?? {});
+  const { row, matter } = await requireRequest(id);
+  if (row.status !== 'answered') {
+    throw httpError('Only answered research can be approved', 409);
+  }
+  const [saved] = await db()
+    .update(researchRequests)
+    .set({
+      status: 'approved',
+      approvedBy: actor.userId ?? null,
+      approvedAt: new Date(),
+      approvalNoteEncrypted: note ? await encryptJson(note) : null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(researchRequests.id, row.id), eq(researchRequests.status, 'answered')))
+    .returning();
+  await auditService.logEvent(
+    {
+      entityType: 'research_request',
+      entityId: row.id,
+      action: 'research_approved',
+      summary: `Research memo approved on ${matter.caseNumber}`,
+      details: { caseNumber: matter.caseNumber },
+    },
+    actor,
+  );
+  return toRequest(saved!, matter.caseNumber);
 }
