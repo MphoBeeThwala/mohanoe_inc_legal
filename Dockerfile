@@ -2,7 +2,7 @@
 # CLIs used by scheduled jobs. Built by .github/workflows/deploy.yml.
 
 # ---- build ---------------------------------------------------------------
-FROM node:22-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
@@ -16,7 +16,7 @@ COPY apps/web apps/web
 RUN npm run build && npm prune --omit=dev --no-audit --no-fund
 
 # ---- run -----------------------------------------------------------------
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 RUN apt-get update \
   && apt-get install -y --no-install-recommends tini ca-certificates \
   && rm -rf /var/lib/apt/lists/*
