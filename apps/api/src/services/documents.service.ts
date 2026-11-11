@@ -130,7 +130,7 @@ export async function createDocument(input: unknown, actor: Actor = {}): Promise
       entityType: 'document',
       entityId: saved.id,
       action: 'document_created',
-      summary: `Document created: ${saved.title}`,
+      summary: `Document created on ${caseRecord.caseNumber}`,
       details: { caseId: caseRecord.id, documentType: saved.documentType },
     },
     actor,
@@ -159,7 +159,8 @@ export async function signDocument(documentId: string, actor: Actor = {}): Promi
       entityType: 'document',
       entityId: documentId,
       action: 'document_signed',
-      summary: `Document signed: ${updated.title}`,
+      summary: 'Document signed',
+      details: { caseId: updated.caseId, documentType: updated.documentType },
     },
     actor,
   );

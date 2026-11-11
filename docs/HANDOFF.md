@@ -88,6 +88,17 @@ TEST_DATABASE_URL=postgresql://owner_user:pw@localhost:55432/t npm run test:post
    - Add a test that the audit row has no title.
 2. Roadmap §10: list epic 13 (done) and point to this file (already done in the PR that added this file).
 
+Done on `fix/audit-free-text`: document, task, timeline, notification and report titles no longer reach audit rows (`test/audit-privacy.test.ts`).
+
+**Next, before pilots: encrypt the MVP's clear-text free-text columns.**
+
+- **Columns:** `case_tasks.title` and `description`, `case_timeline.message`, `documents.title`, `notifications.title` and `body`, `report_snapshots.title`, and `cases.title`. Staff type free text into these, and it can name clients.
+- **The usual pattern:**
+  - Add `*_encrypted` columns and backfill them with `encryptJson()` in an `ops` command, then drop the clear columns in a later migration.
+  - Add the new columns to `reencrypt.service.ts` and `firm-export.service.ts`.
+  - Check list views and any search that relied on the clear text.
+- **Leave `client_label` alone:** it holds the party number, not a name.
+
 ## 5. What is left to build, in order
 
 Each item is one branch and one PR. The acceptance criteria are the minimum; follow `CLAUDE.md` throughout.
