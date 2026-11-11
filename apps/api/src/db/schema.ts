@@ -907,6 +907,8 @@ export const users = pgTable(
     /** Set on the firm's stand-in account for a platform support operator. */
     platformOperatorId: uuid('platform_operator_id'),
     isActive: boolean('is_active').notNull().default(true),
+    /** Billable hours expected per month (utilisation reports); null = not set. */
+    targetHoursPerMonth: integer('target_hours_per_month'),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
     ...timestamps,
   },

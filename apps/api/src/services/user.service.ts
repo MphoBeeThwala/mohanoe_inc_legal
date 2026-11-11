@@ -272,6 +272,7 @@ function toStaffUser(user: UserRow): StaffUser {
     ...authService.toPublicUser(user),
     isActive: user.isActive,
     lockedUntil: user.lockedUntil && user.lockedUntil > new Date() ? iso(user.lockedUntil) : null,
+    targetHoursPerMonth: user.targetHoursPerMonth,
   };
 }
 
@@ -313,7 +314,8 @@ export async function updateUser(id: string, input: unknown, actor: Actor): Prom
   if (user.role === 'support') {
     throw httpError('Platform support accounts are controlled by support grants', 400);
   }
-  if (user.id === actor.userId) {
+  // Administrators may set their own target hours, but not their own role or access.
+  if (user.id === actor.userId && (changes.role !== undefined || changes.isActive !== undefined)) {
     throw httpError('You cannot change your own role or deactivate yourself', 400);
   }
   const losesAdmin =
@@ -334,6 +336,9 @@ export async function updateUser(id: string, input: unknown, actor: Actor): Prom
       ...(changes.role ? { role: changes.role } : {}),
       ...(changes.isActive !== undefined ? { isActive: changes.isActive } : {}),
       ...(changes.isActive ? { failedLoginCount: 0, lockedUntil: null } : {}),
+      ...(changes.targetHoursPerMonth !== undefined
+        ? { targetHoursPerMonth: changes.targetHoursPerMonth }
+        : {}),
     })
     .where(eq(users.id, user.id))
     .returning();
@@ -352,6 +357,9 @@ export async function updateUser(id: string, input: unknown, actor: Actor): Prom
       details: {
         ...(changes.role ? { role: { from: user.role, to: changes.role } } : {}),
         ...(changes.isActive !== undefined ? { isActive: changes.isActive } : {}),
+        ...(changes.targetHoursPerMonth !== undefined
+          ? { targetHoursPerMonth: changes.targetHoursPerMonth }
+          : {}),
       },
     },
     actor,

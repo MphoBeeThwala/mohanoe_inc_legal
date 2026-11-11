@@ -109,10 +109,18 @@ export const userUpdateSchema = z
   .object({
     role: staffRole.optional(),
     isActive: z.boolean().optional(),
+    /** Billable hours expected per month; null clears it. */
+    targetHoursPerMonth: z.number().int().min(0).max(400).nullable().optional(),
   })
-  .refine((value) => value.role !== undefined || value.isActive !== undefined, {
-    message: 'Nothing to update',
-  });
+  .refine(
+    (value) =>
+      value.role !== undefined ||
+      value.isActive !== undefined ||
+      value.targetHoursPerMonth !== undefined,
+    {
+      message: 'Nothing to update',
+    },
+  );
 
 export const uuidSchema = z.string().uuid();
 

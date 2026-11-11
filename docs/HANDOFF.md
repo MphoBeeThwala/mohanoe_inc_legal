@@ -5,7 +5,7 @@ Written 10 Nov 2026, after epic 13. Read this file, `CLAUDE.md` and `docs/ROADMA
 
 ## 1. Where things stand
 
-- `main` holds epics 1–13. Every feature PR up to #50 is merged; the only open PR is Dependabot #36 (Node 26, see §6).
+- `main` holds epics 1–14. Every feature PR up to #50 is merged; the only open PR is Dependabot #36 (Node 26, see §6).
 - Built: multi-tenant core with forced RLS; identity with MFA; per-firm encryption and records; the practice core (clients, matters, conflicts, FICA, time, billing, calendar, court rolls); white label and onboarding; Azure Terraform and CI/CD; PayFast subscriptions; grounded AI research; trust accounting; the client portal; Court Online; the operators' console; the support desk; and platform tax invoices.
 - Tests: 354 API tests and 56 web tests, all passing on PGlite and on PostgreSQL 16.
 - GitHub Actions does not run: the GitHub account is billing-locked. Run every check locally before merging (§3).
@@ -103,7 +103,10 @@ Done on `fix/audit-free-text`: document, task, timeline, notification and report
 
 Each item is one branch and one PR. The acceptance criteria are the minimum; follow `CLAUDE.md` throughout.
 
-### 14. Reporting (P1)
+### 14. Reporting (P1) — done (`feat/reporting`, see README → Practice reports)
+
+What was built, for reference:
+
 
 Already exists: `reports.service.ts` (dashboard and saved snapshots) and `billing.service.ts` `agingReport()`.
 

@@ -169,6 +169,22 @@ When the firms table is empty, the server creates a `default` firm from these va
 - **Encryption:** subjects, notes and line descriptions can name people, so they are encrypted with the firm's key. Amounts, numbers and dates stay readable for reports.
 - **Not covered:** trust accounting under the Legal Practice Act (section 86) is not built yet. The trust/operating ledger is a simple record.
 
+## Practice reports
+
+Under Operations → Reports, for any period of up to a year, each with a CSV download (`GET /api/reports/practice/<report>[.csv]?from=YYYY-MM-DD&to=YYYY-MM-DD`):
+
+- **Work in progress:** unbilled billable time and disbursements at the end of the period, by matter and by fee earner.
+- **Debtors:** aged 0–30, 31–60, 61–90 and 90+ days, by client label (the party number, never a name).
+- **Utilisation:** billable hours against each fee earner's monthly target. Administrators set the target per person under Account & team → Staff.
+- **Realisation:** billing (time billed ÷ time recorded) per fee earner and matter, and collection (paid ÷ invoiced, for invoices issued in the period).
+- **Fee earners:** hours, recorded value, billed and written off.
+
+Who sees what:
+
+- Administrators and bookkeepers (`reports.firm`) see the whole firm. Restricted matters they cannot see are counted in the totals but shown only as "Restricted matter".
+- Other fee earners see their own time and disbursements, on matters they can see.
+- CSV cells that a spreadsheet would read as a formula are defused (`lib/csv.ts`; the trust cashbook uses it too).
+
 ## White label and onboarding
 - **Onboarding wizard:** a new firm's administrator is taken through five steps after first sign-in: practice details, name/logo/colours, invoicing and VAT, numbering and compliance, and inviting the team. Steps can be skipped, and everything can be changed later under **Account & team → Firm settings**.
 - **Practice details:** the firm's address, registration, Legal Practice Council and Fidelity Fund certificate numbers, and contact details are printed in the letterhead of invoices and statements.

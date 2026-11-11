@@ -209,6 +209,31 @@ function StaffAdmin({ currentUser }: StaffAdminProps) {
                     </option>
                   ))}
                 </select>
+                {user.role === 'support' ? null : (
+                  <input
+                    type="number"
+                    min={0}
+                    max={400}
+                    className="target-hours"
+                    aria-label={`Billable hours target per month for ${user.fullName}`}
+                    placeholder="Target h/month"
+                    defaultValue={user.targetHoursPerMonth ?? ''}
+                    disabled={busy}
+                    onBlur={(event) => {
+                      const raw = event.target.value.trim();
+                      const next = raw === '' ? null : Math.round(Number(raw));
+                      if (next === user.targetHoursPerMonth) return;
+                      if (next !== null && !(next >= 0 && next <= 400)) return;
+                      void run(
+                        () =>
+                          api
+                            .patch(`/users/${user.id}`, { targetHoursPerMonth: next })
+                            .then(() => undefined),
+                        next === null ? 'Target cleared.' : 'Target saved.',
+                      );
+                    }}
+                  />
+                )}
                 {self ? null : (
                   <>
                     <button

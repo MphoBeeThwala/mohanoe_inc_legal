@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "target_hours_per_month" integer;

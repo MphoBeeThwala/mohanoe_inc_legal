@@ -99,6 +99,7 @@ export type Permission =
   | 'billing.write'
   | 'billing.void'
   | 'reports.read'
+  | 'reports.firm'
   | 'notifications.read'
   | 'notifications.write'
   | 'compliance.read'
@@ -164,6 +165,8 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'compliance.write',
     'compliance.admin',
     'audit.read',
+    // Firm-wide practice reports: every fee earner, every matter (restricted ones masked).
+    'reports.firm',
     'users.manage',
     'conflicts.waive',
     // Corrects or writes off other people's time, and sets hourly rates.
@@ -213,6 +216,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>>
     'billing.read',
     'billing.write',
     'reports.read',
+    'reports.firm',
     'notifications.read',
     // Records trust receipts, requests payments, reconciles (never authorises).
     'trust.read',
@@ -309,6 +313,8 @@ export interface SessionInfo {
 export interface StaffUser extends PublicUser {
   isActive: boolean;
   lockedUntil: string | null;
+  /** Billable hours expected per month (utilisation); null = not set. */
+  targetHoursPerMonth: number | null;
 }
 
 /** Minimal staff entry for pickers (matter members, assignees). */
@@ -2191,4 +2197,120 @@ export interface PlatformInvoice {
 export interface ConsolePlatformInvoice extends PlatformInvoice {
   firmId: string;
   firmSlug: string;
+}
+
+// ------------------------------------------------------- Practice reports
+
+export type PracticeReportKind = 'wip' | 'debtors' | 'utilisation' | 'realisation' | 'fee-earners';
+
+/** Whose figures a report covers: the whole firm, or the caller's own. */
+export type ReportScope = 'firm' | 'own';
+
+export interface ReportPeriod {
+  from: string;
+  to: string;
+  scope: ReportScope;
+}
+
+/** A matter row; restricted matters the caller can't see read "Restricted matter". */
+export interface ReportMatter {
+  caseId: string | null;
+  caseNumber: string;
+  restricted: boolean;
+}
+
+export interface WipMatterRow extends ReportMatter {
+  hours: number;
+  timeCents: number;
+  disbursementCents: number;
+  totalCents: number;
+  /** Oldest unbilled work date. */
+  oldestWorkDate: string | null;
+}
+
+export interface WipFeeEarnerRow {
+  userId: string | null;
+  name: string;
+  hours: number;
+  timeCents: number;
+}
+
+export interface WipReport extends ReportPeriod {
+  matters: WipMatterRow[];
+  feeEarners: WipFeeEarnerRow[];
+  totals: { hours: number; timeCents: number; disbursementCents: number; totalCents: number };
+}
+
+export interface DebtorBuckets {
+  current: number;
+  days30: number;
+  days60: number;
+  days90: number;
+  days120: number;
+  total: number;
+}
+
+export interface DebtorsReport extends ReportPeriod {
+  asOf: string;
+  clients: Array<DebtorBuckets & { clientLabel: string; invoices: number }>;
+  /** Owed on matters the caller can't see, as one line. */
+  restricted: DebtorBuckets | null;
+  totals: DebtorBuckets;
+}
+
+export interface UtilisationRow {
+  userId: string;
+  name: string;
+  /** YYYY-MM */
+  month: string;
+  billableHours: number;
+  nonBillableHours: number;
+  targetHours: number | null;
+  /** Billable ÷ target, 0–1+; null without a target. */
+  utilisation: number | null;
+}
+
+export interface UtilisationReport extends ReportPeriod {
+  rows: UtilisationRow[];
+}
+
+export interface RealisationFigures {
+  recordedCents: number;
+  billedCents: number;
+  writtenOffCents: number;
+  unbilledCents: number;
+  /** Billed ÷ recorded; null when nothing was recorded. */
+  billingRealisation: number | null;
+}
+
+export interface RealisationReport extends ReportPeriod {
+  feeEarners: Array<RealisationFigures & { userId: string | null; name: string }>;
+  matters: Array<
+    RealisationFigures &
+      ReportMatter & {
+        invoicedCents: number;
+        collectedCents: number;
+        /** Collected ÷ invoiced for invoices issued in the period; null without invoices. */
+        collectionRealisation: number | null;
+      }
+  >;
+  totals: RealisationFigures & {
+    invoicedCents: number;
+    collectedCents: number;
+    collectionRealisation: number | null;
+  };
+}
+
+export interface FeeEarnerSummaryRow {
+  userId: string | null;
+  name: string;
+  billableHours: number;
+  nonBillableHours: number;
+  recordedCents: number;
+  billedCents: number;
+  writtenOffCents: number;
+}
+
+export interface FeeEarnerReport extends ReportPeriod {
+  rows: FeeEarnerSummaryRow[];
 }

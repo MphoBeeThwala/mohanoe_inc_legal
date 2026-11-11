@@ -1671,3 +1671,16 @@
 .help-text h4 {
   margin: 14px 0 6px;
 }
+
+/* Practice reports */
+.practice-reports {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+}
+.practice-reports .data-table {
+  margin-top: 8px;
+}
+.target-hours {
+  width: 9rem;
+}
