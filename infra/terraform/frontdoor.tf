@@ -1,11 +1,13 @@
-# Azure Front Door Premium: TLS for every firm's address (managed
-# certificates), the web application firewall, and the only way in (the app
-# rejects requests without this profile's X-Azure-FDID).
+# Azure Front Door: TLS for every firm's address (managed certificates), the
+# web application firewall, and the only way in (the app rejects requests
+# without this profile's X-Azure-FDID). Premium (production) adds Microsoft's
+# managed WAF rule sets and bot protection; Standard (a low-cost staging)
+# keeps the rate-limit rule only.
 
 resource "azurerm_cdn_frontdoor_profile" "main" {
   name                     = "afd-${local.name}"
   resource_group_name      = azurerm_resource_group.main.name
-  sku_name                 = "Premium_AzureFrontDoor"
+  sku_name                 = var.front_door_sku
   response_timeout_seconds = 120
   tags                     = local.tags
 }
@@ -100,16 +102,17 @@ resource "azurerm_cdn_frontdoor_firewall_policy" "main" {
     }
   }
 
-  managed_rule {
-    type    = "Microsoft_DefaultRuleSet"
-    version = "2.1"
-    action  = "Block"
-  }
-
-  managed_rule {
-    type    = "Microsoft_BotManagerRuleSet"
-    version = "1.1"
-    action  = "Block"
+  # Managed rule sets exist only on Premium.
+  dynamic "managed_rule" {
+    for_each = var.front_door_sku == "Premium_AzureFrontDoor" ? [
+      { type = "Microsoft_DefaultRuleSet", version = "2.1" },
+      { type = "Microsoft_BotManagerRuleSet", version = "1.1" },
+    ] : []
+    content {
+      type    = managed_rule.value.type
+      version = managed_rule.value.version
+      action  = "Block"
+    }
   }
 
   tags = local.tags

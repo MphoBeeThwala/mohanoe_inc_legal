@@ -50,6 +50,26 @@ variable "image" {
   default     = "mcr.microsoft.com/k8se/quickstart:latest"
 }
 
+variable "front_door_sku" {
+  description = "Premium_AzureFrontDoor (production: managed WAF rules and bot protection) or Standard_AzureFrontDoor (low-cost staging: rate limiting only)."
+  type        = string
+  default     = "Premium_AzureFrontDoor"
+  validation {
+    condition     = contains(["Premium_AzureFrontDoor", "Standard_AzureFrontDoor"], var.front_door_sku)
+    error_message = "front_door_sku must be Premium_AzureFrontDoor or Standard_AzureFrontDoor."
+  }
+}
+
+variable "container_registry_sku" {
+  description = "Basic (staging) or Standard (production)."
+  type        = string
+  default     = "Standard"
+  validation {
+    condition     = contains(["Basic", "Standard", "Premium"], var.container_registry_sku)
+    error_message = "container_registry_sku must be Basic, Standard or Premium."
+  }
+}
+
 variable "api_min_replicas" {
   type    = number
   default = 1
