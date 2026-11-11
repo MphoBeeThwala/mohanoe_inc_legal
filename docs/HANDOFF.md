@@ -1,13 +1,13 @@
 # Handoff: what is built, what is left, and how to build it
 
-Written 10 Nov 2026, after epic 13. Read this file, `CLAUDE.md` and `docs/ROADMAP.md` before starting.
+Written 10 Nov 2026; updated 11 Nov 2026 after epic 14. Read this file, `CLAUDE.md` and `docs/ROADMAP.md` before starting.
 `CLAUDE.md` holds the rules every change must follow; this file says what to build next and how to work in this repository without breaking them.
 
 ## 1. Where things stand
 
-- `main` holds epics 1–14. Every feature PR up to #50 is merged; the only open PR is Dependabot #36 (Node 26, see §6).
-- Built: multi-tenant core with forced RLS; identity with MFA; per-firm encryption and records; the practice core (clients, matters, conflicts, FICA, time, billing, calendar, court rolls); white label and onboarding; Azure Terraform and CI/CD; PayFast subscriptions; grounded AI research; trust accounting; the client portal; Court Online; the operators' console; the support desk; and platform tax invoices.
-- Tests: 354 API tests and 56 web tests, all passing on PGlite and on PostgreSQL 16.
+- `main` holds epics 1–14. Every feature PR up to #53 is merged; the only open PR is Dependabot #36 (Node 26, see §6).
+- Built: multi-tenant core with forced RLS; identity with MFA; per-firm encryption and records; the practice core (clients, matters, conflicts, FICA, time, billing, calendar, court rolls); white label and onboarding; Azure Terraform and CI/CD; PayFast subscriptions; grounded AI research; trust accounting; the client portal; Court Online; the operators' console; the support desk; platform tax invoices; and practice reports.
+- Tests: 366 API tests and 58 web tests, all passing on PGlite and on PostgreSQL 16.
 - GitHub Actions does not run: the GitHub account is billing-locked. Run every check locally before merging (§3).
 
 ## 2. Set up
@@ -80,17 +80,9 @@ TEST_DATABASE_URL=postgresql://owner_user:pw@localhost:55432/t npm run test:post
 - **After `npm install`:** run `npm dedupe`, then check `npm ls react` shows one copy.
 - **Audit rows and emails are not encrypted.** Never put names, titles, subjects or message text in them; use numbers.
 
-## 4. Small fixes to do first (one PR, about an hour)
+## 4. Do first: encrypt the MVP's clear-text columns (before pilots)
 
-1. `apps/api/src/services/documents.service.ts`, `signDocument()`: the audit summary includes the document title, which can carry client names. That breaks the audit rule in `CLAUDE.md`.
-   - Change it to `Document signed` with `details: { documentId }`.
-   - Check the other `logEvent` summaries in that file the same way.
-   - Add a test that the audit row has no title.
-2. Roadmap §10: list epic 13 (done) and point to this file (already done in the PR that added this file).
-
-Done on `fix/audit-free-text`: document, task, timeline, notification and report titles no longer reach audit rows (`test/audit-privacy.test.ts`).
-
-**Next, before pilots: encrypt the MVP's clear-text free-text columns.**
+Already done (`fix/audit-free-text`, #52): document, task, timeline, notification and report titles no longer reach audit rows (`test/audit-privacy.test.ts`).
 
 - **Columns:** `case_tasks.title` and `description`, `case_timeline.message`, `documents.title`, `notifications.title` and `body`, `report_snapshots.title`, and `cases.title`. Staff type free text into these, and it can name clients.
 - **The usual pattern:**
@@ -103,27 +95,9 @@ Done on `fix/audit-free-text`: document, task, timeline, notification and report
 
 Each item is one branch and one PR. The acceptance criteria are the minimum; follow `CLAUDE.md` throughout.
 
-### 14. Reporting (P1) — done (`feat/reporting`, see README → Practice reports)
+### 14. Reporting (P1): done
 
-What was built, for reference:
-
-
-Already exists: `reports.service.ts` (dashboard and saved snapshots) and `billing.service.ts` `agingReport()`.
-
-Build `/api/reports/*` with the `reports.read` permission:
-
-- **Work in progress (WIP):** unbilled time and disbursements per matter and per fee earner, in value and hours.
-- **Debtors:** aged 0–30, 31–60, 61–90 and 90+ days by client party number. Reuse `agingReport`.
-- **Utilisation:** billable hours ÷ target hours per fee earner per month. Add `users.targetHoursPerMonth`, set by admins.
-- **Realisation:** amount billed ÷ value of time recorded, and amount collected ÷ amount billed, per fee earner and per matter.
-- **Fee-earner summary:** hours, value, billed and collected for a date range.
-
-How it must behave:
-
-- A date range with South African dates, CSV download for each report, and the web view under Operations → Reports.
-- Restricted matters: totals across matters may use `withSystemScope`, but **rows for matters the caller cannot see show "Restricted matter"** (as in the trust `cashbookCsv`).
-- Never decrypt client names for reports. Use party and matter numbers.
-- Tests: the figures match hand-computed fixtures; a restricted matter is masked; another firm sees nothing; the CSV escapes cells against formula injection (prefix `'` to cells starting with `=`, `+`, `-` or `@`).
+Done on `feat/reporting` (#53). See README → Practice reports. It covers work in progress, debtors, utilisation (`users.target_hours_per_month`), realisation and a fee-earner summary, with JSON and CSV for each. The firm-wide scope (`reports.firm`) masks restricted matters.
 
 ### 15. Drafting with firm templates, then e-signature (P1)
 
