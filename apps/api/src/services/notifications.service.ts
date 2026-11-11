@@ -92,7 +92,7 @@ export async function createNotification(
       entityType: 'notification',
       entityId: saved.id,
       action: 'notification_created',
-      summary: saved.title,
+      summary: `Notification created (${saved.category})`,
       details: { category: saved.category, recipientRole: saved.recipientRole },
     },
     actor,
@@ -119,7 +119,7 @@ export async function markRead(
       entityType: 'notification',
       entityId: notificationId,
       action: 'notification_read',
-      summary: updated.title,
+      summary: 'Notification read',
     },
     actor,
   );

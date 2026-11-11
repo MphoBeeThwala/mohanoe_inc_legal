@@ -95,7 +95,7 @@ export async function generateSnapshot(input: unknown, actor: Actor = {}): Promi
       entityType: 'report',
       entityId: saved.id,
       action: 'report_generated',
-      summary: saved.title,
+      summary: 'Report generated',
     },
     actor,
   );
