@@ -1,3 +1,4 @@
+import PracticeReportsPanel from './PracticeReportsPanel';
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import type { ApiClient } from '../api';
 import { apiErrorMessage } from '../api';
@@ -762,6 +763,8 @@ function OperationsHub({
               </button>
             </form>
           ) : null}
+
+          {can('reports.read') ? <PracticeReportsPanel /> : null}
 
           <div className="mini-list">
             {reports.slice(0, 5).map((item) => (

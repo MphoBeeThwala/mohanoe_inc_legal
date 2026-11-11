@@ -18,6 +18,7 @@
 //
 // References and descriptions are encrypted (bank references often carry a
 // payer's name); audit rows carry matter numbers and amounts only.
+import { csvCell } from '../lib/csv';
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -879,10 +880,8 @@ export async function cashbookCsv(accountId: string, from: string, to: string): 
         ),
       )
       .orderBy(asc(trustEntries.entryDate), asc(trustEntries.createdAt));
-    const cell = (value: string | number | null) => {
-      const text = String(value ?? '');
-      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-    };
+    // csvCell also defuses formula-like cells (CSV injection).
+    const cell = csvCell;
     const lines = [
       [
         'date',

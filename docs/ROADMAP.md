@@ -248,7 +248,10 @@ Trust accounting and AI research ship behind feature flags to pilots first.
     - 13a, the operators' console (`console.<platform domain>`) and Dependabot.
     - 13b, the support desk and help centre.
     - 13c, platform tax invoices to firms, one per PayFast payment.
+14. **Reporting** — done on `feat/reporting`: work in progress, aged debtors, utilisation against per-person monthly targets, billing and collection realisation, and a fee-earner summary.
+    - JSON and CSV for each, with formula-safe cells.
+    - Firm-wide for `reports.firm` (administrators, bookkeepers), with restricted matters counted but masked; everyone else sees their own figures.
 
-**What is left, in order, with acceptance criteria: [`docs/HANDOFF.md`](HANDOFF.md)** (14 reporting, 15 drafting and e-signature, 16 Xero/Sage, 17 email filing, 18 pen test, then the smaller follow-ups, P2 and the Node 26 move).
+**What is left, in order, with acceptance criteria: [`docs/HANDOFF.md`](HANDOFF.md)** (15 drafting and e-signature, 16 Xero/Sage, 17 email filing, 18 pen test, then the smaller follow-ups, P2 and the Node 26 move).
 
 Open decisions: product name; Entra External ID vs Auth0/WorkOS; pilot firms and practice areas.
